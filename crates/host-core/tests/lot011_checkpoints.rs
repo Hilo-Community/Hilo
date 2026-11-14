@@ -519,6 +519,50 @@ fn a_restore_never_writes_through_a_symbolic_link() {
     assert!(restored_inside || !report.failed.is_empty(), "{report:?}");
 }
 
+fn task_dir_exists(worktrees: &Path, task_id: &str) -> bool {
+    fs::read_dir(worktrees)
+        .unwrap()
+        .any(|repo| repo.unwrap().path().join(task_id).exists())
+}
+
+/// The worktrees directory is given by the Host: absolute, outside the repository, and never
+/// below a `.git` directory (Vite and other tools refuse to serve files there).
+#[test]
+fn the_worktrees_directory_must_be_absolute_outside_the_repository_and_not_below_git() {
+    let dir = repo_with(&[("a.ts", b"a\n")]);
+    let root = dir.path();
+    let manager = CheckpointManager::open(root).unwrap();
+    manager.create_checkpoint("task-dir", BEFORE, &[]).unwrap();
+    assert!(matches!(
+        manager.provision_worktree("task-dir"),
+        Err(CheckpointError::WorktreesDirNotConfigured)
+    ));
+    let outside = tempfile::tempdir().unwrap();
+    for bad in [
+        PathBuf::from("relative/worktrees"),
+        root.join(".git/coloride/worktrees"),
+        outside.path().join("x/.git/worktrees"),
+        root.join("worktrees"),
+    ] {
+        let error = CheckpointManager::open(root)
+            .unwrap()
+            .with_worktrees_dir(&bad)
+            .unwrap_err();
+        assert!(
+            matches!(error, CheckpointError::InvalidWorktreesDir { .. }),
+            "{bad:?}: {error}"
+        );
+    }
+    assert!(
+        !root.join("worktrees").exists(),
+        "a refused directory was created"
+    );
+    assert!(CheckpointManager::open(root)
+        .unwrap()
+        .with_worktrees_dir(outside.path())
+        .is_ok());
+}
+
 /// Whether the file system holding `dir` can clone files (APFS, btrfs, XFS, ReFS).
 fn cow_supported(dir: &Path) -> bool {
     let probe = dir.join(".cow-probe");
@@ -549,7 +593,11 @@ fn a_task_worktree_materializes_the_checkpoint_by_copy_on_write_or_fails_closed(
     let dir = repo_with(&refs);
     let root = dir.path();
     write(root, "untracked.txt", b"untracked\n");
-    let manager = CheckpointManager::open(root).unwrap();
+    let worktrees = tempfile::tempdir().unwrap();
+    let manager = CheckpointManager::open(root)
+        .unwrap()
+        .with_worktrees_dir(worktrees.path())
+        .unwrap();
 
     assert!(matches!(
         manager.provision_worktree("task-wt"),
@@ -566,7 +614,6 @@ fn a_task_worktree_materializes_the_checkpoint_by_copy_on_write_or_fails_closed(
     // Changed on disk after the checkpoint: the worktree keeps the checkpointed content.
     write(root, "src/module_1.ts", b"changed after the checkpoint\n");
 
-    let worktrees = root.join(".git/coloride/worktrees");
     if !cow_supported(root) {
         let error = manager.provision_worktree("task-wt").unwrap_err();
         assert!(
@@ -574,7 +621,7 @@ fn a_task_worktree_materializes_the_checkpoint_by_copy_on_write_or_fails_closed(
             "{error}"
         );
         assert!(
-            !worktrees.join("task-wt").exists(),
+            !task_dir_exists(worktrees.path(), "task-wt"),
             "a partial worktree was left behind"
         );
         return;
@@ -588,10 +635,11 @@ fn a_task_worktree_materializes_the_checkpoint_by_copy_on_write_or_fails_closed(
         worktree.cloned_files,
         worktree.written_files
     );
-    assert_eq!(
-        worktree.path,
-        worktrees.canonicalize().unwrap().join("task-wt")
-    );
+    // `<worktrees dir>/<repository id>/<task_id>`, outside the repository and any `.git`.
+    let base = worktrees.path().canonicalize().unwrap();
+    assert_eq!(worktree.path.parent().unwrap().parent().unwrap(), base);
+    assert!(worktree.path.ends_with("task-wt"));
+    assert!(!worktree.path.starts_with(root.canonicalize().unwrap()));
     assert_eq!(worktree.workspace, worktree.path);
     assert_eq!(worktree.checkpoint_seq, 1);
     assert_eq!(worktree.written_files, 2, "{worktree:?}"); // the buffer and module_1.ts
@@ -621,7 +669,7 @@ fn a_task_worktree_materializes_the_checkpoint_by_copy_on_write_or_fails_closed(
     // Closing the task removes its worktree with its checkpoints.
     manager.provision_worktree("task-wt").unwrap();
     manager.discard_task("task-wt").unwrap();
-    assert!(!worktrees.join("task-wt").exists());
+    assert!(!task_dir_exists(worktrees.path(), "task-wt"));
     // The workspace itself was never touched.
     assert_eq!(
         git(root, &["status", "--porcelain=v1"]),
@@ -656,7 +704,11 @@ fn provisioning_a_task_worktree_of_a_thousand_files_takes_under_5_ms() {
         return;
     }
     write(root, "index.ts", b"export {};\n");
-    let manager = CheckpointManager::open(root).unwrap();
+    let worktrees = tempfile::tempdir().unwrap();
+    let manager = CheckpointManager::open(root)
+        .unwrap()
+        .with_worktrees_dir(worktrees.path())
+        .unwrap();
     let buffer_path = root.join("index.ts");
     let unsaved = [UnsavedBuffer {
         path: &buffer_path,
@@ -688,4 +740,167 @@ fn provisioning_a_task_worktree_of_a_thousand_files_takes_under_5_ms() {
             "median {median:?} >= 5 ms"
         );
     }
+}
+
+/// Installed packages (ignored by Git) are available in the worktree so that the agent can
+/// build and test: real Node resolves shared packages to the user's installation, and the
+/// workspace's own packages to the worktree's copy (the one the agent edits). Tool caches are
+/// private; nothing of the user's installation changes, even when the worktree is released.
+#[cfg(unix)]
+#[test]
+fn a_task_worktree_shares_installed_packages_and_resolves_workspace_packages_to_itself() {
+    use std::os::unix::fs::symlink;
+    let dir = repo_with(&[
+        (".gitignore", b"node_modules/\n"),
+        (
+            "package.json",
+            b"{ \"name\": \"root\", \"private\": true }\n",
+        ),
+        (
+            "packages/local/package.json",
+            b"{ \"name\": \"@app/local\", \"main\": \"index.js\" }\n",
+        ),
+        (
+            "packages/local/index.js",
+            b"module.exports = 'user version';\n",
+        ),
+    ]);
+    let root = dir.path();
+    // A pnpm-like installation.
+    write(
+        root,
+        "node_modules/.pnpm/dep@1.0.0/node_modules/dep/index.js",
+        b"module.exports = 'dep';\n",
+    );
+    symlink(
+        ".pnpm/dep@1.0.0/node_modules/dep",
+        root.join("node_modules/dep"),
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("node_modules/@app")).unwrap();
+    symlink("../../packages/local", root.join("node_modules/@app/local")).unwrap();
+    write(
+        root,
+        "node_modules/plain/index.js",
+        b"module.exports = 'plain';\n",
+    );
+    write(
+        root,
+        "node_modules/.vite/deps.json",
+        b"{ \"user\": true }\n",
+    );
+    write(
+        root,
+        "packages/local/node_modules/nested/index.js",
+        b"module.exports = 'nested';\n",
+    );
+
+    let worktrees = tempfile::tempdir().unwrap();
+    let manager = CheckpointManager::open(root)
+        .unwrap()
+        .with_worktrees_dir(worktrees.path())
+        .unwrap();
+    manager.create_checkpoint("task-pkg", BEFORE, &[]).unwrap();
+    if !cow_supported(root) {
+        assert!(matches!(
+            manager.provision_worktree("task-pkg"),
+            Err(CheckpointError::CowUnavailable { .. })
+        ));
+        return;
+    }
+    let worktree = manager.provision_worktree("task-pkg").unwrap();
+    let wt = worktree.path.clone();
+    let real = root.canonicalize().unwrap();
+
+    let sources: Vec<_> = worktree
+        .shared_package_stores
+        .iter()
+        .map(|store| store.source.clone())
+        .collect();
+    assert_eq!(
+        sources,
+        vec![
+            real.join("node_modules"),
+            real.join("packages/local/node_modules")
+        ]
+    );
+    // The store is a real directory of the worktree; packages point back to the user's.
+    assert!(fs::symlink_metadata(wt.join("node_modules"))
+        .unwrap()
+        .is_dir());
+    assert_eq!(
+        fs::read_link(wt.join("node_modules/plain")).unwrap(),
+        real.join("node_modules/plain")
+    );
+    assert_eq!(
+        read(&wt, "packages/local/node_modules/nested/index.js"),
+        b"module.exports = 'nested';\n"
+    );
+    // Workspace packages resolve inside the worktree.
+    assert_eq!(
+        wt.join("node_modules/@app/local").canonicalize().unwrap(),
+        wt.canonicalize().unwrap().join("packages/local")
+    );
+    // Tool caches are private and empty.
+    let cache = fs::symlink_metadata(wt.join("node_modules/.vite")).unwrap();
+    assert!(
+        cache.is_dir()
+            && fs::read_dir(wt.join("node_modules/.vite"))
+                .unwrap()
+                .next()
+                .is_none()
+    );
+
+    // The agent edits a workspace package in its worktree; real Node sees that edit and the
+    // shared packages.
+    write(
+        &wt,
+        "packages/local/index.js",
+        b"module.exports = 'agent version';\n",
+    );
+    let node = Command::new("node")
+        .args([
+            "-e",
+            "console.log([require('dep'), require('@app/local'), require('plain')].join(' '))",
+        ])
+        .current_dir(&wt)
+        .output();
+    match node {
+        Ok(output) => {
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert_eq!(
+                String::from_utf8_lossy(&output.stdout),
+                "dep agent version plain\n"
+            );
+        }
+        Err(_) => eprintln!("node is not installed: module resolution not exercised"),
+    }
+
+    // Nothing of the user's installation or workspace changed, and releasing keeps it.
+    manager.release_worktree("task-pkg").unwrap();
+    assert!(!wt.exists());
+    assert_eq!(
+        read(root, "packages/local/index.js"),
+        b"module.exports = 'user version';\n"
+    );
+    assert_eq!(
+        read(root, "node_modules/plain/index.js"),
+        b"module.exports = 'plain';\n"
+    );
+    assert_eq!(
+        read(root, "node_modules/dep/index.js"),
+        b"module.exports = 'dep';\n"
+    );
+    assert_eq!(
+        read(root, "node_modules/.vite/deps.json"),
+        b"{ \"user\": true }\n"
+    );
+    assert_eq!(
+        read(root, "packages/local/node_modules/nested/index.js"),
+        b"module.exports = 'nested';\n"
+    );
 }

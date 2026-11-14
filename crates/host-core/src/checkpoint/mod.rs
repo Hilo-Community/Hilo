@@ -18,6 +18,7 @@
 //! Only libgit2 is used: it runs no hook, no filter driver and no other program, so creating a
 //! checkpoint is allowed on an untrusted workspace (`AGENTS.md` rule 6).
 
+mod packages;
 mod paths;
 mod rollback;
 mod snapshot;
@@ -31,8 +32,9 @@ use git2::{Oid, Repository, Signature, Time};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub use packages::{SharedPackageStore, PACKAGE_STORE_DIRS};
 pub use rollback::{RollbackConflict, RollbackFailure, RollbackOptions, RollbackReport};
-pub use worktree::{TaskWorktree, WORKTREES_DIR};
+pub use worktree::TaskWorktree;
 
 /// Namespace of every checkpoint reference.
 pub const CHECKPOINT_REF_PREFIX: &str = "refs/coloride/checkpoints";
@@ -142,6 +144,10 @@ pub enum CheckpointError {
     Corrupt(String),
     #[error("task {task_id} has no checkpoint to build a worktree from")]
     NoCheckpoint { task_id: String },
+    #[error("no worktrees directory is configured (CheckpointManager::with_worktrees_dir)")]
+    WorktreesDirNotConfigured,
+    #[error("invalid worktrees directory {path:?}: {reason}")]
+    InvalidWorktreesDir { path: PathBuf, reason: String },
     #[error("task {task_id} already has a worktree; release it first")]
     WorktreeExists { task_id: String },
     #[error(
@@ -181,6 +187,10 @@ pub struct CheckpointManager {
     /// Repository-relative path of the workspace (empty when it is the whole work tree).
     prefix: PathBuf,
     cache_path: PathBuf,
+    /// Where task worktrees go (see [`CheckpointManager::with_worktrees_dir`]).
+    worktrees_dir: Option<PathBuf>,
+    /// Stable id of the repository, naming its folder in the worktrees directory.
+    repository_id: String,
 }
 
 impl std::fmt::Debug for CheckpointManager {
@@ -209,12 +219,61 @@ impl CheckpointManager {
             .map_err(|_| not_a_repo())?
             .to_path_buf();
         let cache_path = repo.path().join(CHECKPOINT_INDEX_FILENAME);
+        let git_dir = repo
+            .path()
+            .canonicalize()
+            .unwrap_or_else(|_| repo.path().to_path_buf());
+        let repository_id =
+            blake3::hash(git_dir.as_os_str().as_encoded_bytes()).to_hex()[..16].to_string();
         Ok(CheckpointManager {
             repo: Mutex::new(repo),
             workdir,
             prefix,
             cache_path,
+            worktrees_dir: None,
+            repository_id,
         })
+    }
+
+    /// Sets the directory that holds task worktrees (created if missing): an application
+    /// cache directory, outside the repository, without a `.git` component, on the same
+    /// volume as the workspace.
+    pub fn with_worktrees_dir(mut self, dir: &Path) -> Result<Self, CheckpointError> {
+        let invalid = |reason: &str| CheckpointError::InvalidWorktreesDir {
+            path: dir.to_path_buf(),
+            reason: reason.to_string(),
+        };
+        if !dir.is_absolute() {
+            return Err(invalid("it must be absolute"));
+        }
+        if dir
+            .components()
+            .any(|part| part.as_os_str().eq_ignore_ascii_case(".git"))
+        {
+            return Err(invalid("tools ignore files below a .git directory"));
+        }
+        // Checked before creating anything; again after, on the canonical path (`/var` and
+        // `/private/var` on macOS are the same directory).
+        if dir.starts_with(&self.workdir) {
+            return Err(invalid("it must be outside the repository"));
+        }
+        let existed = dir.exists();
+        std::fs::create_dir_all(dir).map_err(|source| CheckpointError::Io {
+            path: dir.to_path_buf(),
+            source,
+        })?;
+        let canonical = dir.canonicalize().map_err(|source| CheckpointError::Io {
+            path: dir.to_path_buf(),
+            source,
+        })?;
+        if canonical.starts_with(&self.workdir) {
+            if !existed {
+                let _ = std::fs::remove_dir(dir);
+            }
+            return Err(invalid("it must be outside the repository"));
+        }
+        self.worktrees_dir = Some(canonical);
+        Ok(self)
     }
 
     /// The workspace the checkpoints cover (canonical).
@@ -307,8 +366,10 @@ impl CheckpointManager {
     /// garbage collection.
     pub fn discard_task(&self, task_id: &str) -> Result<usize, CheckpointError> {
         validate_task_id(task_id)?;
+        if self.worktrees_dir.is_some() {
+            worktree::remove_worktree(&self.worktree_path(task_id)?)?;
+        }
         let repo = self.lock();
-        worktree::remove_worktree(&worktree::worktree_path(&repo, task_id))?;
         let names: Vec<String> = repo
             .references_glob(&format!("{CHECKPOINT_REF_PREFIX}/{task_id}/*"))?
             .filter_map(|reference| reference.ok()?.name().ok().map(str::to_string))

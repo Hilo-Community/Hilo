@@ -1,7 +1,7 @@
 //! Copy-on-Write task worktrees (`LOT-011`, `CowWorktreeProvisioner`).
 //!
 //! A task's worktree is the content of its latest checkpoint, materialized in
-//! `<git dir>/coloride/worktrees/<task_id>`: the agent sees exactly what the user saw,
+//! `<worktrees dir>/<repository id>/<task_id>`: the agent sees exactly what the user saw,
 //! unsaved buffers included. A file whose disk content is still the checkpointed one is
 //! cloned (`clonefile` on APFS, `FICLONE` on btrfs/XFS, block cloning on ReFS), which shares
 //! its blocks until one side writes; the others (unsaved buffers, files changed since) are
@@ -10,6 +10,12 @@
 //! **Fail closed:** when the file system cannot clone (ext4, NTFS, HFS+, a Git directory on
 //! another volume), provisioning fails with [`CheckpointError::CowUnavailable`] and removes
 //! what it created. It never falls back to a full copy.
+//!
+//! **Location:** the Host gives the worktrees directory (an application cache directory)
+//! with [`CheckpointManager::with_worktrees_dir`]. It must be outside the repository and have
+//! no `.git` component: tools refuse to serve or watch files below `.git/` (Vite's
+//! `server.fs.deny` includes `**/.git/**`, which broke Vitest in a worktree kept there). It
+//! must be on the same volume as the workspace for Copy-on-Write to work.
 //!
 //! **Budget `< 5 ms`: not met, kept as an objective.** Measured on macOS/APFS (release build):
 //! median 15.6 ms for 1,000 files, of which a single `clonefile` of the directory alone takes
@@ -26,12 +32,10 @@ use std::time::{Duration, Instant};
 use git2::{Index, IndexEntry, ObjectType, Oid, Repository, Tree};
 use serde::{Deserialize, Serialize};
 
+use super::packages::{share_package_stores, SharedPackageStore, StoreScope};
 use super::paths::{from_git_path, write_new_file};
 use super::snapshot::{stat_matches, MODE_EXECUTABLE, MODE_FILE, MODE_SYMLINK};
 use super::{load_history, validate_task_id, CheckpointError, CheckpointManager};
-
-/// Directory, inside the Git directory, that holds the task worktrees.
-pub const WORKTREES_DIR: &str = "coloride/worktrees";
 
 /// A provisioned task worktree.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,6 +52,9 @@ pub struct TaskWorktree {
     pub cloned_files: usize,
     /// Files written from the checkpoint (unsaved buffers, files changed since).
     pub written_files: usize,
+    /// The user's installed packages made available in the worktree; the sandbox must expose
+    /// each `source` read-only (see `packages.rs`).
+    pub shared_package_stores: Vec<SharedPackageStore>,
     pub elapsed: Duration,
 }
 
@@ -63,7 +70,7 @@ impl CheckpointManager {
                 .ok_or_else(|| CheckpointError::NoCheckpoint {
                     task_id: task_id.to_string(),
                 })?;
-        let path = worktree_path(&repo, task_id);
+        let path = self.worktree_path(task_id)?;
         fs::create_dir_all(path.parent().unwrap_or(&path))
             .map_err(|source| io_error(&path, source))?;
         // `create_dir`, not `create_dir_all`: an existing worktree is an error, never reused.
@@ -75,11 +82,24 @@ impl CheckpointManager {
         })?;
 
         let mut counts = (0, 0);
-        let result = self.materialize(&repo, latest.tree, &path, &mut counts);
-        if let Err(error) = result {
-            let _ = fs::remove_dir_all(&path);
-            return Err(error);
-        }
+        let result = self
+            .materialize(&repo, latest.tree, &path, &mut counts)
+            .and_then(|()| {
+                let scope = StoreScope {
+                    repo: &repo,
+                    workdir: &self.workdir,
+                    prefix: &self.prefix,
+                    root: &path,
+                };
+                share_package_stores(&scope, latest.tree)
+            });
+        let shared_package_stores = match result {
+            Ok(shared) => shared,
+            Err(error) => {
+                let _ = fs::remove_dir_all(&path);
+                return Err(error);
+            }
+        };
         Ok(TaskWorktree {
             task_id: task_id.to_string(),
             workspace: path.join(&self.prefix),
@@ -87,6 +107,7 @@ impl CheckpointManager {
             checkpoint_seq: latest.seq,
             cloned_files: counts.0,
             written_files: counts.1,
+            shared_package_stores,
             elapsed: started.elapsed(),
         })
     }
@@ -94,8 +115,16 @@ impl CheckpointManager {
     /// Deletes the worktree of `task_id`. Returns whether there was one.
     pub fn release_worktree(&self, task_id: &str) -> Result<bool, CheckpointError> {
         validate_task_id(task_id)?;
-        let repo = self.lock();
-        remove_worktree(&worktree_path(&repo, task_id))
+        let _repo = self.lock();
+        remove_worktree(&self.worktree_path(task_id)?)
+    }
+
+    pub(super) fn worktree_path(&self, task_id: &str) -> Result<PathBuf, CheckpointError> {
+        let dir = self
+            .worktrees_dir
+            .as_ref()
+            .ok_or(CheckpointError::WorktreesDirNotConfigured)?;
+        Ok(dir.join(&self.repository_id).join(task_id))
     }
 
     fn materialize(
@@ -242,10 +271,6 @@ fn clone(source: &Path, target: &Path) -> Result<(), CheckpointError> {
         path: source.to_path_buf(),
         source: error,
     })
-}
-
-pub(super) fn worktree_path(repo: &Repository, task_id: &str) -> PathBuf {
-    repo.path().join(WORKTREES_DIR).join(task_id)
 }
 
 pub(super) fn remove_worktree(path: &Path) -> Result<bool, CheckpointError> {
