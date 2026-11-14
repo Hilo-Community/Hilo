@@ -1,3 +1,4 @@
+pub mod checkpoint;
 pub mod contracts;
 pub mod dap;
 pub mod document;
@@ -10,6 +11,7 @@ pub mod process;
 pub mod terminal;
 pub mod trust;
 
+pub use checkpoint::*;
 pub use contracts::*;
 pub use dap::*;
 pub use document::*;

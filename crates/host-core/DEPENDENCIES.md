@@ -28,6 +28,29 @@ shell's group is killed when the session is dropped and by an `OrphanWatchdog` i
 dies abruptly. Not behind a cargo feature: the terminal is part of the core editor (LOT-010).
 Any version change needs another review.
 
+## `git2 = 0.21.0` + `libgit2-sys = 0.18.8+1.9.7` (checkpoints, LOT-011) — reviewed 2026-11-14
+
+Pinned exactly (`git2`). The rust-lang project's bindings to libgit2 1.9.7 (published
+2026-05-18). Built with `default-features = false` and `vendored-libgit2`: **no** `https`/`ssh`
+features, so no OpenSSL, libssh2 or network transport is compiled in, and every platform links
+the same libgit2 built from the crate's bundled sources.
+
+- `libgit2-sys/build.rs` (SHA-256 `0428eccc1a527dba5b208d84e622935821bdf89a4a396ba706857cb3298acd45`):
+  compiles the bundled C sources with `cc`. It runs `git submodule update` only when those
+  sources are missing, which is never the case for the published crate. No download.
+- Published package checksums in `Cargo.lock`: `git2`
+  `ddddbf932745a6be37109b6112d3ee09696106f848449069d3a57bba937ab82e`, `libgit2-sys`
+  `7f7c568b25d7489bc3fb2988ed69ab111d2944d2f5fec3d5c987fe545ea97b50`.
+- New crates in the lockfile: `libgit2-sys`, `libz-sys` (zlib, also vendored when missing),
+  `log`. The C sources of libgit2 were not reviewed line by line.
+
+How we use it: only from `src/checkpoint/`. libgit2 runs no hook, no `.gitattributes` filter
+driver and no other program (checked by `checkpoints_run_no_git_hook`), which is why checkpoints
+are not behind `WorkspaceTrustGate`. Blobs are created with `git_blob_create_from_disk` /
+`from_buffer`, which apply no filter: restores are byte-exact. It never writes `.git/index`,
+`HEAD` or a branch; it writes objects, `refs/coloride/checkpoints/*` and
+`<git dir>/coloride_tmp_index`. Any version change needs another review.
+
 ## `rustix = 1.1.6` (`process` feature, Unix only)
 
 Already in the dependency tree (via `tempfile`). Used for one call: `kill_process_group`
