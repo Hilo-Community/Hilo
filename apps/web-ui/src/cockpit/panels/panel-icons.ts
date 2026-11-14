@@ -1,14 +1,6 @@
 const svg = (body: string) =>
   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 
-/** Rectangle cut by a vertical line: the new panel appears on the right. */
-export const SPLIT_RIGHT_ICON = svg(
-  '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>',
-);
-/** Rectangle cut by a horizontal line: the new panel appears below. */
-export const SPLIT_DOWN_ICON = svg(
-  '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18"/>',
-);
 /** A window with the file tree as its right-hand column; `arrow` is the chevron in the editor. */
 const treeIcon = (arrow: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M22 12C22 8.25027 22 6.3754 21.0451 5.06107C20.7367 4.6366 20.3634 4.26331 19.9389 3.95491C18.6246 3 16.7497 3 13 3H11C7.25027 3 5.3754 3 4.06107 3.95491C3.6366 4.26331 3.26331 4.6366 2.95491 5.06107C2 6.3754 2 8.25027 2 12C2 15.7497 2 17.6246 2.95491 18.9389C3.26331 19.3634 3.6366 19.7367 4.06107 20.0451C5.3754 21 7.25027 21 11 21H13C16.7497 21 18.6246 21 19.9389 20.0451C20.3634 19.7367 20.7367 19.3634 21.0451 18.9389C22 17.6246 22 15.7497 22 12Z"/><path d="M14.5 3.5L14.5 20.5"/><path d="M19 7H17.5" stroke-linecap="round"/><path d="M19 11H17.5" stroke-linecap="round"/><path d="${arrow}" stroke-linecap="round"/></svg>`;
@@ -22,13 +14,25 @@ export const TREE_SHOW_ICON = treeIcon(
 );
 /** The Codex mark: a cloud with a prompt (`>_`) cut out of it, painted in the text colour. */
 export const CODEX_ICON = `<svg class="coloride-codex-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="14" height="14" fill="none" aria-hidden="true"><path fill="currentColor" d="M43.125 2.437A32.56 32.56 0 0 1 59.37.224q10.664 1.225 19.008 9.067a.62.62 0 0 0 .571.155q11.265-2.768 21.659 1.952l.336.16l.821.405c7.237 3.749 12.427 9.44 15.563 17.056a30 30 0 0 1 2.245 11.339a30.2 30.2 0 0 1-.96 8.699a.89.89 0 0 0 .213.827a31.9 31.9 0 0 1 8.416 15.419c2.053 10.139-.053 19.28-6.309 27.413l-.971 1.173a32.34 32.34 0 0 1-15.648 9.872a.86.86 0 0 0-.576.544c-1.36 3.925-2.725 7.275-5.264 10.624c-6.395 8.437-15.797 13.131-26.389 13.072q-12.663-.066-22.453-9.259a.77.77 0 0 0-.747-.171c-2.763.891-5.547 1.019-8.555.987a31.6 31.6 0 0 1-13.84-3.317a32.3 32.3 0 0 1-11.445-9.499c-1.083-1.435-2.155-2.784-2.939-4.379a41.3 41.3 0 0 1-2.64-6.843a32.6 32.6 0 0 1-.091-16.341a.9.9 0 0 0 .043-.395a.6.6 0 0 0-.197-.341a31.8 31.8 0 0 1-7.36-11.744a27.7 27.7 0 0 1-1.776-8.475a36.9 36.9 0 0 1 1.003-11.371q3.6-11.871 13.744-18.629c1.504-1.003 2.933-1.781 4.277-2.336a43 43 0 0 1 4.592-1.621a.69.69 0 0 0 .464-.464a32.1 32.1 0 0 1 5.888-11.483q5.44-6.77 13.072-9.883m-4.288 41.867a4.523 4.523 0 0 0-7.856 4.491l9.035 15.813l-9.003 15.189a4.528 4.528 0 0 0 7.787 4.608l10.347-17.451a4.53 4.53 0 0 0 .037-4.555zm29.045 33.28a4.528 4.528 0 0 0 0 9.04h25.856a4.528 4.528 0 0 0 0-9.045H67.882z"/></svg>`;
-/** A rectangle growing to its corners: show this panel alone. */
-export const MAXIMIZE_ICON = svg(
-  '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="8" y="8" width="8" height="8" rx="1"/>',
+/** Header icons: 24-unit grid, a 1.5 line, shown at 14 px like the tree icons. */
+const fineIcon = (body: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+const cornerIcon = (path: string) => fineIcon(`<path d="${path}"/>`);
+/** A window cut by a vertical line: the new panel appears on the right. */
+export const SPLIT_RIGHT_ICON = fineIcon(
+  '<path d="M11.9922 21L11.9922 20L11.9922 4L11.9922 3"/><path d="M7.99219 19.9995C6.69208 19.8699 5.81694 19.5772 5.16376 18.9157C3.99219 17.7291 3.99219 15.8193 3.99219 11.9997C3.99219 8.18016 3.99219 6.27038 5.16376 5.08379C5.81694 4.42224 6.69207 4.12952 7.99219 4"/><path d="M15.9922 19.9998C17.2923 19.8703 18.1674 19.5776 18.8206 18.916C19.9922 17.7294 19.9922 15.8196 19.9922 12.0001C19.9922 8.1805 19.9922 6.27072 18.8206 5.08413C18.192 4.44741 17.3577 4.15236 16.1368 4.01562"/>',
 );
-/** Two rectangles: bring the other panels back. */
-export const RESTORE_ICON = svg(
-  '<rect x="3" y="4" width="8" height="7" rx="1"/><rect x="13" y="4" width="8" height="7" rx="1"/><rect x="3" y="13" width="18" height="7" rx="1"/>',
+/** A window cut by a horizontal line: the new panel appears below. */
+export const SPLIT_DOWN_ICON = fineIcon(
+  '<path d="M20.9922 11.9993L2.99219 11.9993"/><path d="M19.9917 15.9993C19.8621 17.2994 19.5694 18.1745 18.9079 18.8277C17.7213 19.9993 15.8115 19.9993 11.9919 19.9993C8.17235 19.9993 6.26257 19.9993 5.07598 18.8277C4.41443 18.1745 4.12171 17.2994 3.99219 15.9993"/><path d="M19.992 7.99927C19.8625 6.69915 19.5697 5.82402 18.9082 5.17084C17.7216 3.99927 15.8118 3.99927 11.9923 3.99927C8.17269 3.99927 6.26291 3.99927 5.07632 5.17084C4.4396 5.7995 4.14454 6.63376 4.00781 7.85464"/>',
+);
+/** Four rounded corners opening outwards: show this panel alone. */
+export const MAXIMIZE_ICON = cornerIcon(
+  "M15.5 21C16.8956 21 17.5933 21 18.1611 20.8278C19.4395 20.44 20.44 19.4395 20.8278 18.1611C21 17.5933 21 16.8956 21 15.5M21 8.5C21 7.10444 21 6.40666 20.8278 5.83886C20.44 4.56046 19.4395 3.56004 18.1611 3.17224C17.5933 3 16.8956 3 15.5 3M8.5 21C7.10444 21 6.40666 21 5.83886 20.8278C4.56046 20.44 3.56004 19.4395 3.17224 18.1611C3 17.5933 3 16.8956 3 15.5M3 8.5C3 7.10444 3 6.40666 3.17224 5.83886C3.56004 4.56046 4.56046 3.56004 5.83886 3.17224C6.40666 3 7.10444 3 8.5 3",
+);
+/** The same four corners turned to point inwards: bring the other panels back. */
+export const RESTORE_ICON = cornerIcon(
+  "M3 9h2.5A3.5 3.5 0 0 0 9 5.5V3M21 9h-2.5A3.5 3.5 0 0 1 15 5.5V3M3 15h2.5A3.5 3.5 0 0 1 9 18.5V21M21 15h-2.5a3.5 3.5 0 0 0-3.5 3.5V21",
 );
 /** A terminal window with a prompt; used for terminal panels and their menu entry. */
 export const TERMINAL_ICON =
