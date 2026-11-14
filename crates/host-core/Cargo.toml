@@ -25,6 +25,8 @@ portable-pty = "=0.9.0"
 
 # Git checkpoints (LOT-011). No network features; libgit2 built from source. See DEPENDENCIES.md.
 git2 = { version = "=0.21.0", default-features = false, features = ["vendored-libgit2"] }
+# Copy-on-Write task worktrees (LOT-011). See DEPENDENCIES.md.
+reflink-copy = { version = "=0.1.30", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 # Safe process-group signalling (no `unsafe` in this crate). Already in the dependency tree.

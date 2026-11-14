@@ -518,3 +518,174 @@ fn a_restore_never_writes_through_a_symbolic_link() {
     let restored_inside = root.join("lib").is_dir() && read(root, "lib/a.ts") == b"original\n";
     assert!(restored_inside || !report.failed.is_empty(), "{report:?}");
 }
+
+/// Whether the file system holding `dir` can clone files (APFS, btrfs, XFS, ReFS).
+fn cow_supported(dir: &Path) -> bool {
+    let probe = dir.join(".cow-probe");
+    fs::write(&probe, b"probe").unwrap();
+    let supported = reflink_copy::reflink(&probe, dir.join(".cow-probe-clone")).is_ok();
+    let _ = fs::remove_file(dir.join(".cow-probe-clone"));
+    fs::remove_file(probe).unwrap();
+    supported
+}
+
+/// The task worktree is the latest checkpoint (unsaved buffers included, later disk edits
+/// excluded), shares unchanged files with the workspace by Copy-on-Write, and is removed when
+/// released. Without Copy-on-Write it is an explicit error and nothing is left behind.
+#[test]
+fn a_task_worktree_materializes_the_checkpoint_by_copy_on_write_or_fails_closed() {
+    let files: Vec<(String, Vec<u8>)> = (0..50)
+        .map(|n| {
+            (
+                format!("src/module_{n}.ts"),
+                format!("export const n = {n};\n").into_bytes(),
+            )
+        })
+        .collect();
+    let refs: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(path, body)| (path.as_str(), body.as_slice()))
+        .collect();
+    let dir = repo_with(&refs);
+    let root = dir.path();
+    write(root, "untracked.txt", b"untracked\n");
+    let manager = CheckpointManager::open(root).unwrap();
+
+    assert!(matches!(
+        manager.provision_worktree("task-wt"),
+        Err(CheckpointError::NoCheckpoint { .. })
+    ));
+    let buffer_path = root.join("src/module_0.ts");
+    let unsaved = [UnsavedBuffer {
+        path: &buffer_path,
+        text: "export const n = 'unsaved';\n",
+    }];
+    manager
+        .create_checkpoint("task-wt", BEFORE, &unsaved)
+        .unwrap();
+    // Changed on disk after the checkpoint: the worktree keeps the checkpointed content.
+    write(root, "src/module_1.ts", b"changed after the checkpoint\n");
+
+    let worktrees = root.join(".git/coloride/worktrees");
+    if !cow_supported(root) {
+        let error = manager.provision_worktree("task-wt").unwrap_err();
+        assert!(
+            matches!(error, CheckpointError::CowUnavailable { .. }),
+            "{error}"
+        );
+        assert!(
+            !worktrees.join("task-wt").exists(),
+            "a partial worktree was left behind"
+        );
+        return;
+    }
+
+    let worktree = manager.provision_worktree("task-wt").unwrap();
+    eprintln!(
+        "worktree of {} files in {:?} ({} cloned, {} written)",
+        worktree.cloned_files + worktree.written_files,
+        worktree.elapsed,
+        worktree.cloned_files,
+        worktree.written_files
+    );
+    assert_eq!(
+        worktree.path,
+        worktrees.canonicalize().unwrap().join("task-wt")
+    );
+    assert_eq!(worktree.workspace, worktree.path);
+    assert_eq!(worktree.checkpoint_seq, 1);
+    assert_eq!(worktree.written_files, 2, "{worktree:?}"); // the buffer and module_1.ts
+    assert_eq!(worktree.cloned_files, 49, "{worktree:?}"); // the 48 other modules and untracked.txt
+    let wt = &worktree.path;
+    assert_eq!(
+        read(wt, "src/module_0.ts"),
+        b"export const n = 'unsaved';\n"
+    );
+    assert_eq!(read(wt, "src/module_1.ts"), b"export const n = 1;\n");
+    assert_eq!(read(wt, "src/module_42.ts"), b"export const n = 42;\n");
+    assert_eq!(read(wt, "untracked.txt"), b"untracked\n");
+    assert!(!wt.join(".git").exists());
+
+    // Writes on one side never reach the other.
+    write(wt, "src/module_42.ts", b"agent\n");
+    assert_eq!(read(root, "src/module_42.ts"), b"export const n = 42;\n");
+
+    assert!(matches!(
+        manager.provision_worktree("task-wt"),
+        Err(CheckpointError::WorktreeExists { .. })
+    ));
+    assert!(manager.release_worktree("task-wt").unwrap());
+    assert!(!wt.exists());
+    assert!(!manager.release_worktree("task-wt").unwrap());
+
+    // Closing the task removes its worktree with its checkpoints.
+    manager.provision_worktree("task-wt").unwrap();
+    manager.discard_task("task-wt").unwrap();
+    assert!(!worktrees.join("task-wt").exists());
+    // The workspace itself was never touched.
+    assert_eq!(
+        git(root, &["status", "--porcelain=v1"]),
+        " M src/module_1.ts\n?? untracked.txt\n"
+    );
+}
+
+/// LOT-011 budget: a task worktree in < 5 ms (no network involved). Measured on a 1,000-file
+/// project with one unsaved buffer; reported, and enforced only where Copy-on-Write exists and
+/// in optimized builds (debug builds of libgit2 are not representative).
+///
+/// KNOWN FAILURE in optimized builds: median ~15.6 ms on macOS/APFS. The budget is kept as an
+/// objective and not raised (see `src/checkpoint/worktree.rs`).
+#[test]
+fn provisioning_a_task_worktree_of_a_thousand_files_takes_under_5_ms() {
+    let files: Vec<(String, Vec<u8>)> = (0..1000)
+        .map(|n| {
+            (
+                format!("src/dir_{}/file_{n}.ts", n / 50),
+                format!("export const n = {n};\n").into_bytes(),
+            )
+        })
+        .collect();
+    let refs: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(path, body)| (path.as_str(), body.as_slice()))
+        .collect();
+    let dir = repo_with(&refs);
+    let root = dir.path();
+    if !cow_supported(root) {
+        eprintln!("Copy-on-Write unavailable here: budget not measured");
+        return;
+    }
+    write(root, "index.ts", b"export {};\n");
+    let manager = CheckpointManager::open(root).unwrap();
+    let buffer_path = root.join("index.ts");
+    let unsaved = [UnsavedBuffer {
+        path: &buffer_path,
+        text: "export { unsaved };\n",
+    }];
+    // Two checkpoints so that the stat cache is warm, as it is for every task after the first.
+    manager
+        .create_checkpoint("task-warmup", BEFORE, &unsaved)
+        .unwrap();
+    // Let the racy-Git window pass so that cached blob ids are trusted.
+    std::thread::sleep(std::time::Duration::from_millis(2100));
+    manager
+        .create_checkpoint("task-perf", BEFORE, &unsaved)
+        .unwrap();
+
+    let mut samples = Vec::new();
+    for _ in 0..5 {
+        let worktree = manager.provision_worktree("task-perf").unwrap();
+        assert_eq!(worktree.cloned_files + worktree.written_files, 1001);
+        samples.push(worktree.elapsed);
+        manager.release_worktree("task-perf").unwrap();
+    }
+    samples.sort();
+    let median = samples[samples.len() / 2];
+    eprintln!("worktree of 1001 files: median {median:?}, samples {samples:?}");
+    if !cfg!(debug_assertions) {
+        assert!(
+            median < std::time::Duration::from_millis(5),
+            "median {median:?} >= 5 ms"
+        );
+    }
+}

@@ -195,6 +195,26 @@ pub(super) fn write_file_atomic(
     result.map_err(io_error)
 }
 
+/// Creates `target` (which must not exist) with `contents`, without syncing it to disk: for
+/// disposable task worktrees, where a crash simply means provisioning again.
+pub(super) fn write_new_file(
+    target: &Path,
+    contents: &[u8],
+    executable: bool,
+) -> Result<(), CheckpointError> {
+    let io_error = |source| CheckpointError::Io {
+        path: target.to_path_buf(),
+        source,
+    };
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(target)
+        .map_err(io_error)?;
+    file.write_all(contents).map_err(io_error)?;
+    set_executable(&file, executable).map_err(io_error)
+}
+
 #[cfg(unix)]
 fn set_executable(file: &fs::File, executable: bool) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;

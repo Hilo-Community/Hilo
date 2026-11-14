@@ -325,6 +325,11 @@ struct StatKey {
     modified: Option<SystemTime>,
 }
 
+/// The file behind `meta` is the one `cached` was hashed from, unchanged since.
+pub(super) fn stat_matches(meta: &Metadata, cached: &IndexEntry) -> bool {
+    StatKey::of(meta).matches(cached)
+}
+
 impl StatKey {
     fn of(meta: &Metadata) -> Self {
         let modified = meta.modified().ok();

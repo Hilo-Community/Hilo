@@ -11,12 +11,17 @@
 //! and **never** overwrites a change the user made by hand: such a file is reported as a
 //! conflict and left as it is, unless the user confirmed that path explicitly.
 //!
+//! [`CheckpointManager::provision_worktree`] (the `CowWorktreeProvisioner` of the spec)
+//! materializes the latest checkpoint of a task in its own directory by Copy-on-Write, for the
+//! agent to work in; see `worktree.rs`.
+//!
 //! Only libgit2 is used: it runs no hook, no filter driver and no other program, so creating a
 //! checkpoint is allowed on an untrusted workspace (`AGENTS.md` rule 6).
 
 mod paths;
 mod rollback;
 mod snapshot;
+mod worktree;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
@@ -27,6 +32,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub use rollback::{RollbackConflict, RollbackFailure, RollbackOptions, RollbackReport};
+pub use worktree::{TaskWorktree, WORKTREES_DIR};
 
 /// Namespace of every checkpoint reference.
 pub const CHECKPOINT_REF_PREFIX: &str = "refs/coloride/checkpoints";
@@ -134,6 +140,20 @@ pub enum CheckpointError {
     AgentResultMissing { task_id: String },
     #[error("checkpoint reference {0} is malformed")]
     Corrupt(String),
+    #[error("task {task_id} has no checkpoint to build a worktree from")]
+    NoCheckpoint { task_id: String },
+    #[error("task {task_id} already has a worktree; release it first")]
+    WorktreeExists { task_id: String },
+    #[error(
+        "Copy-on-Write cloning is not available for {path:?} ({source}); task worktrees need a \
+         file system that supports it (APFS, btrfs, XFS, ReFS) on the same volume as the Git \
+         directory, and are never created by a full copy"
+    )]
+    CowUnavailable {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("git: {0}")]
     Git(#[from] git2::Error),
     #[error("I/O error on {path:?}: {source}")]
@@ -282,11 +302,13 @@ impl CheckpointManager {
             .collect())
     }
 
-    /// Deletes every checkpoint reference of `task_id` (the task is closed). Returns how many
-    /// were deleted. Git reclaims the objects later, at its next garbage collection.
+    /// Deletes every checkpoint reference of `task_id` and its worktree (the task is closed).
+    /// Returns how many references were deleted. Git reclaims the objects later, at its next
+    /// garbage collection.
     pub fn discard_task(&self, task_id: &str) -> Result<usize, CheckpointError> {
         validate_task_id(task_id)?;
         let repo = self.lock();
+        worktree::remove_worktree(&worktree::worktree_path(&repo, task_id))?;
         let names: Vec<String> = repo
             .references_glob(&format!("{CHECKPOINT_REF_PREFIX}/{task_id}/*"))?
             .filter_map(|reference| reference.ok()?.name().ok().map(str::to_string))

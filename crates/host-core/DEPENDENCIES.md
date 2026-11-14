@@ -51,6 +51,30 @@ are not behind `WorkspaceTrustGate`. Blobs are created with `git_blob_create_fro
 `HEAD` or a branch; it writes objects, `refs/coloride/checkpoints/*` and
 `<git dir>/coloride_tmp_index`. Any version change needs another review.
 
+## `reflink-copy = 0.1.30` (Copy-on-Write task worktrees, LOT-011) — reviewed 2026-11-14
+
+Pinned exactly; published 2026-06-18 (0.1.31 to 0.1.33 were less than two weeks old). From the
+cargo-bins project. Reviewed from the published crate in the local cargo registry:
+
+- `src/sys/unix/macos.rs` (SHA-256 `db099e9addb9fe40a9e4bd4f75c6dab05521865b302848dd4ddb2e4fe0b48293`):
+  one `clonefile(src, dst, CLONE_NOOWNERCOPY)` FFI call. Without `CLONE_NOFOLLOW` it follows a
+  symbolic link at `src`: we only clone sources whose `lstat` is a regular file (or a directory
+  checked entry by entry) matching the checkpoint's stat cache.
+- `src/sys/unix/linux.rs` (SHA-256 `badfe8a09a4940a65715154f3e04ea3910dcdc1419040b219762a86e3008a708`):
+  `ioctl_ficlone` through `rustix` into a new file created with `O_EXCL`, removed on failure.
+- `src/sys/windows_impl.rs` (SHA-256 `07e054084c036645fcccd5f40266ab55b9080a4301f12d01313d860238582db2`):
+  `FSCTL_DUPLICATE_EXTENTS_TO_FILE` (ReFS / Dev Drive). Its own documentation calls it
+  untested; on NTFS it fails, which we report as `CowUnavailable`.
+- `src/lib.rs` (SHA-256 `f6236077c1f158ae4dbdee748797a877c3eab397a06bedd2f22bda517a56ecf2`):
+  `reflink` never falls back to copying (only `reflink_or_copy` does, which we do not call).
+- No build script, no network. Published package checksum in `Cargo.lock`:
+  `d9dd7ab4af0363d5ccfd2838d782a28196cf32a5cc2e4fe3c5dc83f2be588b8b`.
+- New crates in the lockfile: `cfg-if`; Windows-only `windows` 0.62 bindings.
+
+How we use it: only `reflink(source, target)` from `src/checkpoint/worktree.rs`. Any error is
+fatal (`CowUnavailable`), and the partial worktree is removed: no silent full copy.
+Any version change needs another review.
+
 ## `rustix = 1.1.6` (`process` feature, Unix only)
 
 Already in the dependency tree (via `tempfile`). Used for one call: `kill_process_group`
