@@ -1,6 +1,24 @@
 //! Capability skeleton only; no OS sandbox runner can execute commands yet.
 //! Health-check targets are configuration, not measured execution guarantees.
 
+pub mod audit;
+pub mod engine;
+pub mod error;
+pub mod path_guard;
+pub mod runner;
+pub mod spec;
+pub mod supervisor;
+
+pub use audit::{
+    AuditSink, MemoryAuditSink, SecurityAuditEvent, SecurityEventKind, TracingAuditSink,
+};
+pub use engine::{EngineCapabilities, OsSandboxEngine};
+pub use error::SandboxError;
+pub use path_guard::{PathGuard, PathGuardError};
+pub use runner::{native_sandbox, OsNativeSandbox, SandboxRunner};
+pub use spec::{NetworkPolicy, ResourceLimits, SandboxSpec, ValidatedSpec, TMP_DIR_NAME};
+pub use supervisor::{RunOutput, SandboxedChild, Termination};
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
