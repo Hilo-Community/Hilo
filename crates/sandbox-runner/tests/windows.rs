@@ -218,17 +218,44 @@ fn the_output_budget_stops_a_flood() {
 fn the_process_count_limit_is_enforced() {
     let l = layout();
     let (runner, _) = runner();
-    // `findstr` is a second process started by `cmd`.
-    let script = "findstr readable input.txt";
+    // `findstr` is a second process started by `cmd`, named by its full path so that only the
+    // limit is tested here.
+    let script = r"%SystemRoot%\System32\findstr.exe readable input.txt";
     let free = runner.run(&cmd(&l.work, script)).unwrap();
-    assert!(text(&free.stdout).contains("readable"), "{free:?}");
+    assert!(text(&free.stdout).contains("readable"), "{}", report(&free));
     let mut limited = cmd(&l.work, script);
     limited.limits.max_processes = Some(1);
     let out = runner.run(&limited).unwrap();
     assert!(
         !text(&out.stdout).contains("readable"),
-        "the second process ran despite the limit of one: {out:?}"
+        "the second process ran despite the limit of one: {}",
+        report(&out)
     );
+}
+
+/// Exit, stdout and stderr as text, for assertion messages.
+fn report(out: &sandbox_runner::RunOutput) -> String {
+    format!(
+        "{:?}\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        out.termination,
+        text(&out.stdout),
+        text(&out.stderr)
+    )
+}
+
+#[test]
+fn programs_are_found_through_the_path_the_request_gives() {
+    let l = layout();
+    let (runner, _) = runner();
+    // On failure, the message shows the environment and the directory listing as `cmd` sees
+    // them inside the AppContainer.
+    let out = runner
+        .run(&cmd(
+            &l.work,
+            r"set & dir %SystemRoot%\System32\findstr.exe & findstr readable input.txt",
+        ))
+        .unwrap();
+    assert!(text(&out.stdout).contains("readable"), "{}", report(&out));
 }
 
 #[test]
