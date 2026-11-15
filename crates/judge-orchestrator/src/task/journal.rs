@@ -37,7 +37,7 @@ impl Journal {
     pub(super) fn create(path: &Path) -> Result<Self, RepositoryError> {
         let file = OpenOptions::new()
             .read(true)
-            .append(true)
+            .write(true)
             .create_new(true)
             .open(path)
             .map_err(io_error(path))?;
@@ -53,9 +53,12 @@ impl Journal {
     pub(super) fn open<R: DeserializeOwned>(
         path: &Path,
     ) -> Result<(Self, Vec<R>), RepositoryError> {
+        // Write access, not append-only: truncating an unfinished last write needs it on Windows
+        // (an append-only handle may extend the file but not cut it). `append` seeks to the end
+        // itself before every write.
         let mut file = OpenOptions::new()
             .read(true)
-            .append(true)
+            .write(true)
             .open(path)
             .map_err(io_error(path))?;
         let mut bytes = Vec::new();
@@ -91,6 +94,9 @@ impl Journal {
         frame.extend_from_slice(&len.to_le_bytes());
         frame.extend_from_slice(blake3::hash(&payload).as_bytes());
         frame.extend_from_slice(&payload);
+        self.file
+            .seek(SeekFrom::End(0))
+            .map_err(io_error(&self.path))?;
         self.file.write_all(&frame).map_err(io_error(&self.path))?;
         self.file.sync_data().map_err(io_error(&self.path))
     }
