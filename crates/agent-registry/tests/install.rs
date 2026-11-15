@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use agent_registry::{
-    AgentRegistry, CatalogOrigin, Fetch, Launch, NodeLocator, NodeToolchain, Parts, Redirects,
+    AgentRegistry, CatalogOrigin, Fetch, NodeLocator, NodeToolchain, Parts, Redirects,
     RegistryError,
 };
 use serde_json::{json, Value};
@@ -399,6 +399,8 @@ fn removing_an_installation_whose_record_points_elsewhere_deletes_nothing_there(
 
 #[cfg(unix)]
 mod npm {
+    use agent_registry::Launch;
+
     use super::*;
 
     /// An "npm" that records its arguments and lays out `node_modules/<name>` like the real one.

@@ -339,6 +339,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn only_the_end_of_a_long_output_is_kept_and_the_cut_is_reported() {
+        let long: Vec<u8> = (0..MAX_TERMINAL_OUTPUT_BYTES * 3)
+            .map(|i| (i % 251) as u8)
+            .collect();
+        let (kept, dropped) =
+            read_tail(Some(Box::new(std::io::Cursor::new(long.clone())))).unwrap();
+        assert!(dropped);
+        assert_eq!(kept, long[long.len() - MAX_TERMINAL_OUTPUT_BYTES..]);
+        let (kept, dropped) =
+            read_tail(Some(Box::new(std::io::Cursor::new(vec![7u8; 100])))).unwrap();
+        assert!(!dropped);
+        assert_eq!(kept.len(), 100);
+        assert_eq!(read_tail(None).unwrap(), (Vec::new(), false));
+    }
+
+    #[test]
     fn terminal_output_always_fits_a_journaled_summary() {
         // Control characters are escaped as six bytes each: the worst case for the JSON size.
         let noisy = (vec![1u8; MAX_TERMINAL_OUTPUT_BYTES], true);
