@@ -405,3 +405,92 @@ fn unavailable_sandbox_untrusted_workspace_network_and_credentials_fail_closed()
         );
     }
 }
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn absolute_paths_inside_the_worktree_work_as_acp_specifies() {
+    let f = Fixture::new();
+    let (mut session, rx) = f.start("absolute");
+    let (mut read, mut location) = (false, false);
+    while !(read && location) {
+        if let AcpEvent::Update { update } = next(&rx) {
+            if update["sessionUpdate"] == "tool_call" {
+                // The UI receives the worktree-relative path it can open.
+                assert_eq!(update["locations"][0]["path"], "src/file.rs");
+                location = true;
+            } else if update["content"]["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("unsaved"))
+            {
+                read = true;
+            }
+        }
+    }
+    session.stop();
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn a_verbose_command_keeps_the_end_of_its_output_and_the_session_alive() {
+    let f = Fixture::new();
+    let (mut session, rx) = f.start("terminal-verbose");
+    let output = loop {
+        match next(&rx) {
+            AcpEvent::Permission { id, .. } => session.answer_permission(id, true).unwrap(),
+            AcpEvent::Stopped { reason } => panic!("the session ended: {reason}"),
+            AcpEvent::Update { update } => {
+                let text = update["content"]["text"].as_str().unwrap_or("");
+                let echoed: serde_json::Value = serde_json::from_str(text).unwrap_or_default();
+                if echoed["id"] == 11 {
+                    break echoed["result"].clone();
+                }
+            }
+            _ => {}
+        }
+    };
+    session.stop();
+    assert_eq!(output["truncated"], true);
+    assert_eq!(output["exitStatus"]["exitCode"], 0);
+    let text = output["output"].as_str().unwrap();
+    assert!(text.len() <= MAX_TERMINAL_OUTPUT_BYTES);
+    assert!(text.ends_with("line 3999\n"), "the end is kept");
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn cancelling_a_turn_stops_its_command_but_not_the_agent() {
+    let f = Fixture::new();
+    let (mut session, rx) = f.start("terminal");
+    loop {
+        if let AcpEvent::Permission { id, .. } = next(&rx) {
+            session.answer_permission(id, true).unwrap();
+            break;
+        }
+    }
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while session.process_ids().len() < 2 {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let started = std::time::Instant::now();
+    session.cancel().unwrap();
+    // The agent, still alive, echoes the answer to its `sleep 60` command: it ended at once.
+    loop {
+        if let AcpEvent::Update { update } = next(&rx) {
+            if update["content"]["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("terminalId"))
+            {
+                break;
+            }
+        }
+    }
+    assert!(started.elapsed() < Duration::from_secs(3));
+    session.stop();
+    assert!(f
+        .repository
+        .snapshot("task")
+        .unwrap()
+        .pending_intents
+        .is_empty());
+}

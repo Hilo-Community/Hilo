@@ -1,4 +1,6 @@
-use super::protocol::{AcpEvent, ProposedEdit, MAX_SESSION_ITEMS, MAX_TEXT_BYTES};
+use super::protocol::{
+    AcpEvent, ProposedEdit, MAX_FILE_BYTES, MAX_SESSION_ITEMS, MAX_TERMINAL_OUTPUT_BYTES,
+};
 use crate::{
     broker::{ExecutionError, ExecutionReport, ToolExecutor},
     budget::BudgetUsage,
@@ -37,6 +39,9 @@ pub struct AgentToolExecutor {
     reader: Arc<dyn WorkspaceText>,
     runner: Arc<dyn SandboxRunner>,
     limits: ResourceLimits,
+    /// The agent process itself, killed only when the session stops.
+    pub(crate) agent: Mutex<Option<Arc<Mutex<SandboxedChild>>>>,
+    /// Running terminal commands, killed when the turn is cancelled too.
     pub(crate) children: Children,
     pub(crate) cancelled: Arc<AtomicBool>,
     proposals: Mutex<BTreeMap<String, ProposedEdit>>,
@@ -56,6 +61,7 @@ impl AgentToolExecutor {
             reader,
             runner,
             limits,
+            agent: Mutex::new(None),
             children: Arc::new(Mutex::new(Vec::new())),
             cancelled: Arc::new(AtomicBool::new(false)),
             proposals: Mutex::new(BTreeMap::new()),
@@ -72,11 +78,30 @@ impl AgentToolExecutor {
             .collect()
     }
 
+    /// Ends the session: no new command starts, and every process, the agent included, is killed.
     pub(crate) fn stop(&self) {
         self.cancelled.store(true, Ordering::SeqCst);
+        self.kill_commands();
+        if let Some(agent) = self.agent.lock().expect("agent lock").as_ref() {
+            agent.lock().expect("child lock").kill();
+        }
+    }
+
+    /// Ends the running commands only (a cancelled turn); the agent stays to answer the cancel.
+    pub(crate) fn kill_commands(&self) {
         for child in self.children.lock().expect("children lock").iter() {
             child.lock().expect("child lock").kill();
         }
+    }
+
+    pub(crate) fn process_ids(&self) -> Vec<u32> {
+        let agent = self.agent.lock().expect("agent lock").clone();
+        let children = self.children.lock().expect("children lock").clone();
+        agent
+            .iter()
+            .chain(&children)
+            .map(|child| child.lock().expect("child lock").id())
+            .collect()
     }
 
     fn text_arg<'a>(&self, call: &'a ToolCall, key: &str) -> Result<&'a str, ExecutionError> {
@@ -105,7 +130,7 @@ impl AgentToolExecutor {
             ));
         }
         let text = self.reader.text(path).map_err(ExecutionError::NotStarted)?;
-        if text.len() > MAX_TEXT_BYTES {
+        if text.len() > MAX_FILE_BYTES {
             return Err(ExecutionError::NotStarted("file size limit".into()));
         }
         Ok((path.to_string(), text))
@@ -136,21 +161,8 @@ impl AgentToolExecutor {
             child = Arc::new(Mutex::new(process));
             children.push(child.clone());
         }
-        let read = |pipe: Option<ChildOutput>, child: Arc<Mutex<SandboxedChild>>| {
-            thread::spawn(move || {
-                let mut bytes = Vec::new();
-                if let Some(pipe) = pipe {
-                    pipe.take((MAX_TEXT_BYTES + 1) as u64)
-                        .read_to_end(&mut bytes)?;
-                }
-                if bytes.len() > MAX_TEXT_BYTES {
-                    child.lock().expect("child lock").kill();
-                }
-                Ok::<_, std::io::Error>(bytes)
-            })
-        };
-        let out = read(stdout, child.clone());
-        let err = read(stderr, child.clone());
+        let out = thread::spawn(move || read_tail(stdout));
+        let err = thread::spawn(move || read_tail(stderr));
         let status = loop {
             let status = child
                 .lock()
@@ -174,10 +186,62 @@ impl AgentToolExecutor {
             .lock()
             .expect("children lock")
             .retain(|c| !Arc::ptr_eq(c, &child));
-        if output.len() + errors.len() > MAX_TEXT_BYTES {
-            return Err(ExecutionError::Invalid("terminal output limit".into()));
+        Ok(terminal_result(&output, &errors, status.code()))
+    }
+}
+
+/// Everything a pipe produces, of which only the last [`MAX_TERMINAL_OUTPUT_BYTES`] are kept:
+/// a verbose command is not killed for its output, and memory stays bounded. The flag says
+/// whether anything was dropped.
+fn read_tail(pipe: Option<ChildOutput>) -> std::io::Result<(Vec<u8>, bool)> {
+    let mut kept = Vec::new();
+    let mut dropped = false;
+    let Some(mut pipe) = pipe else {
+        return Ok((kept, dropped));
+    };
+    let mut buffer = [0u8; 8192];
+    loop {
+        let count = pipe.read(&mut buffer)?;
+        if count == 0 {
+            return Ok((kept, dropped));
         }
-        Ok(serde_json::json!({"output": format!("{}{}", String::from_utf8_lossy(&output), String::from_utf8_lossy(&errors)), "truncated": false, "exitStatus": {"exitCode": status.code()}}).to_string())
+        kept.extend_from_slice(&buffer[..count]);
+        if kept.len() > MAX_TERMINAL_OUTPUT_BYTES {
+            kept.drain(..kept.len() - MAX_TERMINAL_OUTPUT_BYTES);
+            dropped = true;
+        }
+    }
+}
+
+/// The ACP `terminal/output` result. It is journaled as the call's summary and parsed back on
+/// every later terminal request, so it is cut until its JSON fits a summary whole: escaping
+/// (control characters become six bytes) can make it several times longer than the text.
+pub(crate) fn terminal_result(
+    stdout: &(Vec<u8>, bool),
+    stderr: &(Vec<u8>, bool),
+    exit_code: Option<i32>,
+) -> String {
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&stdout.0),
+        String::from_utf8_lossy(&stderr.0)
+    );
+    let mut keep = MAX_TERMINAL_OUTPUT_BYTES.min(text.len());
+    loop {
+        let mut start = text.len() - keep;
+        while !text.is_char_boundary(start) {
+            start += 1;
+        }
+        let result = serde_json::json!({
+            "output": &text[start..],
+            "truncated": stdout.1 || stderr.1 || start > 0,
+            "exitStatus": {"exitCode": exit_code},
+        })
+        .to_string();
+        if result.len() <= crate::broker::MAX_SUMMARY_BYTES || keep == 0 {
+            return result;
+        }
+        keep /= 2;
     }
 }
 
@@ -228,7 +292,7 @@ impl ToolExecutor for AgentToolExecutor {
             "write_worktree" => {
                 let (path, old_text) = self.base(spec, call)?;
                 let new_text = self.text_arg(call, "content")?.to_string();
-                if new_text.len() > MAX_TEXT_BYTES {
+                if new_text.len() > MAX_FILE_BYTES {
                     return Err(ExecutionError::NotStarted("proposal size limit".into()));
                 }
                 let edit = ProposedEdit {
@@ -252,7 +316,7 @@ impl ToolExecutor for AgentToolExecutor {
                     .reader
                     .query_local_mcp(self.text_arg(call, "request")?)
                     .map_err(ExecutionError::NotStarted)?;
-                if result.len() > MAX_TEXT_BYTES {
+                if result.len() > MAX_FILE_BYTES {
                     return Err(ExecutionError::NotStarted("MCP output limit".into()));
                 }
                 result
@@ -267,5 +331,26 @@ impl ToolExecutor for AgentToolExecutor {
             actual: self.estimate(spec, call)?,
             failure_signature: None,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn terminal_output_always_fits_a_journaled_summary() {
+        // Control characters are escaped as six bytes each: the worst case for the JSON size.
+        let noisy = (vec![1u8; MAX_TERMINAL_OUTPUT_BYTES], true);
+        let result = terminal_result(&noisy, &(b"tail".to_vec(), false), Some(1));
+        assert!(result.len() <= crate::broker::MAX_SUMMARY_BYTES);
+        let value: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(value["truncated"], true);
+        assert!(value["output"].as_str().unwrap().ends_with("tail"));
+
+        let quiet = terminal_result(&(b"ok\n".to_vec(), false), &(Vec::new(), false), Some(0));
+        let value: serde_json::Value = serde_json::from_str(&quiet).unwrap();
+        assert_eq!(value["output"], "ok\n");
+        assert_eq!(value["truncated"], false);
     }
 }

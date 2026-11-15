@@ -64,6 +64,7 @@ pub struct AcpHost {
 enum Control {
     Prompt(String),
     Permission(String, bool),
+    CancelTurn,
 }
 
 pub struct AcpSessionSupervisor {
@@ -74,7 +75,7 @@ pub struct AcpSessionSupervisor {
 }
 
 impl AcpSessionSupervisor {
-    pub fn start(host: AcpHost, launch: AcpLaunch) -> Result<Self, AcpError> {
+    pub fn start(mut host: AcpHost, launch: AcpLaunch) -> Result<Self, AcpError> {
         host.gate
             .authorize(GatedCapability::WorkspaceLocalBinary)
             .map_err(|e| AcpError::Launch(e.to_string()))?;
@@ -89,6 +90,8 @@ impl AcpSessionSupervisor {
             .worktree_root
             .canonicalize()
             .map_err(|e| AcpError::Launch(e.to_string()))?;
+        // The agent sees this exact path (its cwd and the prefix of the absolute paths it sends).
+        host.worktree_root.clone_from(&root);
         let executor = Arc::new(AgentToolExecutor::new(
             root.clone(),
             host.text.clone(),
@@ -149,11 +152,7 @@ impl AcpSessionSupervisor {
             .take_stderr()
             .ok_or_else(|| bad("stderr unavailable"))?;
         let child = Arc::new(Mutex::new(child));
-        executor
-            .children
-            .lock()
-            .expect("children lock")
-            .push(child.clone());
+        *executor.agent.lock().expect("agent lock") = Some(child.clone());
         let (messages_tx, messages_rx) = mpsc::sync_channel(MAX_PENDING_REQUESTS);
         let output_limit = launch.limits.max_output_bytes;
         let output_child = child.clone();
@@ -264,11 +263,17 @@ impl AcpSessionSupervisor {
             .try_send(Control::Permission(id, allow))
             .map_err(|_| bad("session closed or pending request limit"))
     }
-    pub fn cancel(&self) {
-        self.executor.stop();
+    /// Cancels the current turn (ACP `session/cancel`): running commands are killed and pending
+    /// requests answered as cancelled. The agent keeps running and the session stays open.
+    pub fn cancel(&self) -> Result<(), AcpError> {
+        self.executor.kill_commands();
+        self.controls
+            .try_send(Control::CancelTurn)
+            .map_err(|_| bad("session closed or pending request limit"))
     }
+    /// Ends the session: the agent and every command are killed.
     pub fn stop(&mut self) {
-        self.cancel();
+        self.executor.stop();
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
@@ -284,13 +289,7 @@ impl AcpSessionSupervisor {
             .cloned()
     }
     pub fn process_ids(&self) -> Vec<u32> {
-        self.executor
-            .children
-            .lock()
-            .expect("children lock")
-            .iter()
-            .map(|c| c.lock().expect("child lock").id())
-            .collect()
+        self.executor.process_ids()
     }
 }
 impl Drop for AcpSessionSupervisor {
@@ -415,7 +414,7 @@ impl Session {
         messages: Receiver<Result<Option<Value>, AcpError>>,
         controls: Receiver<Control>,
     ) -> Result<(), AcpError> {
-        self.request("initialize", json!({"protocolVersion":1,"clientInfo":{"name":"Coloride","version":"0.1.0"},"clientCapabilities":{"fs":{"readTextFile":true,"writeTextFile":true},"terminal":true,"_meta":{"relativePathsOnly":true,"writesAreProposals":true}}}))?;
+        self.request("initialize", json!({"protocolVersion":1,"clientInfo":{"name":"Coloride","version":"0.1.0"},"clientCapabilities":{"fs":{"readTextFile":true,"writeTextFile":true},"terminal":true,"_meta":{"writesAreProposals":true}}}))?;
         let mut deadline = Instant::now() + Duration::from_secs(10);
         loop {
             if self.executor.cancelled.load(Ordering::SeqCst)
@@ -448,6 +447,7 @@ impl Session {
                     }
                 }
                 Ok(Control::Permission(id, allow)) => self.permission(&id, allow)?,
+                Ok(Control::CancelTurn) => self.cancel_pending(),
                 Err(TryRecvError::Disconnected) => return Ok(()),
                 Err(TryRecvError::Empty) => {}
             }
@@ -531,12 +531,19 @@ impl Session {
             return Err(bad("wrong session"));
         }
         if method == "session/update" && message.get("id").is_none() {
-            if !message["params"]["update"].is_object() {
+            let mut update = message["params"]["update"].clone();
+            if !update.is_object() {
                 return Err(bad("invalid session update"));
             }
-            (self.host.events)(AcpEvent::Update {
-                update: message["params"]["update"].clone(),
-            });
+            // Agents report the absolute paths ACP uses; the Host UI opens worktree-relative ones.
+            if let Some(locations) = update.get_mut("locations").and_then(Value::as_array_mut) {
+                for location in locations {
+                    if let Some(path) = location["path"].as_str() {
+                        location["path"] = json!(self.relative(path));
+                    }
+                }
+            }
+            (self.host.events)(AcpEvent::Update { update });
             return Ok(());
         }
         if message.get("id").is_none() {
@@ -618,18 +625,19 @@ impl Session {
                 .ok_or_else(|| format!("Missing {key}"))
         };
         let arg = |key: &str| text(key).map(ToolArgValue::Text);
+        let path = |key: &str| text(key).map(|p| ToolArgValue::Text(self.relative(&p)));
         let (name, cap, args, approval) = match message["method"].as_str().unwrap_or("") {
             "fs/read_text_file" => (
                 "read_workspace",
                 ToolCapability::ReadWorkspace,
-                BTreeMap::from([("path".into(), arg("path")?)]),
+                BTreeMap::from([("path".into(), path("path")?)]),
                 false,
             ),
             "fs/write_text_file" => (
                 "write_worktree",
                 ToolCapability::WriteWorktree,
                 BTreeMap::from([
-                    ("path".into(), arg("path")?),
+                    ("path".into(), path("path")?),
                     ("content".into(), arg("content")?),
                 ]),
                 true,
@@ -652,7 +660,9 @@ impl Session {
                         ("program".into(), arg("command")?),
                         (
                             "cwd".into(),
-                            ToolArgValue::Text(params["cwd"].as_str().unwrap_or(".").into()),
+                            ToolArgValue::Text(
+                                self.relative(params["cwd"].as_str().unwrap_or(".")),
+                            ),
                         ),
                         ("args".into(), ToolArgValue::StringList(args)),
                     ]),
@@ -668,6 +678,15 @@ impl Session {
             _ => return Err("Unknown ACP method".into()),
         };
         Ok(tool_call(&self.host, key, name, cap, args, approval))
+    }
+    /// ACP paths are absolute. One inside the worktree becomes the relative path the policy
+    /// checks; any other path is passed on unchanged, for the policy to refuse.
+    fn relative(&self, path: &str) -> String {
+        match std::path::Path::new(path).strip_prefix(&self.host.worktree_root) {
+            Ok(rest) if rest.as_os_str().is_empty() => ".".into(),
+            Ok(rest) => rest.to_string_lossy().replace('\\', "/"),
+            Err(_) => path.into(),
+        }
     }
     fn execute(
         &mut self,

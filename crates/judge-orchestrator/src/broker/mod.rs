@@ -5,6 +5,7 @@ mod sandbox;
 mod summary;
 pub use executor::{ExecutionError, ExecutionReport, ToolExecutor};
 pub use sandbox::SandboxToolExecutor;
+pub(crate) use summary::MAX_SUMMARY_BYTES;
 
 use crate::{
     budget::{BudgetError, BudgetLedger, BudgetUsage},

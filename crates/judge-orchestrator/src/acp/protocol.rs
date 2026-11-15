@@ -3,10 +3,19 @@ use serde_json::Value;
 use std::io::{self, BufRead, Read, Write};
 use thiserror::Error;
 
-pub const MAX_MESSAGE_BYTES: usize = 256 * 1024;
+/// One JSON-RPC line. Large enough for a file of [`MAX_FILE_BYTES`] even if every byte had to be
+/// escaped (`\u00XX`, six bytes), so a permitted file always fits in a message.
+pub const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 pub const MAX_PENDING_REQUESTS: usize = 32;
+/// A prompt typed by the user.
 pub const MAX_TEXT_BYTES: usize = 24 * 1024;
+/// A file the agent reads or proposes, or a local MCP answer. The broker journals it whole, so
+/// it must fit in a journaled summary: a larger file is refused, never silently cut.
+pub const MAX_FILE_BYTES: usize = crate::broker::MAX_SUMMARY_BYTES;
+/// The output kept of one terminal command: its end, as ACP specifies (`truncated` is then set).
+pub const MAX_TERMINAL_OUTPUT_BYTES: usize = 16 * 1024;
 pub const MAX_SESSION_ITEMS: usize = 512;
+const _: () = assert!(MAX_FILE_BYTES * 6 + 4096 <= MAX_MESSAGE_BYTES);
 
 /// Count raw bytes, including JSON whitespace, before buffering or deserializing them.
 pub(crate) struct OutputBudget<R> {

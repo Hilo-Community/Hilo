@@ -4,7 +4,7 @@
 use crate::IntentOutcome;
 
 /// Largest summary kept in the journal, in bytes.
-pub(super) const MAX_SUMMARY_BYTES: usize = 64 * 1024;
+pub(crate) const MAX_SUMMARY_BYTES: usize = 64 * 1024;
 const KEEP: usize = MAX_SUMMARY_BYTES / 2 - 256;
 
 fn floor_boundary(text: &str, index: usize) -> usize {
