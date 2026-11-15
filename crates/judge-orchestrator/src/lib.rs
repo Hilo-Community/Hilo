@@ -4,6 +4,7 @@
 //! The model proposes; this crate decides what is authorized and records every step durably
 //! (`AGENTS.md` rule 1). Health-check targets are configuration, not measured guarantees.
 
+pub mod acp;
 pub mod broker;
 pub mod budget;
 pub mod policy;

@@ -117,6 +117,12 @@ impl AppContainerEngine {
     }
 
     fn launch_config(&self, spec: &ValidatedSpec) -> Result<LaunchConfig, SandboxError> {
+        if spec.worktree_read_only {
+            return Err(SandboxError::LimitNotEnforceable {
+                engine: "windows-appcontainer",
+                limit: "read-only agent worktree",
+            });
+        }
         if !spec.read_only_paths.is_empty() {
             return Err(SandboxError::InvalidSpec(
                 "the Windows sandbox cannot share read-only directories: that would change the \

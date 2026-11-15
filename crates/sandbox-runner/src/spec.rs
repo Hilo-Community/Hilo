@@ -51,6 +51,10 @@ impl Default for ResourceLimits {
 
 #[derive(Debug, Clone)]
 pub struct SandboxSpec {
+    /// Hide source file data from an agent: only its executable and private scratch are readable.
+    pub mediate_worktree_reads: bool,
+    /// ACP agents can propose changes but cannot write the task worktree themselves.
+    pub worktree_read_only: bool,
     /// The task worktree: the only place the process may write.
     pub worktree_root: PathBuf,
     /// Absolute path of the program. It is never looked up in `PATH`.
@@ -72,6 +76,8 @@ impl SandboxSpec {
     pub fn new(worktree_root: impl Into<PathBuf>, program: impl Into<PathBuf>) -> Self {
         let worktree_root = worktree_root.into();
         Self {
+            mediate_worktree_reads: false,
+            worktree_read_only: false,
             cwd: worktree_root.clone(),
             worktree_root,
             program: program.into(),
@@ -87,6 +93,8 @@ impl SandboxSpec {
 /// A request whose paths were resolved and checked. Engines receive only this.
 #[derive(Debug, Clone)]
 pub struct ValidatedSpec {
+    pub mediate_worktree_reads: bool,
+    pub worktree_read_only: bool,
     /// Canonical.
     pub worktree_root: PathBuf,
     pub program: PathBuf,
@@ -121,6 +129,9 @@ impl SandboxSpec {
     /// Checks the request. `tmp_dir` is filled in by the runner once it has created it.
     pub(crate) fn validate(&self) -> Result<ValidatedSpec, SandboxError> {
         let invalid = |reason: &str| SandboxError::InvalidSpec(reason.to_string());
+        if self.mediate_worktree_reads && !self.worktree_read_only {
+            return Err(invalid("Host-mediated reads require a read-only worktree"));
+        }
         if !self.program.is_absolute() {
             return Err(invalid("the program must be an absolute path"));
         }
@@ -183,6 +194,8 @@ impl SandboxSpec {
             read_only_paths.push(real);
         }
         Ok(ValidatedSpec {
+            mediate_worktree_reads: self.mediate_worktree_reads,
+            worktree_read_only: self.worktree_read_only,
             worktree_root,
             program: self.program.clone(),
             args: self.args.clone(),

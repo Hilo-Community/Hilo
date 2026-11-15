@@ -195,6 +195,18 @@ pub(crate) fn render_profile(spec: &ValidatedSpec, home: &Path) -> Result<Profil
             .map(|secret| profile.subpath("SEC", Path::new(secret))),
     );
 
+    let writable = if spec.worktree_read_only {
+        profile.subpath("TMP", &spec.tmp_dir)
+    } else {
+        worktree.clone()
+    };
+    let mediated = if spec.mediate_worktree_reads {
+        let executable = profile.literal("EXE", &spec.program);
+        let scratch = profile.subpath("SCRATCH", &spec.tmp_dir);
+        format!("(deny file-read-data {worktree})\n(allow file-read-data {executable} {scratch})\n")
+    } else {
+        String::new()
+    };
     let text = &mut profile.text;
     text.push_str("(version 1)\n");
     text.push_str(&format!(
@@ -213,10 +225,11 @@ pub(crate) fn render_profile(spec: &ValidatedSpec, home: &Path) -> Result<Profil
         read_only.join(" ")
     ));
     text.push_str(&format!(
-        "(allow file-write* {worktree} {})\n",
+        "(allow file-write* {writable} {})\n",
         devices.join(" ")
     ));
     text.push_str("(allow file-ioctl (literal \"/dev/dtracehelper\"))\n");
+    text.push_str(&mediated);
     // No `network` rule means no network. The proxy is the one exception.
     if let NetworkPolicy::LocalProxyOnly(addr) = spec.network {
         text.push_str(&format!(
@@ -374,6 +387,8 @@ mod tests {
 
     fn spec() -> ValidatedSpec {
         ValidatedSpec {
+            mediate_worktree_reads: false,
+            worktree_read_only: false,
             worktree_root: "/Users/u/Library/Caches/Coloride/wt".into(),
             program: "/usr/bin/true".into(),
             args: vec![],

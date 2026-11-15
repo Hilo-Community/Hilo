@@ -201,7 +201,25 @@ pub(crate) fn render_args(
     for path in &spec.read_only_paths {
         args.bind("--ro-bind", path, path);
     }
-    args.bind("--bind", &spec.worktree_root, &spec.worktree_root);
+    if spec.mediate_worktree_reads {
+        args.with("--dir", &spec.worktree_root);
+        if spec.program.starts_with(&spec.worktree_root) {
+            args.bind("--ro-bind", &spec.program, &spec.program);
+        }
+    } else {
+        args.bind(
+            if spec.worktree_read_only {
+                "--ro-bind"
+            } else {
+                "--bind"
+            },
+            &spec.worktree_root,
+            &spec.worktree_root,
+        );
+    }
+    if spec.worktree_read_only {
+        args.bind("--bind", &spec.tmp_dir, &spec.tmp_dir);
+    }
 
     // Last of the mounts, so that nothing shows through: a secret that sits inside a shared path.
     let shared: Vec<&PathBuf> = std::iter::once(&spec.worktree_root)
@@ -338,6 +356,8 @@ mod tests {
         fs::write(home.join(".netrc"), "secret").unwrap();
         fs::create_dir_all(&worktree).unwrap();
         let spec = ValidatedSpec {
+            mediate_worktree_reads: false,
+            worktree_read_only: false,
             worktree_root: worktree.clone(),
             program: "/bin/sh".into(),
             args: vec!["-c".into(), "true".into()],

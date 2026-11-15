@@ -1,5 +1,12 @@
 # LOT-013 governance core
 
+The scoped LOT-014 ACP supervisor is documented in [acp/README.md](src/acp/README.md).
+It adds no dependency: the bounded JSON-RPC client reuses the existing `serde_json` stack.
+The current official Rust SDK's workspace declares Rust 1.88; this workspace declares 1.80.
+We retain synchronous supervised pipes and explicit framing/request bounds instead of adding
+that SDK and its transport/schema dependency tree. See the linked notes for protocol conflicts,
+platform refusals, mutation evidence and the deliberately deferred provider/authentication work.
+
 Implementation notes and test evidence; LOT-013 acceptance remains a human signoff.
 
 ## Host boundary
