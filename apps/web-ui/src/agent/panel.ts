@@ -1,3 +1,4 @@
+import { diffLines, formatDiff } from "./diff.js";
 import { type AgentHandle, type AgentHost, AgentStore } from "./store.js";
 
 /** Generic ACP panel. Its DOM and subscriptions never own or replace the CodeMirror view. */
@@ -171,13 +172,8 @@ export class AgentPanel {
         const diff = doc.createElement("pre");
         diff.setAttribute("aria-label", `Read-only proposed diff for ${tool.edit.path}`);
         diff.tabIndex = 0;
-        diff.textContent = `Base BLAKE3: ${tool.edit.baseContentHash}\n--- ${tool.edit.path}\n+++ proposed/${tool.edit.path}\n${tool.edit.oldText
-          .split("\n")
-          .map((line) => `- ${line}`)
-          .join("\n")}\n${tool.edit.newText
-          .split("\n")
-          .map((line) => `+ ${line}`)
-          .join("\n")}`;
+        const { path, baseContentHash, oldText, newText } = tool.edit;
+        diff.textContent = `Base BLAKE3: ${baseContentHash}\n--- ${path}\n+++ proposed/${path}\n${formatDiff(diffLines(oldText, newText))}`;
         const label = doc.createElement("p");
         label.textContent = "! Needs Review — proposal only";
         card.append(label, diff);
