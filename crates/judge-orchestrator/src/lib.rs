@@ -4,6 +4,7 @@
 //! The model proposes; this crate decides what is authorized and records every step durably
 //! (`AGENTS.md` rule 1). Health-check targets are configuration, not measured guarantees.
 
+pub mod policy;
 pub mod task;
 
 pub use task::{IntentOutcome, Lease, Millis, RepositoryError, TaskSnapshot, TaskStateRepository};
