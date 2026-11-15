@@ -10,59 +10,9 @@ use host_core::{TaskSpec, TaskState};
 
 use super::journal::Journal;
 use super::record::{apply, new_snapshot, IntentOutcome, Record, TaskSnapshot};
+use super::state::Task;
 use super::transitions;
 use super::{Lease, Millis, RepositoryError};
-
-struct Task {
-    journal: Journal,
-    snapshot: TaskSnapshot,
-}
-
-impl Task {
-    fn apply(&mut self, record: Record) {
-        apply(&mut self.snapshot, record);
-    }
-
-    /// Flushes `record` to disk, then applies it.
-    fn commit(&mut self, record: Record) -> Result<(), RepositoryError> {
-        self.journal.append(&record)?;
-        self.apply(record);
-        Ok(())
-    }
-
-    fn check_lease(&self, lease: &Lease, now: Millis) -> Result<(), RepositoryError> {
-        let current = self.snapshot.generation;
-        let live = self
-            .snapshot
-            .lease
-            .as_ref()
-            .is_some_and(|(worker, _)| *worker == lease.worker_id());
-        if lease.generation() != current || !live {
-            return Err(RepositoryError::StaleLease {
-                lease: lease.generation(),
-                current,
-            });
-        }
-        let expires_at = self.snapshot.lease.as_ref().map_or(0, |(_, until)| *until);
-        if now >= expires_at {
-            return Err(RepositoryError::LeaseExpired {
-                generation: lease.generation(),
-                expired_at: expires_at,
-            });
-        }
-        Ok(())
-    }
-
-    fn check_live(&self) -> Result<(), RepositoryError> {
-        if self.snapshot.state.is_terminal() {
-            return Err(RepositoryError::Terminal {
-                task_id: self.snapshot.spec.task_id.clone(),
-                state: self.snapshot.state,
-            });
-        }
-        Ok(())
-    }
-}
 
 fn valid_task_id(task_id: &str) -> bool {
     (1..=128).contains(&task_id.len())
@@ -124,7 +74,15 @@ impl TaskStateRepository {
                 apply(&mut snapshot, record);
             }
             snapshot.lease = None;
-            tasks.insert(task_id, Task { journal, snapshot });
+            tasks.insert(
+                task_id,
+                Task {
+                    journal,
+                    snapshot,
+                    reservations: HashMap::new(),
+                    next_reservation: 0,
+                },
+            );
         }
         Ok(Self {
             dir,
@@ -170,6 +128,8 @@ impl TaskStateRepository {
             Task {
                 journal,
                 snapshot: new_snapshot(spec),
+                reservations: HashMap::new(),
+                next_reservation: 0,
             },
         );
         Ok(())
@@ -189,11 +149,11 @@ impl TaskStateRepository {
         ids
     }
 
-    fn with_task<T>(
+    pub(super) fn with_task<T, E: From<RepositoryError>>(
         &self,
         task_id: &str,
-        action: impl FnOnce(&mut Task) -> Result<T, RepositoryError>,
-    ) -> Result<T, RepositoryError> {
+        action: impl FnOnce(&mut Task) -> Result<T, E>,
+    ) -> Result<T, E> {
         let mut tasks = self.tasks();
         let task = tasks
             .get_mut(task_id)

@@ -6,6 +6,7 @@ use host_core::{TaskSpec, TaskState};
 use serde::{Deserialize, Serialize};
 
 use super::Millis;
+use crate::budget::BudgetUsage;
 
 /// How an external action ended, as recorded after it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,6 +49,19 @@ pub(super) enum Record {
         reconciled_by_human: bool,
         at: Millis,
     },
+    // Append only: existing bincode discriminants are part of the durable format.
+    BudgetSpent {
+        generation: u64,
+        usage: BudgetUsage,
+        paused: bool,
+        at: Millis,
+    },
+    CorrectionCycle {
+        generation: u64,
+        signature: String,
+        stopped: Option<TaskState>,
+        at: Millis,
+    },
 }
 
 /// What is known about a task, as of its last journal record.
@@ -66,6 +80,8 @@ pub struct TaskSnapshot {
     pub resolved_intents: BTreeMap<String, IntentOutcome>,
     /// State before the last `Paused`, where a resume must go back to.
     pub paused_from: Option<TaskState>,
+    pub budget_spent: BudgetUsage,
+    pub correction_failures: Vec<String>,
 }
 
 pub(super) fn new_snapshot(spec: TaskSpec) -> TaskSnapshot {
@@ -77,6 +93,8 @@ pub(super) fn new_snapshot(spec: TaskSpec) -> TaskSnapshot {
         pending_intents: BTreeMap::new(),
         resolved_intents: BTreeMap::new(),
         paused_from: None,
+        budget_spent: BudgetUsage::default(),
+        correction_failures: Vec::new(),
     }
 }
 
@@ -109,6 +127,24 @@ pub(super) fn apply(snapshot: &mut TaskSnapshot, record: Record) {
         Record::IntentResolved { key, outcome, .. } => {
             snapshot.pending_intents.remove(&key);
             snapshot.resolved_intents.insert(key, outcome);
+        }
+        Record::BudgetSpent { usage, paused, .. } => {
+            snapshot.budget_spent = snapshot.budget_spent.add(usage);
+            if paused {
+                snapshot.paused_from = Some(snapshot.state);
+                snapshot.state = TaskState::Paused;
+            }
+        }
+        Record::CorrectionCycle {
+            signature, stopped, ..
+        } => {
+            snapshot.correction_failures.push(signature);
+            if let Some(state) = stopped {
+                if state == TaskState::Paused {
+                    snapshot.paused_from = Some(snapshot.state);
+                }
+                snapshot.state = state;
+            }
         }
     }
 }

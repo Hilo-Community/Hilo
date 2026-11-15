@@ -12,11 +12,13 @@
 //! happened, so the task moves to `NeedsReconciliation` and nothing retries it: a human settles
 //! each such intent first ([`TaskStateRepository::reconcile`]).
 
+mod budget;
 mod error;
 mod journal;
 mod lease;
 mod record;
 mod repository;
+mod state;
 pub mod transitions;
 
 pub use error::RepositoryError;
