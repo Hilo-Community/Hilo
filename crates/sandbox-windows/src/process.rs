@@ -263,6 +263,12 @@ fn pipes() -> io::Result<Pipes> {
 /// The process is created suspended, placed in the job, then resumed: it never runs outside the
 /// job. It inherits nothing from the Host but its three pipes.
 pub fn spawn(config: &LaunchConfig) -> io::Result<Spawned> {
+    // EXPERIMENT ONLY (branch fix/win-child-experiment): 1 = no CREATE_NO_WINDOW,
+    // 2 = no UI restrictions, 4 = not in the job.
+    let exp: u32 = std::env::var("COLORIDE_EXP")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
     check_config(config)?;
     let program = wide_nul(config.program.as_os_str())?;
     let cwd = wide_nul(config.cwd.as_os_str())?;
@@ -291,7 +297,7 @@ pub fn spawn(config: &LaunchConfig) -> io::Result<Spawned> {
     for dir in &config.writable_dirs {
         changes.grants.push(Grant::full_access(dir, &sid)?);
     }
-    let job = Arc::new(Job::create(&config.limits)?);
+    let job = Arc::new(Job::create(&config.limits, exp & 2 == 0)?);
     let pipes = pipes()?;
 
     let capabilities = SECURITY_CAPABILITIES {
@@ -336,7 +342,7 @@ pub fn spawn(config: &LaunchConfig) -> io::Result<Spawned> {
             EXTENDED_STARTUPINFO_PRESENT
                 | CREATE_SUSPENDED
                 | CREATE_UNICODE_ENVIRONMENT
-                | CREATE_NO_WINDOW,
+                | if exp & 1 == 0 { CREATE_NO_WINDOW } else { 0 },
             environment.as_ptr().cast(),
             cwd.as_ptr(),
             ptr::from_ref(&startup).cast::<STARTUPINFOW>(),
@@ -354,7 +360,9 @@ pub fn spawn(config: &LaunchConfig) -> io::Result<Spawned> {
     };
     // From here, an error drops `process`, which kills the still-suspended process.
     let thread = thread?;
-    process.job.assign(&process.handle)?;
+    if exp & 4 == 0 {
+        process.job.assign(&process.handle)?;
+    }
     // SAFETY: `thread` is the live primary thread of the suspended process.
     if unsafe { ResumeThread(thread.as_raw_handle()) } == u32::MAX {
         return Err(io::Error::last_os_error());
