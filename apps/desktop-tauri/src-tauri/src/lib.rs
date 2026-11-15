@@ -47,6 +47,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::agent::agent_start_command,
+            commands::agent::agent_prompt_command,
+            commands::agent::agent_cancel_command,
+            commands::agent::agent_stop_command,
+            commands::agent::agent_permission_command,
             commands::documents::open_document_binary_command,
             commands::documents::apply_binary_transaction_command,
             commands::documents::save_document_binary_command,
@@ -77,6 +82,11 @@ pub fn run() {
         .expect("error while building Coloride");
 
     app.run(|handle, event| {
+        if matches!(event, tauri::RunEvent::Exit) {
+            if let Some(state) = handle.try_state::<DesktopAppState>() {
+                commands::agent::close_all_agents(&state);
+            }
+        }
         // Quitting (Cmd/Ctrl+Q, or the last window closing) with unsaved changes. An exit asked for
         // with a code (`app.exit`) is the one the user already confirmed.
         if let tauri::RunEvent::ExitRequested { api, code, .. } = event {

@@ -1,5 +1,6 @@
 //! Tauri commands, grouped by concern. Each one is registered in `crate::run`.
 
+pub mod agent;
 pub mod context_index;
 pub mod debug;
 pub mod documents;

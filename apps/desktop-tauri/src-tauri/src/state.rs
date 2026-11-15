@@ -13,7 +13,10 @@ use crate::bridge::DesktopBinaryEditorBridge;
 
 /// State shared by every Tauri command.
 pub(crate) struct DesktopAppState {
-    pub(crate) bridge: Mutex<DesktopBinaryEditorBridge>,
+    pub(crate) bridge: Arc<Mutex<DesktopBinaryEditorBridge>>,
+    pub(crate) agents:
+        Mutex<HashMap<u32, Arc<Mutex<judge_orchestrator::acp::AcpSessionSupervisor>>>>,
+    pub(crate) next_agent_id: AtomicU32,
     pub(crate) workspace_root: Mutex<Option<PathBuf>>,
     /// Trust gate of the open workspace. `None` (no workspace, or a root whose decision cannot
     /// be recorded) means untrusted: nothing may be launched.
@@ -54,7 +57,9 @@ impl DesktopAppState {
     ) -> Self {
         let latest_diagnostics = Arc::new(LatestDiagnostics::new());
         Self {
-            bridge: Mutex::new(bridge),
+            bridge: Arc::new(Mutex::new(bridge)),
+            agents: Mutex::new(HashMap::new()),
+            next_agent_id: AtomicU32::new(1),
             workspace_root: Mutex::new(None),
             trust_gate: Mutex::new(None),
             language_services: Mutex::new(None),

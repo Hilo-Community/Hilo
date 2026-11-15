@@ -64,6 +64,7 @@ pub(crate) fn revoke_workspace_trust(
             services.stop();
         }
         crate::commands::terminal::close_all_terminals(state);
+        crate::commands::agent::close_all_agents(state);
         crate::commands::debug::stop_debugging(state);
         revoked.map_err(|error| error.to_string())?;
     }
