@@ -52,9 +52,14 @@ fn spec(work: &Path, program: &str, args: &[&str]) -> SandboxSpec {
     spec
 }
 
+/// `cmd /s /c <script>`: with `/s`, `cmd` always removes the quotes around the script that the
+/// command-line quoting adds when it contains spaces, and runs the rest as written.
 fn cmd(work: &Path, script: &str) -> SandboxSpec {
-    spec(work, "cmd.exe", &["/d", "/c", script])
+    spec(work, "cmd.exe", &["/d", "/s", "/c", script])
 }
+
+/// Runs until killed, with no network (`ping` cannot even reach loopback in an AppContainer).
+const FOREVER: &str = "for /l %i in (0,0,1) do @rem";
 
 fn runner() -> (Box<dyn SandboxRunner>, Arc<MemoryAuditSink>) {
     let audit = Arc::new(MemoryAuditSink::default());
@@ -177,7 +182,7 @@ fn shared_read_only_directories_are_refused_rather_than_exposed() {
 fn the_wall_clock_budget_kills_the_whole_tree() {
     let l = layout();
     let (runner, audit) = runner();
-    let mut request = cmd(&l.work, "ping -n 60 127.0.0.1 >nul");
+    let mut request = cmd(&l.work, FOREVER);
     request.limits.wall_timeout = Duration::from_secs(2);
     let started = Instant::now();
     let out = runner.run(&request).unwrap();
@@ -237,19 +242,24 @@ fn the_private_temporary_directory_is_purged() {
     assert!(!l.work.join(".coloride-tmp").exists());
 }
 
-/// The SIDs of the access entries of `path`, as strings (no translation to account names).
-fn acl_sids(path: &Path) -> String {
-    let script = format!(
-        "(Get-Acl -LiteralPath '{}').GetAccessRules($true, $true, \
-         [System.Security.Principal.SecurityIdentifier]) | ForEach-Object {{ $_.IdentityReference.Value }}",
-        path.display()
-    );
-    let out = Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+/// The security descriptor of `path` in SDDL, where every SID that has no alias is written out
+/// (`S-1-15-2-...` for an AppContainer). `icacls /save` writes it as UTF-16 to a file.
+fn acl_sddl(path: &Path) -> String {
+    let dir = tempfile::tempdir().unwrap();
+    let saved = dir.path().join("acl.txt");
+    let out = Command::new("icacls")
+        .arg(path)
+        .arg("/save")
+        .arg(&saved)
         .output()
         .unwrap();
-    assert!(out.status.success(), "{}", text(&out.stderr));
-    text(&out.stdout)
+    assert!(out.status.success(), "icacls failed: {}", text(&out.stdout));
+    let bytes = fs::read(&saved).unwrap();
+    let units: Vec<u16> = bytes
+        .chunks_exact(2)
+        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+        .collect();
+    String::from_utf16_lossy(&units)
 }
 
 /// The prefix of every AppContainer SID.
@@ -261,7 +271,7 @@ fn the_access_granted_for_the_run_is_taken_back() {
     let (runner, _) = runner();
     let out = runner.run(&cmd(&l.work, "echo hi")).unwrap();
     assert!(out.termination.success(), "{out:?}");
-    let sids = acl_sids(&l.work);
+    let sids = acl_sddl(&l.work);
     assert!(
         !sids.contains(APP_CONTAINER_SID),
         "an AppContainer entry was left on the worktree:\n{sids}"
@@ -275,7 +285,7 @@ fn a_worktree_holding_a_hard_link_is_refused_before_any_permission_changes() {
     let secret = l.outside.join("secret.txt");
     fs::hard_link(&secret, l.work.join("innocent.txt")).unwrap();
     assert!(runner.run(&cmd(&l.work, "echo hi")).is_err());
-    assert!(!acl_sids(&secret).contains(APP_CONTAINER_SID));
+    assert!(!acl_sddl(&secret).contains(APP_CONTAINER_SID));
 }
 
 #[test]
@@ -290,8 +300,8 @@ fn a_worktree_holding_a_junction_is_refused_before_any_permission_changes() {
         .unwrap();
     assert!(made.status.success(), "{}", text(&made.stderr));
     assert!(runner.run(&cmd(&l.work, "echo hi")).is_err());
-    assert!(!acl_sids(&l.outside).contains(APP_CONTAINER_SID));
-    assert!(!acl_sids(&l.outside.join("secret.txt")).contains(APP_CONTAINER_SID));
+    assert!(!acl_sddl(&l.outside).contains(APP_CONTAINER_SID));
+    assert!(!acl_sddl(&l.outside.join("secret.txt")).contains(APP_CONTAINER_SID));
 }
 
 const HELPER_ENV: &str = "COLORIDE_WINDOWS_HOST_HELPER";
@@ -307,9 +317,7 @@ fn host_helper(dirs: &str) {
     let (work, journal) = dirs.split_once('|').unwrap();
     let engine = AppContainerEngine::with_journal_dir(journal);
     let runner = OsNativeSandbox::new(engine, Arc::new(MemoryAuditSink::default())).unwrap();
-    let child = runner
-        .spawn(&cmd(Path::new(work), "ping -n 120 127.0.0.1 >nul"))
-        .unwrap();
+    let child = runner.spawn(&cmd(Path::new(work), FOREVER)).unwrap();
     println!("SPAWNED {}", child.id());
     std::io::stdout().flush().unwrap();
     std::thread::sleep(Duration::from_secs(120));
@@ -363,13 +371,13 @@ fn a_run_whose_host_died_is_undone_at_the_next_start() {
     }
     assert!(gone(pid), "the sandboxed process outlived its Host");
     assert_eq!(journal_entries(&journal), 1, "the run should be on record");
-    assert!(acl_sids(&l.work).contains(APP_CONTAINER_SID));
+    assert!(acl_sddl(&l.work).contains(APP_CONTAINER_SID));
 
     // The next start cleans up before accepting anything.
     let engine = AppContainerEngine::with_journal_dir(&journal);
     OsNativeSandbox::new(engine, Arc::new(MemoryAuditSink::default())).unwrap();
     assert_eq!(journal_entries(&journal), 0);
-    let sids = acl_sids(&l.work);
+    let sids = acl_sddl(&l.work);
     assert!(
         !sids.contains(APP_CONTAINER_SID),
         "the dead run's access is still on the worktree:\n{sids}"
@@ -400,9 +408,7 @@ fn gone(pid: u32) -> bool {
 fn dropping_the_child_kills_its_whole_tree() {
     let l = layout();
     let (runner, _) = runner();
-    let child = runner
-        .spawn(&cmd(&l.work, "ping -n 120 127.0.0.1 >nul"))
-        .unwrap();
+    let child = runner.spawn(&cmd(&l.work, FOREVER)).unwrap();
     let pid = child.id();
     assert!(!gone(pid));
     drop(child);
