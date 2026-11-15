@@ -13,6 +13,7 @@
 @import "./thin-scrollbar.css";
 @import "./onboarding.css";
 @import "./editor.css";
+@import "./agent.css";
 @source "../**/*.ts";
 
 @theme {

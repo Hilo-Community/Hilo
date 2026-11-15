@@ -1,0 +1,70 @@
+.coloride-agent-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  gap: 8px;
+  padding: 12px;
+  color: var(--color-text-primary, #d4d4d4);
+  background: var(--color-editor, #1e1e1e);
+}
+.coloride-agent-panel input:not([type="checkbox"]),
+.coloride-agent-panel textarea {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  margin: 4px 0;
+  color: inherit;
+  background: var(--color-topbar, #252526);
+  border: 1px solid var(--color-border, #555);
+  user-select: text;
+}
+.coloride-agent-panel button {
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--color-border, #555);
+  padding: 4px 8px;
+  margin: 4px;
+  cursor: pointer;
+}
+.coloride-agent-panel button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.coloride-agent-panel :focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+.coloride-agent-output {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  user-select: text;
+}
+.coloride-agent-output article {
+  margin-bottom: 12px;
+}
+.coloride-agent-output pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  user-select: text;
+}
+.coloride-agent-tool,
+.coloride-agent-permission {
+  border: 2px solid #3b82f6;
+  padding: 8px;
+}
+.coloride-agent-tool[data-status="pending"],
+.coloride-agent-permission {
+  border-color: #eab308;
+}
+.coloride-agent-tool[data-status="failed"],
+.coloride-agent-tool[data-status="denied"] {
+  border-color: #ef4444;
+}
+.coloride-agent-panel textarea {
+  min-height: 64px;
+  resize: vertical;
+}

@@ -13,6 +13,8 @@ import {
   lazyBootDesktopCockpit,
 } from "./index.js";
 import "./shell.css";
+import type { AcpEvent } from "@coloride/web-ui";
+import { createTauriAgentHost } from "./tauri-agent-host.js";
 import { TauriBinaryHostBridge } from "./tauri-binary-host-bridge.js";
 import { createTauriDebugHost } from "./tauri-debug-host.js";
 import { createTauriTerminalHost } from "./tauri-terminal-host.js";
@@ -146,6 +148,7 @@ function ColorideDesktopApp() {
           },
           // Ctrl+`: shells in the trusted workspace, streamed over a binary channel.
           terminalHost: createTauriTerminalHost(invoke, () => new Channel<ArrayBuffer>()),
+          agentHost: createTauriAgentHost(invoke, () => new Channel<AcpEvent>()),
           // F5: debug the shown JavaScript file (vscode-js-debug, trusted workspaces only).
           debugHost: createTauriDebugHost(invoke, () => new Channel<ArrayBuffer>()),
           // The decision is taken in a native dialog owned by the Rust side (commands/trust.rs).

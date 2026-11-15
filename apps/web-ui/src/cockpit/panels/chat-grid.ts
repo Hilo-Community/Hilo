@@ -1,3 +1,5 @@
+import { AgentPanel } from "../../agent/panel.js";
+import type { AgentHost } from "../../agent/store.js";
 import { type LayoutNode, panel, panelIds, reconcileLayout } from "../../layout/layout-tree.js";
 import { PLUS_ICON } from "../../sidebar/icons.js";
 import { sessionDisplayTitle } from "../../sidebar/sidebar-row.js";
@@ -92,6 +94,7 @@ export class ChatGrid {
   private readonly messageRenderer = new VirtualChatMessageListRenderer();
   /** One pane per terminal session, alive for as long as the session exists (any group). */
   private readonly panes = new Map<string, TerminalPane>();
+  private readonly agentPanes = new Map<string, AgentPanel>();
   private readonly newPanelMenu: NewPanelMenu;
   private focusedTerminalId: string | null = null;
   /** Moves a panel by its header. */
@@ -104,6 +107,10 @@ export class ChatGrid {
     private readonly stores: CockpitStoreBundle,
     header: HTMLElement,
     private readonly terminals: ChatGridTerminals | null = null,
+    private readonly agents: {
+      host: AgentHost;
+      openLocation: (path: string, line: number) => Promise<void>;
+    } | null = null,
   ) {
     this.newPanelMenu = new NewPanelMenu(doc);
     this.element = doc.createElement("main");
@@ -250,6 +257,8 @@ export class ChatGrid {
     this.newPanelMenu.close(false);
     for (const pane of this.panes.values()) pane.destroy();
     this.panes.clear();
+    for (const pane of this.agentPanes.values()) pane.destroy();
+    this.agentPanes.clear();
     this.tabs.destroy();
   }
 
@@ -259,6 +268,12 @@ export class ChatGrid {
     const navigation = this.stores.navigation.getState();
     const activeGroup = navigation.groups.find((group) => group.id === navigation.activeGroupId);
     const chatsById = new Map(z3.chats.map((chat) => [chat.chatId, chat]));
+    for (const [id, pane] of this.agentPanes) {
+      if (!chatsById.has(id)) {
+        pane.destroy();
+        this.agentPanes.delete(id);
+      }
+    }
     const chats = (activeGroup?.chatIds ?? []).flatMap((id) => chatsById.get(id) ?? []);
     this.tabs.update(
       chats.map((chat): HeaderTabSpec => {
@@ -408,6 +423,16 @@ export class ChatGrid {
       return cell.el;
     }
     const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
+    if (this.agents) {
+      let pane = this.agentPanes.get(chat.chatId);
+      if (!pane) {
+        pane = new AgentPanel(this.grid.ownerDocument, this.agents.host, this.agents.openLocation);
+        this.agentPanes.set(chat.chatId, pane);
+      }
+      if (pane.element.parentElement !== cell.el) cell.el.append(pane.element);
+      cell.messages.hidden = true;
+      cell.logs.hidden = true;
+    }
     cell.el.dataset.validationState = chat.validationState;
     cell.el.dataset.active = String(active);
     cell.el.setAttribute("aria-label", uiText.chatCell(chat.title, token.labelEn));

@@ -1,4 +1,5 @@
 import type { ColorideEditorView } from "@coloride/editor-cm6";
+import type { AgentHost } from "./agent/store.js";
 import {
   TrustBanner,
   type WorkspaceTrustHost,
@@ -67,6 +68,7 @@ export interface CockpitDomControllerOptions {
   readonly terminalHost?: TerminalHost;
   /** JavaScript debugging (F5). Without it the debugger is not offered. */
   readonly debugHost?: DebugHost;
+  readonly agentHost?: AgentHost;
   /** The terminal emulator; xterm.js by default. */
   readonly createTerminalView?: TerminalViewFactory;
   readonly searchWorkspace?: (query: string) => Promise<readonly CockpitSearchResultItem[]>;
@@ -177,6 +179,20 @@ export class CockpitDomController {
         ? {
             host: options.terminalHost,
             createView: options.createTerminalView ?? createXtermView,
+          }
+        : null,
+      options.agentHost
+        ? {
+            host: options.agentHost,
+            openLocation: async (path, line) => {
+              await this.openWorkspaceFile(path);
+              const view = editorView.getEditorView();
+              const position = view.state.doc.line(
+                Math.min(Math.max(1, line), view.state.doc.lines),
+              ).from;
+              view.dispatch({ selection: { anchor: position }, scrollIntoView: true });
+              view.focus();
+            },
           }
         : null,
     );
