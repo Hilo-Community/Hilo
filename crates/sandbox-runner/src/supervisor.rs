@@ -28,6 +28,19 @@ const DRAIN_GRACE: Duration = Duration::from_secs(2);
 
 static TMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
+/// A fresh identifier, unique among the runs of this Host and, with the process id and the
+/// clock, across Hosts. Letters, digits and `-` only.
+pub(crate) fn new_run_id() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos());
+    format!(
+        "{}-{}-{nanos:x}",
+        std::process::id(),
+        TMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
 /// The private temporary directory of one run, inside the worktree. Removed when dropped.
 #[derive(Debug)]
 pub(crate) struct TmpDir {
@@ -189,8 +202,25 @@ pub struct SandboxedChild {
     timer: Option<LifetimeTimer>,
     timed_out: Arc<AtomicBool>,
     reaped: bool,
+    /// Runs once, when the tree is gone (after it was killed or reaped).
+    on_finish: Option<FinishHook>,
     /// Declared last: purged after the process tree is gone.
     _tmp: TmpDir,
+}
+
+/// What to do once a run is over.
+pub(crate) struct FinishHook(Box<dyn FnOnce() + Send>);
+
+impl FinishHook {
+    pub(crate) fn new(hook: impl FnOnce() + Send + 'static) -> Self {
+        Self(Box::new(hook))
+    }
+}
+
+impl std::fmt::Debug for FinishHook {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("FinishHook")
+    }
 }
 
 impl SandboxedChild {
@@ -200,6 +230,7 @@ impl SandboxedChild {
         tmp: TmpDir,
         lifetime: Option<Duration>,
         stdin_piped: bool,
+        on_finish: Option<FinishHook>,
     ) -> Result<Self, SandboxError> {
         use std::os::unix::process::CommandExt;
         use std::process::Stdio;
@@ -219,6 +250,7 @@ impl SandboxedChild {
             timer: None,
             timed_out: Arc::new(AtomicBool::new(false)),
             reaped: false,
+            on_finish,
             _tmp: tmp,
         };
         // If the watchdog cannot start, `supervised` is dropped here, which kills the child:
@@ -240,6 +272,7 @@ impl SandboxedChild {
         _tmp: TmpDir,
         _lifetime: Option<Duration>,
         _stdin_piped: bool,
+        _on_finish: Option<FinishHook>,
     ) -> Result<Self, SandboxError> {
         Err(SandboxError::SupervisionUnsupported)
     }
@@ -310,6 +343,9 @@ impl SandboxedChild {
         kill_process_group(self.child.id());
         if let Some(watchdog) = self.watchdog.take() {
             watchdog.stop();
+        }
+        if let Some(hook) = self.on_finish.take() {
+            (hook.0)();
         }
     }
 }

@@ -9,12 +9,15 @@ use std::process::Command;
 use std::sync::Arc;
 
 use crate::audit::{AuditSink, SecurityAuditEvent, SecurityEventKind};
+#[cfg(not(target_os = "macos"))]
 use crate::detect_native_os_sandbox;
-use crate::engine::{EngineCapabilities, OsSandboxEngine};
+use crate::engine::{EngineCapabilities, OsSandboxEngine, RunInfo};
 use crate::error::SandboxError;
 use crate::path_guard::PathGuardError;
 use crate::spec::{NetworkPolicy, ResourceLimits, SandboxSpec};
-use crate::supervisor::{run_to_completion, RunOutput, SandboxedChild, Termination, TmpDir};
+use crate::supervisor::{
+    new_run_id, run_to_completion, FinishHook, RunOutput, SandboxedChild, Termination, TmpDir,
+};
 
 /// Runs commands and long-lived processes in isolation.
 pub trait SandboxRunner: Send + Sync {
@@ -32,7 +35,7 @@ pub trait SandboxRunner: Send + Sync {
 
 /// A runner over the isolation mechanism of the current OS.
 pub struct OsNativeSandbox<E: OsSandboxEngine> {
-    engine: E,
+    engine: Arc<E>,
     audit: Arc<dyn AuditSink>,
 }
 
@@ -50,7 +53,10 @@ impl<E: OsSandboxEngine> OsNativeSandbox<E> {
             ));
             return Err(error);
         }
-        Ok(Self { engine, audit })
+        Ok(Self {
+            engine: Arc::new(engine),
+            audit,
+        })
     }
 
     /// Records the refusal, then hands the error back.
@@ -96,18 +102,37 @@ impl<E: OsSandboxEngine> OsNativeSandbox<E> {
         Ok(())
     }
 
-    fn prepare(
-        &self,
-        spec: &SandboxSpec,
-    ) -> Result<(Command, TmpDir, ResourceLimits), SandboxError> {
+    /// Everything needed to start the run: the isolated command, its private temporary
+    /// directory, its limits, and what to do once it is over.
+    fn prepare(&self, spec: &SandboxSpec) -> Result<Prepared, SandboxError> {
         // A malformed request is reported as such before asking what the engine can enforce.
         let mut validated = spec.validate()?;
         self.check_capabilities(spec)?;
         let tmp = TmpDir::create(&validated.worktree_root)?;
         validated.tmp_dir = tmp.path().to_path_buf();
+        validated.run_id = new_run_id();
         let command = self.engine.prepare(&validated)?;
-        Ok((command, tmp, validated.limits))
+        let info = RunInfo {
+            run_id: validated.run_id.clone(),
+            started: std::time::SystemTime::now(),
+            program: validated.program.clone(),
+        };
+        let (engine, audit) = (Arc::clone(&self.engine), Arc::clone(&self.audit));
+        let on_finish = FinishHook::new(move || engine.collect_denials(&info, audit));
+        Ok(Prepared {
+            command,
+            tmp,
+            limits: validated.limits,
+            on_finish,
+        })
     }
+}
+
+struct Prepared {
+    command: Command,
+    tmp: TmpDir,
+    limits: ResourceLimits,
+    on_finish: FinishHook,
 }
 
 impl<E: OsSandboxEngine> SandboxRunner for OsNativeSandbox<E> {
@@ -116,8 +141,13 @@ impl<E: OsSandboxEngine> SandboxRunner for OsNativeSandbox<E> {
     }
 
     fn run(&self, spec: &SandboxSpec) -> Result<RunOutput, SandboxError> {
-        let (command, tmp, limits) = self.prepare(spec).map_err(|error| self.refuse(error))?;
-        let mut child = SandboxedChild::spawn_prepared(command, tmp, None, false)?;
+        let Prepared {
+            command,
+            tmp,
+            limits,
+            on_finish,
+        } = self.prepare(spec).map_err(|error| self.refuse(error))?;
+        let mut child = SandboxedChild::spawn_prepared(command, tmp, None, false, Some(on_finish))?;
         let output = run_to_completion(&mut child, &limits)?;
         let program = spec.program.display();
         match output.termination {
@@ -138,15 +168,38 @@ impl<E: OsSandboxEngine> SandboxRunner for OsNativeSandbox<E> {
     }
 
     fn spawn(&self, spec: &SandboxSpec) -> Result<SandboxedChild, SandboxError> {
-        let (command, tmp, limits) = self.prepare(spec).map_err(|error| self.refuse(error))?;
-        SandboxedChild::spawn_prepared(command, tmp, Some(limits.wall_timeout), true)
+        let Prepared {
+            command,
+            tmp,
+            limits,
+            on_finish,
+        } = self.prepare(spec).map_err(|error| self.refuse(error))?;
+        SandboxedChild::spawn_prepared(
+            command,
+            tmp,
+            Some(limits.wall_timeout),
+            true,
+            Some(on_finish),
+        )
     }
 }
 
-/// The runner of the current OS, or `SandboxUnavailable`.
-///
-/// No OS engine is implemented yet (`Seatbelt`, `Landlock` + `bubblewrap`, `AppContainer` follow
-/// in this lot), so this always refuses: there is no unisolated fallback.
+/// The runner of the current OS, or `SandboxUnavailable`. On macOS this is Seatbelt; the other
+/// engines (`Landlock` + `bubblewrap`, `AppContainer`) follow in this lot, and until they exist
+/// those systems refuse: there is no unisolated fallback.
+#[cfg(target_os = "macos")]
+pub fn native_sandbox(audit: Arc<dyn AuditSink>) -> Result<Box<dyn SandboxRunner>, SandboxError> {
+    let engine = crate::seatbelt::SeatbeltEngine::for_current_user().inspect_err(|error| {
+        audit.record(SecurityAuditEvent::new(
+            SecurityEventKind::SandboxUnavailable,
+            error.to_string(),
+        ));
+    })?;
+    Ok(Box::new(OsNativeSandbox::new(engine, audit)?))
+}
+
+/// The runner of the current OS, or `SandboxUnavailable` (no engine exists for this OS yet).
+#[cfg(not(target_os = "macos"))]
 pub fn native_sandbox(audit: Arc<dyn AuditSink>) -> Result<Box<dyn SandboxRunner>, SandboxError> {
     let error = SandboxError::unavailable(format!(
         "the {:?} engine is not implemented yet",

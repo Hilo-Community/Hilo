@@ -1,6 +1,10 @@
 //! The per-OS part of the sandbox: how a request is turned into an isolated process.
 
 use std::process::Command;
+use std::sync::Arc;
+use std::time::SystemTime;
+
+use crate::audit::AuditSink;
 
 use crate::error::SandboxError;
 use crate::spec::ValidatedSpec;
@@ -35,4 +39,17 @@ pub trait OsSandboxEngine: Send + Sync + 'static {
     /// environment and `spec.cwd` as its working directory. The runner sets stdio and the
     /// process group.
     fn prepare(&self, spec: &ValidatedSpec) -> Result<Command, SandboxError>;
+
+    /// Called once when the process tree of a run has ended. An engine whose OS reports refusals
+    /// after the fact (a log, a trace) collects them here and records them in `audit`. It must
+    /// not block: start a thread for slow work. The default reports nothing.
+    fn collect_denials(&self, _run: &RunInfo, _audit: Arc<dyn AuditSink>) {}
+}
+
+/// Identifies one run to `OsSandboxEngine::collect_denials`.
+#[derive(Debug, Clone)]
+pub struct RunInfo {
+    pub run_id: String,
+    pub started: SystemTime,
+    pub program: std::path::PathBuf,
 }

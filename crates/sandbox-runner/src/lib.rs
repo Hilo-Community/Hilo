@@ -6,16 +6,18 @@ pub mod engine;
 pub mod error;
 pub mod path_guard;
 pub mod runner;
+pub mod seatbelt;
 pub mod spec;
 pub mod supervisor;
 
 pub use audit::{
     AuditSink, MemoryAuditSink, SecurityAuditEvent, SecurityEventKind, TracingAuditSink,
 };
-pub use engine::{EngineCapabilities, OsSandboxEngine};
+pub use engine::{EngineCapabilities, OsSandboxEngine, RunInfo};
 pub use error::SandboxError;
 pub use path_guard::{PathGuard, PathGuardError};
 pub use runner::{native_sandbox, OsNativeSandbox, SandboxRunner};
+pub use seatbelt::SeatbeltEngine;
 pub use spec::{NetworkPolicy, ResourceLimits, SandboxSpec, ValidatedSpec, TMP_DIR_NAME};
 pub use supervisor::{RunOutput, SandboxedChild, Termination};
 

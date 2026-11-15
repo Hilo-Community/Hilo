@@ -23,6 +23,8 @@ pub enum SecurityEventKind {
     FileAccessDenied,
     /// The OS refused a network connection of the sandboxed process.
     NetworkAccessDenied,
+    /// The OS refused something else (a service lookup, a signal to another process).
+    SystemAccessDenied,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

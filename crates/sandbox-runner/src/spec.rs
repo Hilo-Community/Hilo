@@ -100,6 +100,9 @@ pub struct ValidatedSpec {
     pub limits: ResourceLimits,
     /// Private, writable temporary directory inside the worktree, purged when the run ends.
     pub tmp_dir: PathBuf,
+    /// Unique to this run (letters, digits and `-` only): engines use it to tag what the OS
+    /// reports about it.
+    pub run_id: String,
 }
 
 impl ValidatedSpec {
@@ -189,6 +192,7 @@ impl SandboxSpec {
             network: self.network,
             limits: self.limits,
             tmp_dir: PathBuf::new(),
+            run_id: String::new(),
         })
     }
 }

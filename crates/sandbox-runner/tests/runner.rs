@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use sandbox_runner::{
-    native_sandbox, MemoryAuditSink, NetworkPolicy, OsNativeSandbox, SandboxError, SandboxRunner,
+    MemoryAuditSink, NetworkPolicy, OsNativeSandbox, SandboxError, SandboxRunner,
     SecurityEventKind, Termination, TMP_DIR_NAME,
 };
 
@@ -219,6 +219,7 @@ fn fail_closed_an_engine_that_cannot_isolate_a_request_runs_nothing() {
 }
 
 /// Until the OS engines exist there is no native sandbox, and no unisolated fallback.
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn fail_closed_the_native_sandbox_refuses_while_no_engine_is_implemented() {
     let sink = Arc::new(MemoryAuditSink::default());
