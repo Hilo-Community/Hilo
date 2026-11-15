@@ -20,6 +20,7 @@ path = "src/main.rs"
 [dependencies]
 tauri = { version = "2.10.2", features = [] }
 tauri-plugin-dialog = "2.6.0"
+agent-registry.workspace = true
 host-core.workspace = true
 context-engine.workspace = true
 judge-orchestrator.workspace = true

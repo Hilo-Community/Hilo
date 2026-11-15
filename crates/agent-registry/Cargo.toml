@@ -1,0 +1,29 @@
+[package]
+name = "agent-registry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Coloride ACP agent registry: reads the public catalog, installs and removes agents on the Host with verified downloads"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+# Versions already in the lockfile (via other crates) are reused; see README for the review.
+sha2 = "=0.10.9"
+flate2 = "=1.1.11"
+# HTTPS only (rustls, bundled roots): no system TLS stack, no cookies, no proxies from the
+# environment.
+ureq = { version = "=2.12.1", default-features = false, features = ["tls"] }
+# Read side only. Extraction is our own loop over entries (see `archive.rs`), never
+# `unpack`/`extract`.
+tar = { version = "=0.4.46", default-features = false }
+zip = { version = "=4.2.0", default-features = false, features = ["deflate-flate2"] }
+
+[dev-dependencies]
+tempfile.workspace = true
