@@ -1,5 +1,12 @@
-//! Authorization/state-machine foundation only; PolicyEngine is not operational.
-//! Health-check targets are configuration, not measured execution guarantees.
+//! The deterministic governance core (`LOT-013`): the persistent task state machine, and (in
+//! progress) the `PolicyEngine`, the `BudgetLedger` and the `ToolBroker`.
+//!
+//! The model proposes; this crate decides what is authorized and records every step durably
+//! (`AGENTS.md` rule 1). Health-check targets are configuration, not measured guarantees.
+
+pub mod task;
+
+pub use task::{IntentOutcome, Lease, Millis, RepositoryError, TaskSnapshot, TaskStateRepository};
 
 use serde::{Deserialize, Serialize};
 
