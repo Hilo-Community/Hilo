@@ -20,66 +20,16 @@ use sandbox_runner::{
     SandboxSpec, SeatbeltEngine, SecurityEventKind, Termination,
 };
 
-struct World {
-    _dir: tempfile::TempDir,
-    home: PathBuf,
-    worktree: PathBuf,
-    outside: PathBuf,
-}
+mod common;
+use common::world::{lines, sh, World, TRY};
 
-/// A fake home with fake secrets, and a worktree inside it (as in production, where task
-/// worktrees live in the user's cache directory).
 fn world() -> World {
-    let dir = tempfile::tempdir().unwrap();
-    let base = dir.path().canonicalize().unwrap();
-    let home = base.join("home");
-    for (path, secret) in [
-        (".ssh/id_rsa", "SSH-SECRET"),
-        (".aws/credentials", "AWS-SECRET"),
-        (".gnupg/private.key", "GPG-SECRET"),
-        ("Library/Keychains/login.keychain-db", "KEYCHAIN-SECRET"),
-        (".netrc", "NETRC-SECRET"),
-        (".config/gh/hosts.yml", "GH-SECRET"),
-        ("work/other/other.txt", "OTHER-PROJECT"),
-    ] {
-        let path = home.join(path);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, secret).unwrap();
-    }
-    let worktree = home.join("Library/Caches/Coloride/worktrees/task");
-    fs::create_dir_all(&worktree).unwrap();
-    fs::write(worktree.join("a.txt"), "a").unwrap();
-    let outside = home.join("work");
-    World {
-        _dir: dir,
-        home,
-        worktree,
-        outside,
-    }
+    common::world::world("Library/Caches/Coloride/worktrees/task")
 }
 
 fn runner(world: &World, sink: &Arc<MemoryAuditSink>) -> OsNativeSandbox<SeatbeltEngine> {
     let engine = SeatbeltEngine::new(&world.home).unwrap();
     OsNativeSandbox::new(engine, sink.clone()).expect("the Seatbelt self-test must pass")
-}
-
-fn sh(world: &World, script: &str, args: &[&Path]) -> SandboxSpec {
-    let mut spec = SandboxSpec::new(&world.worktree, "/bin/sh");
-    spec.args = vec!["-c".into(), script.into(), "script".into()];
-    spec.args.extend(args.iter().map(|arg| arg.into()));
-    spec
-}
-
-/// `try NAME cmd...` prints DENIED:NAME or LEAKED:NAME. Absolute commands only: the environment
-/// of a sandboxed process is empty.
-const TRY: &str = r#"try() { n="$1"; shift; if "$@" >/dev/null 2>&1; then echo "LEAKED:$n"; else echo "DENIED:$n"; fi; }
-"#;
-
-fn lines(output: &sandbox_runner::RunOutput) -> Vec<String> {
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(str::to_string)
-        .collect()
 }
 
 /// The kernel reports denials to the log with a delay: wait for the audit event.

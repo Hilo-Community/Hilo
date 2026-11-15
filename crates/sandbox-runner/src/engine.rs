@@ -35,17 +35,10 @@ pub trait OsSandboxEngine: Send + Sync + 'static {
     /// being built: no task is accepted.
     fn self_test(&self) -> Result<(), SandboxError>;
 
-    /// The command that runs `spec` inside the sandbox, with `spec.environment()` as its whole
-    /// environment and `spec.cwd` as its working directory. The runner sets stdio and the
-    /// process group.
-    fn prepare(&self, spec: &ValidatedSpec) -> Result<Command, SandboxError>;
-
-    /// What the runner actually starts. Engines that wrap a command (Seatbelt, bubblewrap) keep
-    /// the default; the Windows engine cannot express AppContainer as a `Command` and returns a
-    /// `Launch::AppContainer`.
-    fn prepare_launch(&self, spec: &ValidatedSpec) -> Result<Launch, SandboxError> {
-        self.prepare(spec).map(Launch::Command)
-    }
+    /// How to start `spec` inside the sandbox, with `spec.environment()` as its whole environment
+    /// and `spec.cwd` as its working directory: a command that runs the sandbox tool (Seatbelt,
+    /// bubblewrap), or an AppContainer launch (Windows). The runner sets stdio and supervision.
+    fn prepare(&self, spec: &ValidatedSpec) -> Result<Launch, SandboxError>;
 
     /// Called once when the process tree of a run has ended. An engine whose OS reports refusals
     /// after the fact (a log, a trace) collects them here and records them in `audit`. It must

@@ -21,72 +21,17 @@ use sandbox_runner::{
     SandboxError, SandboxRunner, SandboxSpec, SecurityEventKind, Termination,
 };
 
-struct World {
-    _dir: tempfile::TempDir,
-    home: PathBuf,
-    worktree: PathBuf,
-    /// A worktree next to the home, not inside it: the home can be shared with it.
-    beside: PathBuf,
-    outside: PathBuf,
-}
+mod common;
+use common::world::{lines, sh, sh_in, World, TRY};
 
 fn world() -> World {
-    let dir = tempfile::tempdir().unwrap();
-    let base = dir.path().canonicalize().unwrap();
-    let home = base.join("home");
-    for (path, secret) in [
-        (".ssh/id_rsa", "SSH-SECRET"),
-        (".aws/credentials", "AWS-SECRET"),
-        (".gnupg/private.key", "GPG-SECRET"),
-        ("Library/Keychains/login.keychain-db", "KEYCHAIN-SECRET"),
-        (".netrc", "NETRC-SECRET"),
-        (".config/gh/hosts.yml", "GH-SECRET"),
-        ("work/other/other.txt", "OTHER-PROJECT"),
-    ] {
-        let path = home.join(path);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, secret).unwrap();
-    }
-    let worktree = home.join(".cache/coloride/worktrees/task");
-    fs::create_dir_all(&worktree).unwrap();
-    fs::write(worktree.join("a.txt"), "a").unwrap();
-    let beside = base.join("wt");
-    fs::create_dir_all(&beside).unwrap();
-    let outside = home.join("work");
-    World {
-        _dir: dir,
-        home,
-        worktree,
-        beside,
-        outside,
-    }
+    common::world::world(".cache/coloride/worktrees/task")
 }
 
 fn runner(world: &World, sink: &Arc<MemoryAuditSink>) -> OsNativeSandbox<BubblewrapEngine> {
     let engine = BubblewrapEngine::new(&world.home).unwrap();
     OsNativeSandbox::new(engine, sink.clone())
         .unwrap_or_else(|error| panic!("the bubblewrap self-test must pass: {error}"))
-}
-
-fn sh(world: &World, script: &str, args: &[&Path]) -> SandboxSpec {
-    sh_in(&world.worktree, script, args)
-}
-
-fn sh_in(root: &Path, script: &str, args: &[&Path]) -> SandboxSpec {
-    let mut spec = SandboxSpec::new(root, "/bin/sh");
-    spec.args = vec!["-c".into(), script.into(), "script".into()];
-    spec.args.extend(args.iter().map(|arg| arg.into()));
-    spec
-}
-
-const TRY: &str = r#"try() { n="$1"; shift; if "$@" >/dev/null 2>&1; then echo "LEAKED:$n"; else echo "DENIED:$n"; fi; }
-"#;
-
-fn lines(output: &sandbox_runner::RunOutput) -> Vec<String> {
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(str::to_string)
-        .collect()
 }
 
 fn alive_by_name(pattern: &str) -> bool {

@@ -110,7 +110,7 @@ impl<E: OsSandboxEngine> OsNativeSandbox<E> {
         let tmp = TmpDir::create(&validated.worktree_root)?;
         validated.tmp_dir = tmp.path().to_path_buf();
         validated.run_id = new_run_id();
-        let launch = self.engine.prepare_launch(&validated)?;
+        let launch = self.engine.prepare(&validated)?;
         let info = RunInfo {
             run_id: validated.run_id.clone(),
             started: std::time::SystemTime::now(),

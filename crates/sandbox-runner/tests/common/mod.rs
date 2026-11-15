@@ -3,13 +3,17 @@
 //! engines exist. It is not part of the crate and cannot be reached from production code.
 #![allow(dead_code)]
 
+#[cfg(unix)]
+pub mod world;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 #[cfg(unix)]
 use std::time::{Duration, Instant};
 
 use sandbox_runner::{
-    detect_native_os_sandbox, EngineCapabilities, OsSandboxEngine, SandboxError, ValidatedSpec,
+    detect_native_os_sandbox, EngineCapabilities, Launch, OsSandboxEngine, SandboxError,
+    ValidatedSpec,
 };
 
 pub fn capabilities(name: &'static str) -> EngineCapabilities {
@@ -33,14 +37,14 @@ impl OsSandboxEngine for PassthroughEngine {
     fn self_test(&self) -> Result<(), SandboxError> {
         Ok(())
     }
-    fn prepare(&self, spec: &ValidatedSpec) -> Result<Command, SandboxError> {
+    fn prepare(&self, spec: &ValidatedSpec) -> Result<Launch, SandboxError> {
         let mut command = Command::new(&spec.program);
         command
             .args(&spec.args)
             .current_dir(&spec.cwd)
             .env_clear()
             .envs(spec.environment());
-        Ok(command)
+        Ok(Launch::Command(command))
     }
 }
 
@@ -56,10 +60,10 @@ impl OsSandboxEngine for BrokenSelfTestEngine {
     fn self_test(&self) -> Result<(), SandboxError> {
         Err(SandboxError::unavailable("injected sandbox failure"))
     }
-    fn prepare(&self, _spec: &ValidatedSpec) -> Result<Command, SandboxError> {
+    fn prepare(&self, _spec: &ValidatedSpec) -> Result<Launch, SandboxError> {
         let mut command = Command::new("/usr/bin/touch");
         command.arg(&self.canary);
-        Ok(command)
+        Ok(Launch::Command(command))
     }
 }
 
@@ -73,7 +77,7 @@ impl OsSandboxEngine for FailingPrepareEngine {
     fn self_test(&self) -> Result<(), SandboxError> {
         Ok(())
     }
-    fn prepare(&self, _spec: &ValidatedSpec) -> Result<Command, SandboxError> {
+    fn prepare(&self, _spec: &ValidatedSpec) -> Result<Launch, SandboxError> {
         Err(SandboxError::unavailable(
             "the isolation could not be set up",
         ))
@@ -96,7 +100,7 @@ impl OsSandboxEngine for FullCapabilitiesEngine {
     fn self_test(&self) -> Result<(), SandboxError> {
         Ok(())
     }
-    fn prepare(&self, spec: &ValidatedSpec) -> Result<Command, SandboxError> {
+    fn prepare(&self, spec: &ValidatedSpec) -> Result<Launch, SandboxError> {
         PassthroughEngine.prepare(spec)
     }
 }
