@@ -477,7 +477,7 @@ pub(crate) fn run_to_completion(
     drop(done);
 
     let deadline = started + limits.wall_timeout;
-    let termination = loop {
+    let mut termination = loop {
         match child.try_wait() {
             Ok(Some(status)) => break Termination::from_status(status),
             Ok(None) => {}
@@ -506,6 +506,11 @@ pub(crate) fn run_to_completion(
             incomplete = true;
             break;
         }
+    }
+    // The budget decides, not the race: a process that wrote more than its budget and then exited
+    // on its own before the poll noticed is reported the same as one that was stopped.
+    if matches!(termination, Termination::Exited { .. }) && overflow.load(Ordering::SeqCst) {
+        termination = Termination::OutputLimit;
     }
     let take = |capture: Option<Arc<Mutex<Capture>>>| {
         capture.map_or_else(Capture::default, |capture| {

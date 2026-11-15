@@ -23,8 +23,6 @@
 
 use std::collections::BTreeSet;
 use std::ffi::OsString;
-use std::fs;
-use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -32,10 +30,11 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 
 use crate::audit::{AuditSink, SecurityAuditEvent, SecurityEventKind};
+use crate::common::{check_program_is_readable, cpu_seconds, CONTAINER_SOCKETS, HOME_SECRETS};
 use crate::engine::{EngineCapabilities, OsSandboxEngine, RunInfo};
 use crate::error::SandboxError;
-use crate::spec::{NetworkPolicy, ResourceLimits, SandboxSpec, ValidatedSpec};
-use crate::supervisor::{new_run_id, run_to_completion, SandboxedChild, Termination, TmpDir};
+use crate::probe;
+use crate::spec::{NetworkPolicy, ValidatedSpec};
 use crate::OsSandboxKind;
 
 pub const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
@@ -56,36 +55,8 @@ const SYSTEM_READ_ROOTS: &[&str] = &[
 ];
 /// The only files outside the worktree a process may write.
 const WRITABLE_DEVICES: &[&str] = &["/dev/null", "/dev/dtracehelper", "/dev/tty"];
-/// Denied below the home directory of the user, whatever else is allowed.
-const HOME_SECRETS: &[&str] = &[
-    ".ssh",
-    ".aws",
-    ".gnupg",
-    ".azure",
-    ".kube",
-    ".docker",
-    ".netrc",
-    ".npmrc",
-    ".pypirc",
-    ".git-credentials",
-    ".config/gcloud",
-    ".config/gh",
-    ".config/op",
-    ".cargo/credentials",
-    ".cargo/credentials.toml",
-    ".terraform.d/credentials.tfrc.json",
-    ".orbstack",
-    ".colima",
-    "Library/Keychains",
-    "Library/Cookies",
-];
-/// Denied everywhere: the system Keychain and the container runtimes' sockets.
-const SYSTEM_SECRETS: &[&str] = &[
-    "/Library/Keychains",
-    "/private/var/run/docker.sock",
-    "/var/run/docker.sock",
-    "/private/var/run/podman",
-];
+/// Denied everywhere: the system Keychain (and, from `common`, the container sockets).
+const SYSTEM_SECRETS: &[&str] = &["/Library/Keychains"];
 /// How long the unified log needs to publish what the kernel just reported.
 const LOG_SETTLE: Duration = Duration::from_millis(1200);
 /// A run reports at most this many distinct denials.
@@ -220,6 +191,7 @@ pub(crate) fn render_profile(spec: &ValidatedSpec, home: &Path) -> Result<Profil
     secrets.extend(
         SYSTEM_SECRETS
             .iter()
+            .chain(CONTAINER_SOCKETS)
             .map(|secret| profile.subpath("SEC", Path::new(secret))),
     );
 
@@ -262,17 +234,6 @@ pub(crate) fn render_profile(spec: &ValidatedSpec, home: &Path) -> Result<Profil
     Ok(profile)
 }
 
-fn within(path: &Path, roots: &[PathBuf]) -> bool {
-    roots.iter().any(|root| path.starts_with(root))
-}
-
-/// CPU seconds for `ulimit -t`, rounded up so the budget is never shorter than asked.
-fn cpu_seconds(limits: &ResourceLimits) -> Option<u64> {
-    limits
-        .max_cpu_time
-        .map(|time| time.as_secs() + u64::from(time.subsec_nanos() > 0))
-}
-
 impl OsSandboxEngine for SeatbeltEngine {
     fn capabilities(&self) -> EngineCapabilities {
         EngineCapabilities {
@@ -295,33 +256,17 @@ impl OsSandboxEngine for SeatbeltEngine {
                 self.sandbox_exec.display()
             )));
         }
-        probe(&self.sandbox_exec)
+        let sandbox_exec = self.sandbox_exec.clone();
+        probe::run(
+            "Seatbelt",
+            |home| SeatbeltEngine { home, sandbox_exec },
+            r#"/usr/bin/nc -z -w 1 127.0.0.1 "$PORT" > /dev/null 2>&1 && exit 26"#,
+            |_| None,
+        )
     }
 
     fn prepare(&self, spec: &ValidatedSpec) -> Result<Command, SandboxError> {
-        // The program must be something the profile lets the process read and run, otherwise it
-        // would fail at start-up with an unreadable error.
-        let readable = readable_roots(spec);
-        let real = fs::canonicalize(&spec.program).map_err(|error| {
-            SandboxError::InvalidSpec(format!(
-                "the program {:?} is unusable: {error}",
-                spec.program
-            ))
-        })?;
-        let named = spec
-            .program
-            .parent()
-            .and_then(|parent| parent.canonicalize().ok())
-            .zip(spec.program.file_name())
-            .map(|(parent, name)| parent.join(name))
-            .unwrap_or_else(|| spec.program.clone());
-        if !within(&real, &readable) || !within(&named, &readable) {
-            return Err(SandboxError::InvalidSpec(format!(
-                "the program {:?} is outside the paths the sandbox lets it read; add its toolchain \
-                 directory to the read-only paths",
-                spec.program
-            )));
-        }
+        check_program_is_readable(spec, &readable_roots(spec))?;
 
         let profile = render_profile(spec, &self.home)?;
         let mut command = Command::new(&self.sandbox_exec);
@@ -421,144 +366,10 @@ pub(crate) fn parse_denials(log: &str, max: usize) -> Vec<SecurityAuditEvent> {
     events
 }
 
-/// Removes the self-test's files when dropped.
-struct ProbeDir(PathBuf);
-
-impl Drop for ProbeDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
-
-/// Shell script of the self-test: positive controls (what must work) then negative controls
-/// (what must be refused). Each failure has its own exit code.
-const PROBE_SCRIPT: &str = r#"
-W="$1"; O="$2"; H="$3"; PORT="$4"; VICTIM="$5"
-echo ok > "$W/probe.txt" || exit 10
-[ "$(cat "$W/probe.txt")" = ok ] || exit 11
-[ "$(cat "$H/ok.txt")" = ok ] || exit 12
-( echo x > "$O/escape.txt" ) 2>/dev/null && exit 20
-( echo x > "$W/../escape2.txt" ) 2>/dev/null && exit 21
-cat "$O/secret.txt" > /dev/null 2>&1 && exit 22
-cat "$H/.ssh/id_rsa" > /dev/null 2>&1 && exit 23
-( echo x > "$H/ok.txt" ) 2>/dev/null && exit 24
-/bin/kill -9 "$VICTIM" 2>/dev/null && exit 25
-/usr/bin/nc -z -w 1 127.0.0.1 "$PORT" > /dev/null 2>&1 && exit 26
-exit 0
-"#;
-
-fn probe_failure(code: i32) -> &'static str {
-    match code {
-        10 | 11 => "a process cannot use its own worktree",
-        12 => "a read-only path is not readable",
-        20 | 21 => "a process can write outside its worktree",
-        22 => "a process can read a file outside what it was given",
-        23 => "a process can read ~/.ssh even when its parent directory is shared",
-        24 => "a read-only path is writable",
-        25 => "a process can signal other processes",
-        26 => "a process can open a network connection",
-        _ => "unexpected result",
-    }
-}
-
-/// Runs a probe in a throw-away sandbox. Positive controls make sure the probe does not pass
-/// merely because nothing runs at all; negative controls are the isolation itself.
-fn probe(sandbox_exec: &Path) -> Result<(), SandboxError> {
-    let unavailable =
-        |what: &str| SandboxError::unavailable(format!("the Seatbelt self-test failed: {what}"));
-    let io = |error: std::io::Error| unavailable(&error.to_string());
-
-    let base = std::env::temp_dir()
-        .canonicalize()
-        .map_err(io)?
-        .join(format!("coloride-selftest-{}", new_run_id()));
-    let (worktree, outside, home) = (base.join("wt"), base.join("outside"), base.join("home"));
-    fs::create_dir_all(home.join(".ssh")).map_err(io)?;
-    fs::create_dir_all(&worktree).map_err(io)?;
-    fs::create_dir_all(&outside).map_err(io)?;
-    let _cleanup = ProbeDir(base);
-    fs::write(outside.join("secret.txt"), "secret").map_err(io)?;
-    fs::write(home.join(".ssh/id_rsa"), "secret").map_err(io)?;
-    fs::write(home.join("ok.txt"), "ok").map_err(io)?;
-
-    // What the isolated process will try to reach from outside.
-    let listener = TcpListener::bind("127.0.0.1:0").map_err(io)?;
-    listener.set_nonblocking(true).map_err(io)?;
-    let port = listener.local_addr().map_err(io)?.port();
-    let mut victim = Command::new("/bin/sleep").arg("600").spawn().map_err(io)?;
-
-    let mut spec = SandboxSpec::new(&worktree, "/bin/sh");
-    spec.args = vec![
-        "-c".into(),
-        PROBE_SCRIPT.into(),
-        "probe".into(),
-        worktree.clone().into(),
-        outside.clone().into(),
-        home.clone().into(),
-        port.to_string().into(),
-        victim.id().to_string().into(),
-    ];
-    // The home is shared read-only on purpose: only the explicit secret rules stand between the
-    // process and `~/.ssh` here.
-    spec.read_only_paths = vec![home.clone()];
-    spec.limits.wall_timeout = Duration::from_secs(20);
-    spec.limits.max_output_bytes = 64 * 1024;
-
-    let outcome = (|| {
-        let mut validated = spec.validate()?;
-        let tmp = TmpDir::create(&validated.worktree_root)?;
-        validated.tmp_dir = tmp.path().to_path_buf();
-        validated.run_id = new_run_id();
-        let engine = SeatbeltEngine {
-            home: home.clone(),
-            sandbox_exec: sandbox_exec.to_path_buf(),
-        };
-        let command = engine.prepare(&validated)?;
-        let mut child = SandboxedChild::spawn_prepared(command, tmp, None, false, None)?;
-        run_to_completion(&mut child, &spec.limits)
-    })();
-
-    let victim_alive = matches!(victim.try_wait(), Ok(None));
-    let _ = victim.kill();
-    let _ = victim.wait();
-    let connected = listener.accept().is_ok();
-
-    let output = outcome.map_err(|error| unavailable(&error.to_string()))?;
-    match output.termination {
-        Termination::Exited { code: Some(0), .. } => {}
-        Termination::Exited {
-            code: Some(code), ..
-        } => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(unavailable(&format!(
-                "{} (check {code}) {}",
-                probe_failure(code),
-                stderr.trim()
-            )));
-        }
-        other => return Err(unavailable(&format!("the probe did not finish: {other:?}"))),
-    }
-    if connected {
-        return Err(unavailable("a process reached a local network port"));
-    }
-    if !victim_alive {
-        return Err(unavailable("a process killed another process"));
-    }
-    if outside.join("escape.txt").exists() || base_has_escape(&worktree) {
-        return Err(unavailable("a file was written outside the worktree"));
-    }
-    Ok(())
-}
-
-fn base_has_escape(worktree: &Path) -> bool {
-    worktree
-        .parent()
-        .is_some_and(|parent| parent.join("escape2.txt").exists())
-}
-
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use crate::spec::ResourceLimits;
     use std::collections::BTreeMap;
 
     fn spec() -> ValidatedSpec {

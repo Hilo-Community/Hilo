@@ -9,7 +9,7 @@ use std::process::Command;
 use std::sync::Arc;
 
 use crate::audit::{AuditSink, SecurityAuditEvent, SecurityEventKind};
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 use crate::detect_native_os_sandbox;
 use crate::engine::{EngineCapabilities, OsSandboxEngine, RunInfo};
 use crate::error::SandboxError;
@@ -198,8 +198,21 @@ pub fn native_sandbox(audit: Arc<dyn AuditSink>) -> Result<Box<dyn SandboxRunner
     Ok(Box::new(OsNativeSandbox::new(engine, audit)?))
 }
 
+/// The runner of the current OS, or `SandboxUnavailable`. On Linux this is bubblewrap (see
+/// `BubblewrapEngine` for what the system must provide).
+#[cfg(target_os = "linux")]
+pub fn native_sandbox(audit: Arc<dyn AuditSink>) -> Result<Box<dyn SandboxRunner>, SandboxError> {
+    let engine = crate::bubblewrap::BubblewrapEngine::for_current_user().inspect_err(|error| {
+        audit.record(SecurityAuditEvent::new(
+            SecurityEventKind::SandboxUnavailable,
+            error.to_string(),
+        ));
+    })?;
+    Ok(Box::new(OsNativeSandbox::new(engine, audit)?))
+}
+
 /// The runner of the current OS, or `SandboxUnavailable` (no engine exists for this OS yet).
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn native_sandbox(audit: Arc<dyn AuditSink>) -> Result<Box<dyn SandboxRunner>, SandboxError> {
     let error = SandboxError::unavailable(format!(
         "the {:?} engine is not implemented yet",

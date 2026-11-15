@@ -2,9 +2,12 @@
 //! Health-check targets are configuration, not measured execution guarantees.
 
 pub mod audit;
+pub mod bubblewrap;
+mod common;
 pub mod engine;
 pub mod error;
 pub mod path_guard;
+mod probe;
 pub mod runner;
 pub mod seatbelt;
 pub mod spec;
@@ -13,6 +16,7 @@ pub mod supervisor;
 pub use audit::{
     AuditSink, MemoryAuditSink, SecurityAuditEvent, SecurityEventKind, TracingAuditSink,
 };
+pub use bubblewrap::BubblewrapEngine;
 pub use engine::{EngineCapabilities, OsSandboxEngine, RunInfo};
 pub use error::SandboxError;
 pub use path_guard::{PathGuard, PathGuardError};

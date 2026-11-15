@@ -219,9 +219,10 @@ fn fail_closed_an_engine_that_cannot_isolate_a_request_runs_nothing() {
 }
 
 /// Until the OS engines exist there is no native sandbox, and no unisolated fallback.
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 #[test]
 fn fail_closed_the_native_sandbox_refuses_while_no_engine_is_implemented() {
+    use sandbox_runner::native_sandbox;
     let sink = Arc::new(MemoryAuditSink::default());
     assert!(matches!(
         native_sandbox(sink.clone()),
@@ -487,4 +488,25 @@ fn reading_the_pipes_of_a_killed_tree_does_not_block() {
         .unwrap();
     child.wait().unwrap();
     assert!(buffer.is_empty());
+}
+
+/// The verdict must not depend on who wins the race between the process exiting and the poll:
+/// a flood that fits in the pipe and a process that exits at once are both over budget.
+#[test]
+fn exceeding_the_output_budget_is_reported_the_same_whatever_the_timing() {
+    let (_dir, root) = worktree();
+    let sink = Arc::new(MemoryAuditSink::default());
+    let runner = runner(&sink);
+    for _ in 0..60 {
+        let mut spec = sh(&root, "head -c 200000 /dev/zero");
+        spec.limits.max_output_bytes = 4096;
+        let output = runner.run(&spec).unwrap();
+        assert_eq!(output.termination, Termination::OutputLimit);
+        assert_eq!(output.stdout.len(), 4096);
+        assert!(output.stdout_truncated);
+    }
+    // And a command that stays within its budget is never reported as over it.
+    let mut spec = sh(&root, "head -c 4096 /dev/zero");
+    spec.limits.max_output_bytes = 4096;
+    assert!(runner.run(&spec).unwrap().termination.success());
 }
