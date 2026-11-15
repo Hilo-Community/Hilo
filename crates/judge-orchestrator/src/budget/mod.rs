@@ -59,40 +59,37 @@ pub enum BudgetError {
     MissingReservation,
 }
 
+/// Reserves and charges a task's budget on behalf of one lease. It holds no clock: every call
+/// takes the Host time, so an expired lease is refused however long the ledger was kept.
 pub struct BudgetLedger {
     repository: Arc<TaskStateRepository>,
     lease: Lease,
-    now: Millis,
 }
 
 impl BudgetLedger {
-    pub fn new(repository: Arc<TaskStateRepository>, lease: Lease, now: Millis) -> Self {
-        Self {
-            repository,
-            lease,
-            now,
-        }
+    pub fn new(repository: Arc<TaskStateRepository>, lease: Lease) -> Self {
+        Self { repository, lease }
     }
 
+    /// Reserves the maximum `estimate` before a model or tool call. Refused (and the task paused)
+    /// when it would exceed the task's limits together with what is spent and reserved.
     pub fn reserve_before_call(
         &self,
         estimate: BudgetUsage,
+        now: Millis,
     ) -> Result<BudgetReservationGuard, BudgetError> {
-        let id = self
-            .repository
-            .reserve_budget(&self.lease, estimate, self.now)?;
+        let id = self.repository.reserve_budget(&self.lease, estimate, now)?;
         Ok(BudgetReservationGuard {
             repository: self.repository.clone(),
             lease: self.lease.clone(),
             id,
-            now: self.now,
         })
     }
 
     /// Call before starting each automatic correction, including after a Host restart.
-    pub fn record_failure(&self, signature: &str) -> Result<(), BudgetError> {
+    pub fn record_failure(&self, signature: &str, now: Millis) -> Result<(), BudgetError> {
         self.repository
-            .correction_cycle(&self.lease, signature, self.now)
+            .correction_cycle(&self.lease, signature, now)
     }
 }
 
@@ -101,7 +98,6 @@ pub struct BudgetReservationGuard {
     repository: Arc<TaskStateRepository>,
     lease: Lease,
     id: u64,
-    now: Millis,
 }
 
 impl BudgetReservationGuard {
@@ -117,13 +113,8 @@ impl BudgetReservationGuard {
             .settle_budget(&self.lease, self.id, key, outcome, actual, now)
     }
 
-    pub fn commit(self, actual: BudgetUsage) -> Result<(), BudgetError> {
-        let now = self.now;
-        self.commit_at(actual, now)
-    }
-
-    /// The broker supplies Host time again after a blocking external action.
-    pub fn commit_at(self, actual: BudgetUsage, now: Millis) -> Result<(), BudgetError> {
+    /// Charges what the call actually used and releases the rest of the reservation.
+    pub fn commit(self, actual: BudgetUsage, now: Millis) -> Result<(), BudgetError> {
         self.repository
             .commit_budget(&self.lease, self.id, actual, now)
     }

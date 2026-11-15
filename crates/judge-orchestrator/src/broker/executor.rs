@@ -8,6 +8,10 @@ use thiserror::Error;
 pub enum ExecutionError {
     #[error("unsupported or invalid execution: {0}")]
     Invalid(String),
+    /// The executor guarantees nothing ran (the request was refused before any process or
+    /// external effect started). The broker then closes the intent itself, as failed.
+    #[error("the action did not start: {0}")]
+    NotStarted(String),
     #[error(transparent)]
     Sandbox(#[from] sandbox_runner::SandboxError),
 }

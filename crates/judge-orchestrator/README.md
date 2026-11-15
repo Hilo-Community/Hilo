@@ -11,9 +11,14 @@ serialized or formatted. A restarted Host uses a new authority and must authenti
 its task/approval sources before signing again. Journals are trusted Host storage;
 keep them outside the writable task worktree.
 
-`ToolBroker::execute` authenticates policy, reserves budget, checks idempotency,
-flushes an intent, invokes the trusted executor, and atomically records both outcome
-and spending. Unknown outcomes (errors or panics) leave intents pending. Lease
+`ToolBroker::execute` authenticates policy, checks idempotency (a settled call returns
+its stored outcome without reserving anything, so a replay never pauses a task),
+reserves budget, flushes an intent, invokes the trusted executor, and atomically
+records both outcome and spending. The recorded summary is bounded to 64 KiB (both
+ends kept, plus the BLAKE3 of the full output), so a large output cannot exceed a
+journal record. An executor that proves nothing ran (`ExecutionError::NotStarted`,
+e.g. the sandbox refused the request before spawning) has its intent closed as failed
+at no charge. Other unknown outcomes (errors or panics) leave intents pending. Lease
 takeover moves such tasks to `NeedsReconciliation`; only the existing Host human
 reconciliation flow settles them. The broker never retries an external action.
 An unresolved action's unknown consumption must be assessed during reconciliation;
@@ -22,7 +27,13 @@ released on cancellation and do not survive a process crash.
 
 Time is milliseconds throughout. The broker receives entry time and an injected Host
 clock for completion, so an action finishing after lease expiry cannot publish a
-result. Repository logic never reads the clock itself.
+result. Repository logic never reads the clock itself, and `BudgetLedger` holds none:
+every reservation, commit and correction cycle takes the Host time, so a ledger kept
+past its lease is refused.
+
+Forbidden paths are matched ignoring case (macOS and Windows file systems are
+case-insensitive by default); allowed paths are matched exactly, which can only deny
+more.
 
 ## Tool schemas
 

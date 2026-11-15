@@ -3,7 +3,9 @@
 use super::{ExecutionError, ExecutionReport, ToolExecutor};
 use crate::{budget::BudgetUsage, IntentOutcome};
 use host_core::{TaskSpec, ToolArgValue, ToolCall, ToolCapability};
-use sandbox_runner::{NetworkPolicy, PathGuard, ResourceLimits, SandboxRunner, SandboxSpec};
+use sandbox_runner::{
+    NetworkPolicy, PathGuard, ResourceLimits, SandboxError, SandboxRunner, SandboxSpec,
+};
 use std::path::PathBuf;
 
 #[cfg(test)]
@@ -86,6 +88,22 @@ impl SandboxToolExecutor {
     }
 }
 
+/// Errors the runner reports before any process exists are `NotStarted`: the broker can close
+/// the action without a human. A failed spawn also qualifies (on Windows the process is created
+/// suspended and killed before it ever runs). Anything else (I/O while running, the watchdog)
+/// may come after the program started, so it stays an unknown outcome.
+fn classify(error: SandboxError) -> ExecutionError {
+    match error {
+        SandboxError::SandboxUnavailable { .. }
+        | SandboxError::InvalidSpec(_)
+        | SandboxError::Path(_)
+        | SandboxError::LimitNotEnforceable { .. }
+        | SandboxError::NetworkPolicyNotEnforceable { .. }
+        | SandboxError::Spawn(_) => ExecutionError::NotStarted(error.to_string()),
+        other => ExecutionError::Sandbox(other),
+    }
+}
+
 impl ToolExecutor for SandboxToolExecutor {
     fn estimate(&self, spec: &TaskSpec, call: &ToolCall) -> Result<BudgetUsage, ExecutionError> {
         let request = self.request(spec, call)?;
@@ -120,7 +138,7 @@ impl ToolExecutor for SandboxToolExecutor {
                 "reservation below configured limits".into(),
             ));
         }
-        let output = self.runner.run(&request)?;
+        let output = self.runner.run(&request).map_err(classify)?;
         let succeeded = output.termination.success() && !output.incomplete;
         // The runner exposes elapsed wall time, not CPU telemetry: conservatively charge the
         // full configured CPU allowance rather than pretending wall time is CPU consumption.

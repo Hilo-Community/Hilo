@@ -2,11 +2,12 @@
 
 mod executor;
 mod sandbox;
+mod summary;
 pub use executor::{ExecutionError, ExecutionReport, ToolExecutor};
 pub use sandbox::SandboxToolExecutor;
 
 use crate::{
-    budget::{BudgetError, BudgetLedger},
+    budget::{BudgetError, BudgetLedger, BudgetUsage},
     policy::{call_digest, Decision, PolicyEngine, SignedApproval, SignedTaskSpec},
     IntentOutcome, Lease, Millis, RepositoryError, TaskStateRepository,
 };
@@ -53,6 +54,12 @@ impl ToolBroker {
         }
     }
 
+    /// Runs one tool call for the task, at most once.
+    ///
+    /// Order: policy; idempotency (a settled call returns its stored outcome without spending);
+    /// budget reservation; durable intent; execution; one durable record of outcome and spending.
+    /// A failure after the intent leaves it pending for reconciliation, unless the executor
+    /// proves nothing ran ([`ExecutionError::NotStarted`]).
     pub fn execute(
         &self,
         lease: &Lease,
@@ -76,19 +83,9 @@ impl ToolBroker {
                 "signed spec differs from persisted task".into(),
             )));
         }
-        let estimate = self.executor.estimate(&signed.spec, call)?;
-        // Every external call costs at least one invocation, even with a zero executor estimate.
-        let estimate = crate::budget::BudgetUsage {
-            tool_calls: estimate.tool_calls.max(1),
-            ..estimate
-        };
-        let ledger = BudgetLedger::new(self.repository.clone(), lease.clone(), now);
-        let guard = ledger.reserve_before_call(estimate)?;
+        // Before any spending: replaying a settled call must not reserve budget (and so can
+        // never pause the task). A key recorded meanwhile is caught by `record_intent` below.
         let digest = call_digest(call)?;
-        let snapshot = self
-            .repository
-            .snapshot(lease.task_id())
-            .ok_or_else(|| RepositoryError::UnknownTask(lease.task_id().into()))?;
         if snapshot
             .call_digests
             .get(&call.idempotency_key)
@@ -100,28 +97,51 @@ impl ToolBroker {
         if let Some(outcome) = snapshot.resolved_intents.get(&call.idempotency_key) {
             return Ok(outcome.clone());
         }
+
+        let estimate = self.executor.estimate(&signed.spec, call)?;
+        // Every external call costs at least one invocation, even with a zero executor estimate.
+        let estimate = BudgetUsage {
+            tool_calls: estimate.tool_calls.max(1),
+            ..estimate
+        };
+        let ledger = BudgetLedger::new(self.repository.clone(), lease.clone());
+        let guard = ledger.reserve_before_call(estimate, now)?;
         self.repository
             .record_intent(lease, &call.idempotency_key, &digest, now)?;
-        let report = self.executor.execute(&signed.spec, call, estimate)?;
+        let report = match self.executor.execute(&signed.spec, call, estimate) {
+            Ok(report) => report,
+            Err(ExecutionError::NotStarted(reason)) => {
+                // Nothing ran: the outcome is known, so it is closed now and charges nothing.
+                let outcome = IntentOutcome {
+                    succeeded: false,
+                    summary: format!("not started: {reason}"),
+                };
+                let finished = now.max((self.clock)());
+                guard.settle(
+                    &call.idempotency_key,
+                    outcome,
+                    BudgetUsage::default(),
+                    finished,
+                )?;
+                return Err(ExecutionError::NotStarted(reason).into());
+            }
+            // The action may have happened: its intent stays pending for reconciliation.
+            Err(error) => return Err(error.into()),
+        };
         let finished = now.max((self.clock)());
-        let actual = crate::budget::BudgetUsage {
+        let actual = BudgetUsage {
             tool_calls: report.actual.tool_calls.max(1),
             ..report.actual
         };
-        guard.settle(
-            &call.idempotency_key,
-            report.outcome.clone(),
-            actual,
-            finished,
-        )?;
-        if !report.outcome.succeeded {
+        let outcome = summary::bounded(report.outcome);
+        guard.settle(&call.idempotency_key, outcome.clone(), actual, finished)?;
+        if !outcome.succeeded {
             let signature = report
                 .failure_signature
                 .unwrap_or_else(|| format!("tool:{}:failed", call.tool_name));
-            BudgetLedger::new(self.repository.clone(), lease.clone(), finished)
-                .record_failure(&signature)?;
+            ledger.record_failure(&signature, finished)?;
         }
-        Ok(report.outcome)
+        Ok(outcome)
     }
 
     pub fn begin_correction(
@@ -130,7 +150,7 @@ impl ToolBroker {
         signature: &str,
         now: Millis,
     ) -> Result<(), BudgetError> {
-        BudgetLedger::new(self.repository.clone(), lease.clone(), now).record_failure(signature)
+        BudgetLedger::new(self.repository.clone(), lease.clone()).record_failure(signature, now)
     }
 
     /// Recovery stays in the repository's human reconciliation flow; this broker never retries.

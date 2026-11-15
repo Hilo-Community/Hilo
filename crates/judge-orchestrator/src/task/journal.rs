@@ -82,10 +82,9 @@ impl Journal {
         let len = u32::try_from(payload.len())
             .ok()
             .filter(|len| *len <= MAX_PAYLOAD)
-            .ok_or_else(|| RepositoryError::Corrupt {
+            .ok_or_else(|| RepositoryError::RecordTooLarge {
                 path: self.path.clone(),
-                offset: 0,
-                reason: "a record is too large to be written".into(),
+                bytes: payload.len(),
             })?;
         let mut frame = Vec::with_capacity(HEADER_LEN + payload.len());
         frame.extend_from_slice(&MAGIC);

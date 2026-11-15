@@ -21,6 +21,9 @@ pub enum RepositoryError {
         offset: u64,
         reason: String,
     },
+    /// Nothing was written: the journal is intact. The caller must record less.
+    #[error("a task journal record of {bytes} bytes is too large to write to {path}")]
+    RecordTooLarge { path: PathBuf, bytes: usize },
     #[error("task journal serialization error: {0}")]
     Serialization(#[from] bincode::Error),
     #[error("invalid task id {0:?}: use 1 to 128 of letters, digits, `.`, `-`, `_`")]
