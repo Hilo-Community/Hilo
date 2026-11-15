@@ -28,7 +28,6 @@ use std::ffi::OsString;
 use std::fs;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::Duration;
 
 use sandbox_windows::{JobLimits, LaunchConfig};
@@ -185,15 +184,7 @@ impl OsSandboxEngine for AppContainerEngine {
         self_test(&self.journal_dir)
     }
 
-    fn prepare(&self, _spec: &ValidatedSpec) -> Result<Command, SandboxError> {
-        // An AppContainer cannot be expressed as a wrapped command, and a plain command would
-        // run unisolated: this engine only ever launches through `prepare_launch`.
-        Err(SandboxError::unavailable(
-            "the AppContainer engine launches through `prepare_launch`",
-        ))
-    }
-
-    fn prepare_launch(&self, spec: &ValidatedSpec) -> Result<Launch, SandboxError> {
+    fn prepare(&self, spec: &ValidatedSpec) -> Result<Launch, SandboxError> {
         Ok(Launch::AppContainer(Box::new(self.launch_config(spec)?)))
     }
 }

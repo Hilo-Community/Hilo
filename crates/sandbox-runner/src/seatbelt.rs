@@ -31,7 +31,7 @@ use std::time::{Duration, SystemTime};
 
 use crate::audit::{AuditSink, SecurityAuditEvent, SecurityEventKind};
 use crate::common::{check_program_is_readable, cpu_seconds, CONTAINER_SOCKETS, HOME_SECRETS};
-use crate::engine::{EngineCapabilities, OsSandboxEngine, RunInfo};
+use crate::engine::{EngineCapabilities, Launch, OsSandboxEngine, RunInfo};
 use crate::error::SandboxError;
 use crate::probe;
 use crate::spec::{NetworkPolicy, ValidatedSpec};
@@ -265,7 +265,7 @@ impl OsSandboxEngine for SeatbeltEngine {
         )
     }
 
-    fn prepare(&self, spec: &ValidatedSpec) -> Result<Command, SandboxError> {
+    fn prepare(&self, spec: &ValidatedSpec) -> Result<Launch, SandboxError> {
         check_program_is_readable(spec, &readable_roots(spec))?;
 
         let profile = render_profile(spec, &self.home)?;
@@ -294,7 +294,7 @@ impl OsSandboxEngine for SeatbeltEngine {
             .current_dir(&spec.cwd)
             .env_clear()
             .envs(spec.environment());
-        Ok(command)
+        Ok(Launch::Command(command))
     }
 
     fn collect_denials(&self, run: &RunInfo, audit: Arc<dyn AuditSink>) {

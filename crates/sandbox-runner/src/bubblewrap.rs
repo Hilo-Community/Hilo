@@ -37,7 +37,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::common::{check_program_is_readable, cpu_seconds, CONTAINER_SOCKETS, HOME_SECRETS};
-use crate::engine::{EngineCapabilities, OsSandboxEngine};
+use crate::engine::{EngineCapabilities, Launch, OsSandboxEngine};
 use crate::error::SandboxError;
 use crate::probe;
 use crate::spec::{NetworkPolicy, ValidatedSpec};
@@ -302,7 +302,7 @@ impl OsSandboxEngine for BubblewrapEngine {
         )
     }
 
-    fn prepare(&self, spec: &ValidatedSpec) -> Result<Command, SandboxError> {
+    fn prepare(&self, spec: &ValidatedSpec) -> Result<Launch, SandboxError> {
         check_program_is_readable(spec, &readable_roots(spec))?;
         let args = render_args(spec, &self.home, self.prlimit.as_deref())?;
         let mut command = Command::new(&self.bwrap);
@@ -311,7 +311,7 @@ impl OsSandboxEngine for BubblewrapEngine {
             .current_dir(&spec.cwd)
             .env_clear()
             .envs(spec.environment());
-        Ok(command)
+        Ok(Launch::Command(command))
     }
 }
 
