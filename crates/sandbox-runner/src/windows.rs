@@ -19,6 +19,10 @@
 //!   `NetworkPolicy::LocalProxyOnly` is therefore refused (as on Linux): LOT-014 hands the
 //!   agent another channel.
 //! * **Limits:** memory, process count and CPU time come from the Job Object and are enforced.
+//! * **Programs started by `cmd`:** found through the `PATH` of the request, as build tools do.
+//!   `cmd` refuses a program named by its absolute path ("Access is denied"): it walks every
+//!   folder of that path from the drive root, which an AppContainer cannot list. Programs the
+//!   runner starts itself, or that other programs start, are not affected.
 
 use std::ffi::OsString;
 use std::fs;

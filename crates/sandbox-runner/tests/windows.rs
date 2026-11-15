@@ -48,6 +48,8 @@ fn spec(work: &Path, program: &str, args: &[&str]) -> SandboxSpec {
     spec.args = args.iter().map(Into::into).collect();
     spec.env
         .insert("SystemRoot".into(), std::env::var_os("SystemRoot").unwrap());
+    // The environment is exactly what the request gives: `cmd` finds programs only through it.
+    spec.env.insert("PATH".into(), system32().into_os_string());
     spec.limits.wall_timeout = Duration::from_secs(60);
     spec
 }
@@ -218,9 +220,8 @@ fn the_output_budget_stops_a_flood() {
 fn the_process_count_limit_is_enforced() {
     let l = layout();
     let (runner, _) = runner();
-    // `findstr` is a second process started by `cmd`, named by its full path so that only the
-    // limit is tested here.
-    let script = r"%SystemRoot%\System32\findstr.exe readable input.txt";
+    // `findstr` is a second process started by `cmd`.
+    let script = "findstr readable input.txt";
     let free = runner.run(&cmd(&l.work, script)).unwrap();
     assert!(text(&free.stdout).contains("readable"), "{}", report(&free));
     let mut limited = cmd(&l.work, script);
@@ -244,16 +245,15 @@ fn report(out: &sandbox_runner::RunOutput) -> String {
 }
 
 #[test]
-fn programs_are_found_through_the_path_the_request_gives() {
+fn a_sandboxed_program_starts_children_found_through_the_path_it_was_given() {
     let l = layout();
     let (runner, _) = runner();
-    // On failure, the message shows the environment and the directory listing as `cmd` sees
-    // them inside the AppContainer.
+    // Through `PATH`, as build tools do. Note: `cmd` refuses a program named by its absolute
+    // path ("Access is denied"): it walks every folder of the path from the drive root, which
+    // an AppContainer cannot list. Programs started directly (not through `cmd`) are not
+    // affected.
     let out = runner
-        .run(&cmd(
-            &l.work,
-            r"set & dir %SystemRoot%\System32\findstr.exe & findstr readable input.txt",
-        ))
+        .run(&cmd(&l.work, "findstr readable input.txt"))
         .unwrap();
     assert!(text(&out.stdout).contains("readable"), "{}", report(&out));
 }
