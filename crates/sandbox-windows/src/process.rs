@@ -29,6 +29,7 @@ use crate::acl::Grant;
 use crate::command_line::{build_command_line, build_environment_block};
 use crate::container::Container;
 use crate::job::{Job, KILLED_EXIT_CODE};
+use crate::journal::JournalEntry;
 use crate::win::{check_bool, owned_handle, wide_nul};
 
 /// What to launch, and how tightly.
@@ -44,8 +45,11 @@ pub struct LaunchConfig {
     /// The whole environment of the process; nothing is inherited from the Host.
     pub env: Vec<(OsString, OsString)>,
     /// Directories the process may read and write. Their ACL gets an entry for this run only,
-    /// removed when the [`Process`] is dropped.
+    /// removed when the [`Process`] is dropped. A directory containing a junction, a symbolic
+    /// link or a hard link is refused: the entry would follow it outside.
     pub writable_dirs: Vec<PathBuf>,
+    /// Where the run is recorded until it has cleaned up (see [`crate::recover_stale_runs`]).
+    pub journal_dir: PathBuf,
     /// Limits of the whole process tree.
     pub limits: JobLimits,
     /// Name of the per-run AppContainer profile: unique, 1 to 64 of `[A-Za-z0-9._-]`.
@@ -85,9 +89,35 @@ pub struct Process {
     handle: OwnedHandle,
     pid: u32,
     job: Arc<Job>,
-    // Fields drop in declaration order, after `Drop::drop` has killed the tree.
-    _grants: Vec<Grant>,
-    _container: Container,
+    /// Dropped after `Drop::drop` has killed the tree.
+    _changes: Changes,
+}
+
+/// What a run changed outside its process, undone when dropped: the access granted to
+/// directories, then the profile. The journal entry is removed only if all of it was undone;
+/// otherwise the next recovery tries again.
+#[derive(Debug, Default)]
+struct Changes {
+    journal: Option<JournalEntry>,
+    container: Option<Container>,
+    grants: Vec<Grant>,
+}
+
+impl Drop for Changes {
+    fn drop(&mut self) {
+        let mut undone = true;
+        for grant in self.grants.drain(..) {
+            undone &= grant.revoke().is_ok();
+        }
+        if let Some(container) = self.container.take() {
+            undone &= container.delete().is_ok();
+        }
+        if let Some(journal) = self.journal.take() {
+            if undone {
+                journal.complete();
+            }
+        }
+    }
 }
 
 /// Kills a process tree from another thread (a lifetime timer).
@@ -247,17 +277,25 @@ pub fn spawn(config: &LaunchConfig) -> io::Result<Spawned> {
         .collect();
     let environment = build_environment_block(&env).map_err(invalid_input)?;
 
-    let container = Container::create(&config.container_name)?;
-    let grants = config
-        .writable_dirs
-        .iter()
-        .map(|dir| Grant::full_access(dir, container.sid()))
-        .collect::<io::Result<Vec<_>>>()?;
+    // Recorded first: if anything below fails, or the Host dies, it is undone.
+    let mut changes = Changes::default();
+    changes.journal = Some(JournalEntry::create(
+        &config.journal_dir,
+        &config.container_name,
+        &config.writable_dirs,
+    )?);
+    let container = changes
+        .container
+        .insert(Container::create(&config.container_name)?);
+    let sid = Arc::clone(container.sid());
+    for dir in &config.writable_dirs {
+        changes.grants.push(Grant::full_access(dir, &sid)?);
+    }
     let job = Arc::new(Job::create(&config.limits)?);
     let pipes = pipes()?;
 
     let capabilities = SECURITY_CAPABILITIES {
-        AppContainerSid: container.sid().as_ptr(),
+        AppContainerSid: sid.as_ptr(),
         Capabilities: ptr::null_mut(),
         CapabilityCount: 0,
         Reserved: 0,
@@ -312,8 +350,7 @@ pub fn spawn(config: &LaunchConfig) -> io::Result<Spawned> {
         handle: handle?,
         pid: info.dwProcessId,
         job,
-        _grants: grants,
-        _container: container,
+        _changes: changes,
     };
     // From here, an error drops `process`, which kills the still-suspended process.
     let thread = thread?;

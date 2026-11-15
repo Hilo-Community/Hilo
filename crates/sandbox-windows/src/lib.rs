@@ -8,7 +8,10 @@
 //! * The **AppContainer** is the isolation: a low-integrity token that, with no capability
 //!   granted, has no network (loopback included) and cannot read or write the user's files. The
 //!   only places it may use are the directories in [`LaunchConfig::writable_dirs`], whose ACL
-//!   gets an entry for this run only, removed afterwards.
+//!   gets an entry for this run only, removed afterwards. A directory containing a link to
+//!   elsewhere (junction, symbolic or hard link) is refused, so that the change of permissions
+//!   stays inside it. Each run is recorded in a journal, so that a run whose Host died is undone
+//!   at the next start ([`recover_stale_runs`]).
 //! * The **Job Object** is the supervision: the process tree cannot leave it, it is killed as a
 //!   whole, and it carries the memory, process-count and CPU-time limits. The kernel kills the
 //!   whole tree when the last handle to the job closes, even if the Host dies abruptly.
@@ -24,9 +27,13 @@ mod container;
 #[cfg(windows)]
 mod job;
 #[cfg(windows)]
+mod journal;
+#[cfg(windows)]
 mod process;
 #[cfg(windows)]
 mod win;
 
+#[cfg(windows)]
+pub use journal::recover_stale_runs;
 #[cfg(windows)]
 pub use process::{spawn, JobLimits, LaunchConfig, Process, Spawned, TreeKiller};

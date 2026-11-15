@@ -14,8 +14,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use sandbox_runner::{
-    native_sandbox, MemoryAuditSink, NetworkPolicy, OsNativeSandbox, SandboxError, SandboxRunner,
-    SandboxSpec, SecurityEventKind, Termination,
+    native_sandbox, AppContainerEngine, MemoryAuditSink, NetworkPolicy, OsNativeSandbox,
+    SandboxError, SandboxRunner, SandboxSpec, SecurityEventKind, Termination,
 };
 
 fn system32() -> PathBuf {
@@ -58,7 +58,8 @@ fn cmd(work: &Path, script: &str) -> SandboxSpec {
 
 fn runner() -> (Box<dyn SandboxRunner>, Arc<MemoryAuditSink>) {
     let audit = Arc::new(MemoryAuditSink::default());
-    let runner = native_sandbox(audit.clone()).expect("the AppContainer self-test must pass");
+    let runner = native_sandbox(audit.clone())
+        .unwrap_or_else(|error| panic!("the AppContainer self-test must pass: {error}"));
     (runner, audit)
 }
 
@@ -236,16 +237,142 @@ fn the_private_temporary_directory_is_purged() {
     assert!(!l.work.join(".coloride-tmp").exists());
 }
 
+/// The SIDs of the access entries of `path`, as strings (no translation to account names).
+fn acl_sids(path: &Path) -> String {
+    let script = format!(
+        "(Get-Acl -LiteralPath '{}').GetAccessRules($true, $true, \
+         [System.Security.Principal.SecurityIdentifier]) | ForEach-Object {{ $_.IdentityReference.Value }}",
+        path.display()
+    );
+    let out = Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    text(&out.stdout)
+}
+
+/// The prefix of every AppContainer SID.
+const APP_CONTAINER_SID: &str = "S-1-15-2-";
+
 #[test]
 fn the_access_granted_for_the_run_is_taken_back() {
     let l = layout();
     let (runner, _) = runner();
-    runner.run(&cmd(&l.work, "echo hi")).unwrap();
-    let acl = Command::new("icacls").arg(&l.work).output().unwrap();
-    let acl = text(&acl.stdout);
+    let out = runner.run(&cmd(&l.work, "echo hi")).unwrap();
+    assert!(out.termination.success(), "{out:?}");
+    let sids = acl_sids(&l.work);
     assert!(
-        !acl.contains("S-1-15-2-"),
-        "an AppContainer entry was left on the worktree:\n{acl}"
+        !sids.contains(APP_CONTAINER_SID),
+        "an AppContainer entry was left on the worktree:\n{sids}"
+    );
+}
+
+#[test]
+fn a_worktree_holding_a_hard_link_is_refused_before_any_permission_changes() {
+    let l = layout();
+    let (runner, _) = runner();
+    let secret = l.outside.join("secret.txt");
+    fs::hard_link(&secret, l.work.join("innocent.txt")).unwrap();
+    assert!(runner.run(&cmd(&l.work, "echo hi")).is_err());
+    assert!(!acl_sids(&secret).contains(APP_CONTAINER_SID));
+}
+
+#[test]
+fn a_worktree_holding_a_junction_is_refused_before_any_permission_changes() {
+    let l = layout();
+    let (runner, _) = runner();
+    let made = Command::new("cmd")
+        .args(["/d", "/c", "mklink", "/J"])
+        .arg(l.work.join("junction"))
+        .arg(&l.outside)
+        .output()
+        .unwrap();
+    assert!(made.status.success(), "{}", text(&made.stderr));
+    assert!(runner.run(&cmd(&l.work, "echo hi")).is_err());
+    assert!(!acl_sids(&l.outside).contains(APP_CONTAINER_SID));
+    assert!(!acl_sids(&l.outside.join("secret.txt")).contains(APP_CONTAINER_SID));
+}
+
+const HELPER_ENV: &str = "COLORIDE_WINDOWS_HOST_HELPER";
+const HELPER_TEST: &str = "a_run_whose_host_died_is_undone_at_the_next_start";
+
+fn journal_entries(journal: &Path) -> usize {
+    fs::read_dir(journal).map_or(0, |entries| entries.count())
+}
+
+/// The Host of the abrupt-exit scenario is this test binary run again in a helper mode: it starts
+/// a long run, reports it, and is then killed without running any destructor.
+fn host_helper(dirs: &str) {
+    let (work, journal) = dirs.split_once('|').unwrap();
+    let engine = AppContainerEngine::with_journal_dir(journal);
+    let runner = OsNativeSandbox::new(engine, Arc::new(MemoryAuditSink::default())).unwrap();
+    let child = runner
+        .spawn(&cmd(Path::new(work), "ping -n 120 127.0.0.1 >nul"))
+        .unwrap();
+    println!("SPAWNED {}", child.id());
+    std::io::stdout().flush().unwrap();
+    std::thread::sleep(Duration::from_secs(120));
+}
+
+#[test]
+fn a_run_whose_host_died_is_undone_at_the_next_start() {
+    if let Ok(dirs) = std::env::var(HELPER_ENV) {
+        host_helper(&dirs);
+        return;
+    }
+    let l = layout();
+    let journal = l.outside.parent().unwrap().join("journal");
+    let mut host = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", HELPER_TEST, "--nocapture", "--test-threads=1"])
+        .env(
+            HELPER_ENV,
+            format!("{}|{}", l.work.display(), journal.display()),
+        )
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let (lines_tx, lines_rx) = std::sync::mpsc::channel();
+    let stdout = host.stdout.take().unwrap();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if lines_tx.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let pid = loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        let Ok(line) = lines_rx.recv_timeout(left) else {
+            let _ = host.kill();
+            panic!("the helper Host did not start its run");
+        };
+        if let Some(at) = line.find("SPAWNED ") {
+            break line[at + 8..].trim().parse::<u32>().unwrap();
+        }
+    };
+    // TerminateProcess: no destructor runs in the helper.
+    host.kill().unwrap();
+    host.wait().unwrap();
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !gone(pid) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(gone(pid), "the sandboxed process outlived its Host");
+    assert_eq!(journal_entries(&journal), 1, "the run should be on record");
+    assert!(acl_sids(&l.work).contains(APP_CONTAINER_SID));
+
+    // The next start cleans up before accepting anything.
+    let engine = AppContainerEngine::with_journal_dir(&journal);
+    OsNativeSandbox::new(engine, Arc::new(MemoryAuditSink::default())).unwrap();
+    assert_eq!(journal_entries(&journal), 0);
+    let sids = acl_sids(&l.work);
+    assert!(
+        !sids.contains(APP_CONTAINER_SID),
+        "the dead run's access is still on the worktree:\n{sids}"
     );
 }
 
@@ -305,6 +432,8 @@ fn batch_files_are_refused() {
 
 #[test]
 fn the_engine_passes_its_self_test_on_this_machine() {
-    let engine = sandbox_runner::AppContainerEngine::new();
-    assert!(OsNativeSandbox::new(engine, Arc::new(MemoryAuditSink::default())).is_ok());
+    let engine = AppContainerEngine::for_current_user().unwrap();
+    if let Err(error) = OsNativeSandbox::new(engine, Arc::new(MemoryAuditSink::default())) {
+        panic!("{error}");
+    }
 }

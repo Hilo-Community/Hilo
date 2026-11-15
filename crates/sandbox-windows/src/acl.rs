@@ -2,7 +2,9 @@
 
 use std::ffi::c_void;
 use std::fmt;
+use std::fs::{self, OpenOptions};
 use std::io;
+use std::os::windows::fs::OpenOptionsExt;
 use std::path::Path;
 use std::ptr;
 use std::sync::Arc;
@@ -16,10 +18,12 @@ use windows_sys::Win32::Security::Authorization::{
 use windows_sys::Win32::Security::{
     ACL, DACL_SECURITY_INFORMATION, SUB_CONTAINERS_AND_OBJECTS_INHERIT,
 };
-use windows_sys::Win32::Storage::FileSystem::FILE_ALL_ACCESS;
+use windows_sys::Win32::Storage::FileSystem::{
+    FILE_ALL_ACCESS, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+};
 
 use crate::container::Sid;
-use crate::win::{check_status, wide_nul};
+use crate::win::{check_status, link_count, wide_nul};
 
 /// Memory allocated by the security API, released with `LocalFree`.
 struct LocalMemory(*mut c_void);
@@ -94,7 +98,49 @@ fn update_dacl(path: &mut [u16], sid: &Sid, mode: ACCESS_MODE) -> io::Result<()>
     check_status(status)
 }
 
-/// Access of one AppContainer to one directory. Dropping it removes that access.
+/// Refuses a directory tree that reaches outside itself. Granting access to a directory is
+/// propagated to everything it contains, and a link would carry it to its target: a junction or
+/// a symbolic link to another directory, or a hard link (a second name of a file that lives
+/// elsewhere). Checking before granting keeps the change of permissions inside `dir`.
+pub(crate) fn ensure_self_contained(dir: &Path) -> io::Result<()> {
+    let refuse = |path: &Path, what: &str| {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "{} is {what}: granting access to the worktree would reach outside it",
+                path.display()
+            ),
+        ))
+    };
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(current) = pending.pop() {
+        let meta = fs::symlink_metadata(&current)?;
+        let kind = meta.file_type();
+        // On Windows `is_symlink` is true for every name-surrogate reparse point: symbolic links
+        // and junctions alike.
+        if kind.is_symlink() {
+            return refuse(&current, "a link");
+        }
+        if kind.is_dir() {
+            for entry in fs::read_dir(&current)? {
+                pending.push(entry?.path());
+            }
+        } else {
+            // Read-attributes access is enough to count the names; sharing everything leaves the
+            // file usable by others meanwhile.
+            let file = OpenOptions::new()
+                .access_mode(FILE_READ_ATTRIBUTES)
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+                .open(&current)?;
+            if link_count(&file)? > 1 {
+                return refuse(&current, "a hard link");
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Access of one AppContainer to one directory, taken back by [`Grant::revoke`].
 pub(crate) struct Grant {
     /// NUL-terminated.
     path: Vec<u16>,
@@ -113,8 +159,10 @@ impl fmt::Debug for Grant {
 }
 
 impl Grant {
-    /// Gives the AppContainer `sid` full access to `dir` and everything in it.
+    /// Gives the AppContainer `sid` full access to `dir` and everything in it, after checking
+    /// that nothing in it leads outside.
     pub(crate) fn full_access(dir: &Path, sid: &Arc<Sid>) -> io::Result<Self> {
+        ensure_self_contained(dir)?;
         let mut path = wide_nul(dir.as_os_str())?;
         if let Err(error) = update_dacl(&mut path, sid, GRANT_ACCESS) {
             // Never leave a half-applied grant behind.
@@ -126,12 +174,19 @@ impl Grant {
             sid: Arc::clone(sid),
         })
     }
+
+    /// Removes the access again.
+    pub(crate) fn revoke(mut self) -> io::Result<()> {
+        update_dacl(&mut self.path, &self.sid, REVOKE_ACCESS)
+    }
 }
 
-impl Drop for Grant {
-    fn drop(&mut self) {
-        // Best effort: if it fails, the entry left behind names a profile that is deleted right
-        // after, so it grants nothing to anyone.
-        let _ = update_dacl(&mut self.path, &self.sid, REVOKE_ACCESS);
+/// Removes every entry of `sid` from the ACL of `dir`, for cleaning up after a run that could
+/// not do it itself. A directory that no longer exists has nothing left to clean.
+pub(crate) fn revoke_access(dir: &Path, sid: &Sid) -> io::Result<()> {
+    let mut path = wide_nul(dir.as_os_str())?;
+    match update_dacl(&mut path, sid, REVOKE_ACCESS) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        result => result,
     }
 }

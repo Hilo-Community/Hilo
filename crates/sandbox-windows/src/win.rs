@@ -1,12 +1,16 @@
 //! Small helpers shared by the Win32 modules.
 
 use std::ffi::{c_void, OsStr};
+use std::fs::File;
 use std::io;
 use std::os::windows::ffi::OsStrExt;
-use std::os::windows::io::{FromRawHandle, OwnedHandle};
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 
 use windows_sys::core::BOOL;
 use windows_sys::Win32::Foundation::{INVALID_HANDLE_VALUE, WIN32_ERROR};
+use windows_sys::Win32::Storage::FileSystem::{
+    GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+};
 
 /// UTF-16 with a terminating NUL, as the `...W` functions take it. A string that contains a NUL
 /// would be cut there by Windows and is refused.
@@ -48,4 +52,12 @@ pub(crate) fn owned_handle(raw: *mut c_void) -> io::Result<OwnedHandle> {
     // SAFETY: `raw` is a valid, open handle that the caller just received from Win32 and that
     // nothing else owns; `OwnedHandle` closes it exactly once.
     Ok(unsafe { OwnedHandle::from_raw_handle(raw) })
+}
+
+/// How many names (hard links) the open file has.
+pub(crate) fn link_count(file: &File) -> io::Result<u32> {
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: the handle is an open file for the whole call and `info` is a valid out-pointer.
+    check_bool(unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) })?;
+    Ok(info.nNumberOfLinks)
 }

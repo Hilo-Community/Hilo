@@ -21,14 +21,15 @@ Features: `Win32_Foundation`, `Win32_Security`, `Win32_Security_Authorization`,
 
 | Purpose | Functions |
 |---|---|
-| AppContainer profile | `CreateAppContainerProfile`, `DeleteAppContainerProfile`, `FreeSid` |
+| AppContainer profile | `CreateAppContainerProfile`, `DeleteAppContainerProfile`, `DeriveAppContainerSidFromAppContainerName` (cleanup after a dead Host), `FreeSid` |
 | Access to the worktree (ACL) | `GetNamedSecurityInfoW`, `SetEntriesInAclW`, `SetNamedSecurityInfoW`, `LocalFree` |
+| Refusing links before granting | `GetFileInformationByHandle` (number of hard links of a file) |
 | Starting the process | `InitializeProcThreadAttributeList`, `UpdateProcThreadAttribute`, `DeleteProcThreadAttributeList`, `CreateProcessW`, `ResumeThread` |
 | Pipes | `CreatePipe`, `SetHandleInformation` |
 | Job Object | `CreateJobObjectW`, `SetInformationJobObject`, `AssignProcessToJobObject`, `TerminateJobObject` |
 | Waiting and killing | `WaitForSingleObject`, `GetExitCodeProcess`, `TerminateProcess` |
 
-20 functions. Handles are owned by `std::os::windows::io::OwnedHandle` (closed by the standard
+22 functions. Handles are owned by `std::os::windows::io::OwnedHandle` (closed by the standard
 library), errors come from `std::io::Error::last_os_error`, so `CloseHandle` and `GetLastError`
 are not called directly. No capability is ever requested for the AppContainer: no network, no
 access to the user's files. The command line and environment block are built by the safe

@@ -8,6 +8,10 @@
 //!   content, so the cost grows with the number of files) and removed afterwards. System
 //!   directories are readable by every AppContainer, so the OS and the programs installed there
 //!   run; a toolchain installed under the user's profile is not readable and fails to start.
+//! * **Links:** a worktree containing a junction, a symbolic link or a hard link is refused
+//!   before any permission changes, since the access granted would follow the link outside.
+//! * **Crash safety:** each run is recorded in a journal (`%LOCALAPPDATA%\Coloride\sandbox-runs`)
+//!   until it has undone its changes; the self-test first undoes the runs of a Host that died.
 //! * **Shared read-only directories** (`read_only_paths`) are refused: sharing one would mean
 //!   changing the permissions of the user's own files, and nothing here could restore them if
 //!   the Host died in between. This engine says so instead of weakening the isolation.
@@ -34,14 +38,104 @@ use crate::OsSandboxKind;
 /// Variables that point programs at a temporary directory.
 const TMP_VARS: [&str; 3] = ["TMPDIR", "TMP", "TEMP"];
 
-/// The Windows engine. Stateless: each run gets its own AppContainer profile and Job Object.
-#[derive(Debug, Clone, Default)]
-pub struct AppContainerEngine;
+/// Variables Windows itself needs to start a process in an AppContainer with an environment of
+/// our own: without them `CreateProcessW` fails with `ERROR_ENVVAR_NOT_FOUND` (203). They are
+/// locations of the system and of the profile, copied from the Host; none holds a secret, and
+/// the AppContainer cannot read the profile directories they name anyway.
+const SYSTEM_VARS: [&str; 10] = [
+    "SystemRoot",
+    "windir",
+    "SystemDrive",
+    "ComSpec",
+    "PATHEXT",
+    "ProgramData",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "PUBLIC",
+];
+
+fn same_name(left: &OsString, right: &str) -> bool {
+    left.eq_ignore_ascii_case(right)
+}
+
+/// The environment of a sandboxed process: the system variables, then the caller's (which win,
+/// whatever their case), then the private temporary directory (which wins over both). Names are
+/// case-insensitive on Windows and a duplicate would be refused.
+fn environment<'a>(
+    caller: impl IntoIterator<Item = (&'a OsString, &'a OsString)>,
+    tmp: &Path,
+) -> Vec<(OsString, OsString)> {
+    let mut env: Vec<(OsString, OsString)> = Vec::new();
+    let mut set = |key: OsString, value: OsString| {
+        env.retain(|(existing, _)| !existing.eq_ignore_ascii_case(&key));
+        env.push((key, value));
+    };
+    for var in SYSTEM_VARS {
+        if let Some(value) = std::env::var_os(var) {
+            set(var.into(), value);
+        }
+    }
+    for (key, value) in caller {
+        if !TMP_VARS.iter().any(|var| same_name(key, var)) {
+            set(key.clone(), value.clone());
+        }
+    }
+    for var in TMP_VARS {
+        set(var.into(), tmp.as_os_str().to_os_string());
+    }
+    env
+}
+
+/// The Windows engine: each run gets its own AppContainer profile and Job Object, recorded in a
+/// journal until it has cleaned up after itself.
+#[derive(Debug, Clone)]
+pub struct AppContainerEngine {
+    journal_dir: PathBuf,
+}
 
 impl AppContainerEngine {
+    /// Keeps its journal in `%LOCALAPPDATA%\Coloride\sandbox-runs`.
+    pub fn for_current_user() -> Result<Self, SandboxError> {
+        let local = std::env::var_os("LOCALAPPDATA")
+            .ok_or_else(|| SandboxError::unavailable("the LOCALAPPDATA variable is not set"))?;
+        Ok(Self::with_journal_dir(
+            Path::new(&local).join("Coloride").join("sandbox-runs"),
+        ))
+    }
+
+    /// Keeps its journal in `journal_dir` (an absolute directory of the Host, outside every
+    /// worktree).
     #[must_use]
-    pub fn new() -> Self {
-        Self
+    pub fn with_journal_dir(journal_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            journal_dir: journal_dir.into(),
+        }
+    }
+
+    fn launch_config(&self, spec: &ValidatedSpec) -> Result<LaunchConfig, SandboxError> {
+        if !spec.read_only_paths.is_empty() {
+            return Err(SandboxError::InvalidSpec(
+                "the Windows sandbox cannot share read-only directories: that would change the \
+                 permissions of files outside the worktree"
+                    .to_string(),
+            ));
+        }
+        Ok(LaunchConfig {
+            program: plain(&spec.program),
+            args: spec.args.clone(),
+            cwd: plain(&spec.cwd),
+            env: environment(&spec.env, &plain(&spec.tmp_dir)),
+            writable_dirs: vec![plain(&spec.worktree_root)],
+            journal_dir: self.journal_dir.clone(),
+            limits: JobLimits {
+                max_processes: spec.limits.max_processes,
+                max_memory_bytes: spec.limits.max_memory_bytes,
+                max_cpu_time: spec.limits.max_cpu_time,
+            },
+            container_name: format!("coloride-{}", spec.run_id),
+            stdin_piped: false,
+        })
     }
 }
 
@@ -63,45 +157,6 @@ fn plain(path: &Path) -> PathBuf {
     path.to_path_buf()
 }
 
-fn launch_config(spec: &ValidatedSpec) -> Result<LaunchConfig, SandboxError> {
-    if !spec.read_only_paths.is_empty() {
-        return Err(SandboxError::InvalidSpec(
-            "the Windows sandbox cannot share read-only directories: that would change the \
-             permissions of files outside the worktree"
-                .to_string(),
-        ));
-    }
-    // The private temporary directory replaces any caller value, whatever its case: names are
-    // case-insensitive on Windows and a duplicate would be refused.
-    let tmp = plain(&spec.tmp_dir).into_os_string();
-    let is_tmp_var = |key: &OsString| TMP_VARS.iter().any(|var| key.eq_ignore_ascii_case(var));
-    let mut env: Vec<(OsString, OsString)> = spec
-        .env
-        .iter()
-        .filter(|(key, _)| !is_tmp_var(key))
-        .map(|(key, value)| (key.clone(), value.clone()))
-        .collect();
-    env.extend(
-        TMP_VARS
-            .iter()
-            .map(|var| (OsString::from(var), tmp.clone())),
-    );
-    Ok(LaunchConfig {
-        program: plain(&spec.program),
-        args: spec.args.clone(),
-        cwd: plain(&spec.cwd),
-        env,
-        writable_dirs: vec![plain(&spec.worktree_root)],
-        limits: JobLimits {
-            max_processes: spec.limits.max_processes,
-            max_memory_bytes: spec.limits.max_memory_bytes,
-            max_cpu_time: spec.limits.max_cpu_time,
-        },
-        container_name: format!("coloride-{}", spec.run_id),
-        stdin_piped: false,
-    })
-}
-
 impl OsSandboxEngine for AppContainerEngine {
     fn capabilities(&self) -> EngineCapabilities {
         EngineCapabilities {
@@ -114,8 +169,16 @@ impl OsSandboxEngine for AppContainerEngine {
         }
     }
 
+    /// First undoes the runs of a Host that died before cleaning up (see
+    /// `sandbox_windows::recover_stale_runs`), then proves the isolation.
     fn self_test(&self) -> Result<(), SandboxError> {
-        self_test()
+        sandbox_windows::recover_stale_runs(&self.journal_dir).map_err(|error| {
+            SandboxError::unavailable(format!(
+                "could not clean up after an earlier sandbox run ({}): {error}",
+                self.journal_dir.display()
+            ))
+        })?;
+        self_test(&self.journal_dir)
     }
 
     fn prepare(&self, _spec: &ValidatedSpec) -> Result<Command, SandboxError> {
@@ -127,7 +190,7 @@ impl OsSandboxEngine for AppContainerEngine {
     }
 
     fn prepare_launch(&self, spec: &ValidatedSpec) -> Result<Launch, SandboxError> {
-        Ok(Launch::AppContainer(Box::new(launch_config(spec)?)))
+        Ok(Launch::AppContainer(Box::new(self.launch_config(spec)?)))
     }
 }
 
@@ -148,14 +211,14 @@ fn probe_failure(what: &str, detail: impl std::fmt::Display) -> SandboxError {
 /// must not reach.
 struct Probe {
     _cleanup: ProbeDir,
-    system_root: OsString,
+    journal_dir: PathBuf,
     system32: PathBuf,
     work: PathBuf,
     outside: PathBuf,
 }
 
 impl Probe {
-    fn new() -> Result<Self, SandboxError> {
+    fn new(journal_dir: &Path) -> Result<Self, SandboxError> {
         let system_root = std::env::var_os("SystemRoot")
             .ok_or_else(|| SandboxError::unavailable("the SystemRoot variable is not set"))?;
         let base = std::env::temp_dir().join(format!("coloride-selftest-{}", new_run_id()));
@@ -167,8 +230,8 @@ impl Probe {
         fs::write(work.join("input.txt"), "readable")?;
         Ok(Self {
             _cleanup: cleanup,
+            journal_dir: journal_dir.to_path_buf(),
             system32: Path::new(&system_root).join("System32"),
-            system_root,
             work,
             outside,
         })
@@ -177,17 +240,13 @@ impl Probe {
     /// Runs a program of `System32` in a fresh AppContainer, under the regular supervision.
     fn run(&self, program: &str, args: &[&str]) -> Result<RunOutput, SandboxError> {
         let tmp = TmpDir::create(&self.work)?;
-        let tmp_path = tmp.path().as_os_str().to_os_string();
         let config = LaunchConfig {
             program: self.system32.join(program),
             args: args.iter().map(OsString::from).collect(),
             cwd: self.work.clone(),
-            env: vec![
-                ("SystemRoot".into(), self.system_root.clone()),
-                ("TEMP".into(), tmp_path.clone()),
-                ("TMP".into(), tmp_path),
-            ],
+            env: environment([], tmp.path()),
             writable_dirs: vec![self.work.clone()],
+            journal_dir: self.journal_dir.clone(),
             limits: JobLimits::default(),
             container_name: format!("coloride-selftest-{}", new_run_id()),
             stdin_piped: false,
@@ -222,8 +281,8 @@ fn stdout(output: &RunOutput) -> String {
 /// Proves on this machine that the AppContainer isolates. Positive controls first (the probe
 /// programs run and can use their worktree), so that nothing passes merely because nothing runs;
 /// then the negative controls, which are the isolation itself.
-fn self_test() -> Result<(), SandboxError> {
-    let probe = Probe::new()?;
+fn self_test(journal_dir: &Path) -> Result<(), SandboxError> {
+    let probe = Probe::new(journal_dir)?;
 
     // Positive controls.
     let made = probe.run("cmd.exe", &["/d", "/c", "echo ok>probe.txt"])?;
@@ -286,8 +345,34 @@ fn self_test() -> Result<(), SandboxError> {
 
 #[cfg(test)]
 mod tests {
-    use super::plain;
+    use super::{environment, plain};
+    use std::ffi::OsString;
     use std::path::Path;
+
+    #[test]
+    fn the_environment_has_the_system_variables_the_callers_and_one_private_temp() {
+        let caller = [
+            (OsString::from("temp"), OsString::from(r"C:\elsewhere")),
+            (OsString::from("systemroot"), OsString::from(r"D:\Windows")),
+            (OsString::from("MY_VAR"), OsString::from("1")),
+        ];
+        let env = environment(caller.iter().map(|(k, v)| (k, v)), Path::new(r"C:\w\tmp"));
+        let get = |name: &str| {
+            let found: Vec<_> = env
+                .iter()
+                .filter(|(key, _)| key.eq_ignore_ascii_case(name))
+                .collect();
+            assert!(found.len() <= 1, "{name} appears twice");
+            found
+                .first()
+                .map(|(_, value)| value.to_string_lossy().into_owned())
+        };
+        assert_eq!(get("TEMP").as_deref(), Some(r"C:\w\tmp"));
+        assert_eq!(get("TMP").as_deref(), Some(r"C:\w\tmp"));
+        assert_eq!(get("SystemRoot").as_deref(), Some(r"D:\Windows"));
+        assert_eq!(get("MY_VAR").as_deref(), Some("1"));
+        assert!(get("ComSpec").is_some(), "the system variables are missing");
+    }
 
     #[test]
     fn verbatim_drive_paths_become_plain_and_others_are_kept() {

@@ -213,10 +213,13 @@ pub fn native_sandbox(audit: Arc<dyn AuditSink>) -> Result<Box<dyn SandboxRunner
 /// inside a Job Object (see `AppContainerEngine`).
 #[cfg(target_os = "windows")]
 pub fn native_sandbox(audit: Arc<dyn AuditSink>) -> Result<Box<dyn SandboxRunner>, SandboxError> {
-    Ok(Box::new(OsNativeSandbox::new(
-        crate::windows::AppContainerEngine::new(),
-        audit,
-    )?))
+    let engine = crate::windows::AppContainerEngine::for_current_user().inspect_err(|error| {
+        audit.record(SecurityAuditEvent::new(
+            SecurityEventKind::SandboxUnavailable,
+            error.to_string(),
+        ));
+    })?;
+    Ok(Box::new(OsNativeSandbox::new(engine, audit)?))
 }
 
 /// The runner of the current OS, or `SandboxUnavailable` (no engine exists for this OS).
