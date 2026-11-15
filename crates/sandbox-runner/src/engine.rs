@@ -40,10 +40,27 @@ pub trait OsSandboxEngine: Send + Sync + 'static {
     /// process group.
     fn prepare(&self, spec: &ValidatedSpec) -> Result<Command, SandboxError>;
 
+    /// What the runner actually starts. Engines that wrap a command (Seatbelt, bubblewrap) keep
+    /// the default; the Windows engine cannot express AppContainer as a `Command` and returns a
+    /// `Launch::AppContainer`.
+    fn prepare_launch(&self, spec: &ValidatedSpec) -> Result<Launch, SandboxError> {
+        self.prepare(spec).map(Launch::Command)
+    }
+
     /// Called once when the process tree of a run has ended. An engine whose OS reports refusals
     /// after the fact (a log, a trace) collects them here and records them in `audit`. It must
     /// not block: start a thread for slow work. The default reports nothing.
     fn collect_denials(&self, _run: &RunInfo, _audit: Arc<dyn AuditSink>) {}
+}
+
+/// How a prepared run is started.
+#[derive(Debug)]
+pub enum Launch {
+    /// A command that is already isolated (it runs the sandbox tool itself).
+    Command(Command),
+    /// A process started inside a Windows AppContainer and Job Object.
+    #[cfg(windows)]
+    AppContainer(Box<sandbox_windows::LaunchConfig>),
 }
 
 /// Identifies one run to `OsSandboxEngine::collect_denials`.

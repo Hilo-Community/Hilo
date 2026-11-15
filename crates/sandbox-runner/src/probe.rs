@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-use crate::engine::OsSandboxEngine;
+use crate::engine::{Launch, OsSandboxEngine};
 use crate::error::SandboxError;
 use crate::spec::SandboxSpec;
 use crate::supervisor::{new_run_id, run_to_completion, SandboxedChild, Termination, TmpDir};
@@ -109,7 +109,8 @@ pub(crate) fn run<E: OsSandboxEngine>(
         validated.tmp_dir = tmp.path().to_path_buf();
         validated.run_id = new_run_id();
         let command = build_engine(home.clone()).prepare(&validated)?;
-        let mut child = SandboxedChild::spawn_prepared(command, tmp, None, false, None)?;
+        let mut child =
+            SandboxedChild::spawn_prepared(Launch::Command(command), tmp, None, false, None)?;
         run_to_completion(&mut child, &spec.limits)
     })();
 
