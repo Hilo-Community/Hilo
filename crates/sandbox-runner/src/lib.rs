@@ -1,25 +1,38 @@
-//! Capability skeleton only; no OS sandbox runner can execute commands yet.
-//! Health-check targets are configuration, not measured execution guarantees.
+//! The isolated sandbox runner: every command an agent asks for runs through `SandboxRunner`, in
+//! the native sandbox of the OS (Seatbelt on macOS, bubblewrap on Linux, AppContainer + Job
+//! Object on Windows), or not at all (`AGENTS.md` rule 5).
+//!
+//! `healthcheck` still reports `execution_available: false`: no application command uses the
+//! runner yet (wired with the task runner, LOT-013). Its targets are configuration, not measured
+//! guarantees.
 
 pub mod audit;
+pub mod bubblewrap;
+mod common;
 pub mod engine;
 pub mod error;
 pub mod path_guard;
+mod probe;
 pub mod runner;
 pub mod seatbelt;
 pub mod spec;
 pub mod supervisor;
+#[cfg(windows)]
+pub mod windows;
 
 pub use audit::{
     AuditSink, MemoryAuditSink, SecurityAuditEvent, SecurityEventKind, TracingAuditSink,
 };
-pub use engine::{EngineCapabilities, OsSandboxEngine, RunInfo};
+pub use bubblewrap::BubblewrapEngine;
+pub use engine::{EngineCapabilities, Launch, OsSandboxEngine, RunInfo};
 pub use error::SandboxError;
 pub use path_guard::{PathGuard, PathGuardError};
 pub use runner::{native_sandbox, OsNativeSandbox, SandboxRunner};
 pub use seatbelt::SeatbeltEngine;
 pub use spec::{NetworkPolicy, ResourceLimits, SandboxSpec, ValidatedSpec, TMP_DIR_NAME};
-pub use supervisor::{RunOutput, SandboxedChild, Termination};
+pub use supervisor::{ChildInput, ChildOutput, RunOutput, SandboxedChild, Termination};
+#[cfg(windows)]
+pub use windows::AppContainerEngine;
 
 use serde::{Deserialize, Serialize};
 

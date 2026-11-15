@@ -98,6 +98,25 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
+      # LOT-012: the Linux sandbox is bubblewrap and needs unprivileged user namespaces. Ubuntu 24.04
+      # restricts them with AppArmor (kernel.apparmor_restrict_unprivileged_userns=1), so bwrap gets
+      # a profile that allows `userns`, as a user of that system would install. The sandbox still
+      # fails closed, with a hint, if this does not work; the last command shows it early.
+      - name: Install bubblewrap and let it create user namespaces
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 install -y bubblewrap
+          sudo tee /etc/apparmor.d/coloride-bwrap >/dev/null <<'PROFILE'
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile coloride-bwrap /usr/bin/bwrap flags=(unconfined) {
+            userns,
+          }
+          PROFILE
+          sudo apparmor_parser -r /etc/apparmor.d/coloride-bwrap
+          cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns || true
+          bwrap --unshare-user --unshare-net --unshare-pid --ro-bind / / /bin/true
+
       # LOT-010 tests drive the real vtsls and Biome (node_modules/.bin) and the pinned js-debug
       # adapter (tools/). They are Unix-only, so Windows does not need them.
       - name: Install pnpm

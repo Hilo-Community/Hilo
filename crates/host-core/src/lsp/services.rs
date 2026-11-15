@@ -86,6 +86,14 @@ pub fn biome_server_spec(program: PathBuf) -> LanguageServerSpec {
     }
 }
 
+/// Attempts to start a server that disconnects during start-up. Biome's `lsp-proxy` talks to a
+/// daemon shared by every Biome client of the user. When several clients start it at once (a
+/// fresh machine, another editor opening at the same time), a proxy can reach the daemon that
+/// lost the race while it closes, and exits. A new attempt finds the daemon that won.
+const START_ATTEMPTS: u32 = 3;
+/// Pause before the second attempt; it grows with each attempt.
+const START_RETRY_DELAY: Duration = Duration::from_millis(250);
+
 const TYPESCRIPT_LANGUAGE_IDS: [&str; 4] = [
     "typescript",
     "typescriptreact",
@@ -210,7 +218,7 @@ impl LanguageServices {
         {
             return Ok(());
         }
-        let session = LanguageServerSession::start(&self.gate, &spec.profile, self.sink.clone())?;
+        let session = self.start_session(&spec.profile)?;
         for (path, document) in &state.open {
             if spec.language_ids.contains(&document.language_id) {
                 let _ = session.open_document(
@@ -231,6 +239,29 @@ impl LanguageServices {
             language_ids: spec.language_ids.clone(),
         });
         Ok(())
+    }
+
+    /// Starts a server, again if it disconnects while starting (see [`START_ATTEMPTS`]). Any
+    /// other failure (trust refused, timeout, error answer) is final.
+    fn start_session(
+        &self,
+        profile: &LanguageServerProfile,
+    ) -> Result<LanguageServerSession, LspError> {
+        let mut attempt = 1;
+        loop {
+            match LanguageServerSession::start(&self.gate, profile, self.sink.clone()) {
+                Err(LspError::Disconnected) if attempt < START_ATTEMPTS => {
+                    tracing::debug!(
+                        target: "coloride::lsp",
+                        "{:?} disconnected while starting (attempt {attempt}), starting it again",
+                        profile.source
+                    );
+                    std::thread::sleep(START_RETRY_DELAY * attempt);
+                    attempt += 1;
+                }
+                result => return result,
+            }
+        }
     }
 
     /// Whether a live server reports diagnostics for `source`.

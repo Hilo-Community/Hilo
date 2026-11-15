@@ -1,22 +1,29 @@
-//! Running a prepared command under supervision: its own process group, killed as a whole;
-//! bounded wall-clock time and output; a private temporary directory purged at the end; and a
-//! watchdog that kills the group if the Host itself dies abruptly.
+//! Running a prepared launch under supervision: the process tree is killed as a whole; wall-clock
+//! time and output are bounded; a private temporary directory is purged at the end; and the tree
+//! dies with the Host even if the Host dies abruptly.
 //!
-//! No `unsafe`: the group is made with `CommandExt::process_group` and signalled through
-//! `rustix`'s safe API. A process that leaves the group (`setsid`) is not reached by this layer;
-//! the OS engines add what their platform offers (a PID namespace on Linux, a Job Object on
-//! Windows). Without supervision support (no Unix process groups) launching fails.
+//! * **Unix:** the process leads its own group (`CommandExt::process_group`), signalled through
+//!   `rustix`'s safe API, and an orphan watchdog kills the group if the Host disappears. A
+//!   process that leaves the group (`setsid`) is not reached by this layer; the Linux engine
+//!   adds a PID namespace for that.
+//! * **Windows:** the process lives in a Job Object (`sandbox-windows`), which the kernel
+//!   empties when the Host's handle to it closes, however the Host ends.
+//!
+//! No `unsafe` here.
 
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, ExitStatus};
+#[cfg(unix)]
+use std::process::{Child, ChildStdin};
+use std::process::{Command, ExitStatus};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::engine::Launch;
 use crate::error::SandboxError;
 use crate::spec::{ResourceLimits, TMP_DIR_NAME};
 
@@ -108,24 +115,18 @@ pub(crate) fn kill_process_group(group: u32) -> bool {
         .is_some_and(|group| kill_process_group(group, Signal::KILL).is_ok())
 }
 
-#[cfg(not(unix))]
-pub(crate) fn kill_process_group(_group: u32) -> bool {
-    false
-}
-
 /// Kills a process group if the Host dies abruptly, when no destructor runs: a tiny `sh` blocks
 /// reading a pipe whose only write end the Host holds. The kernel closes that end when the Host
 /// dies, whatever the cause; the watchdog then kills the group.
+#[cfg(unix)]
 #[derive(Debug)]
 struct OrphanWatchdog {
     process: Child,
     _trigger: Option<ChildStdin>,
 }
 
-// Only started by the Unix supervision; Windows gets a Job Object with its engine (this lot).
-#[cfg_attr(not(unix), allow(dead_code))]
+#[cfg(unix)]
 impl OrphanWatchdog {
-    #[cfg(unix)]
     fn start(group: u32) -> Result<Self, SandboxError> {
         use std::os::unix::process::CommandExt;
         use std::process::Stdio;
@@ -150,11 +151,6 @@ impl OrphanWatchdog {
         })
     }
 
-    #[cfg(not(unix))]
-    fn start(_group: u32) -> Result<Self, SandboxError> {
-        Err(SandboxError::SupervisionUnsupported)
-    }
-
     /// The group is gone: stop watching before its id can be reused.
     fn stop(mut self) {
         let _ = self.process.kill();
@@ -162,22 +158,24 @@ impl OrphanWatchdog {
     }
 }
 
-/// Kills the group at a deadline (the lifetime budget of a long-lived process).
+/// Runs `kill` at a deadline (the lifetime budget of a long-lived process).
 #[derive(Debug)]
 struct LifetimeTimer {
     cancel: Option<Sender<()>>,
     handle: Option<JoinHandle<()>>,
 }
 
-// Only started by the Unix supervision; Windows gets a Job Object with its engine (this lot).
-#[cfg_attr(not(unix), allow(dead_code))]
 impl LifetimeTimer {
-    fn start(group: u32, lifetime: Duration, timed_out: Arc<AtomicBool>) -> Self {
+    fn start(
+        kill: impl FnOnce() + Send + 'static,
+        lifetime: Duration,
+        timed_out: Arc<AtomicBool>,
+    ) -> Self {
         let (cancel, receiver) = mpsc::channel::<()>();
         let handle = thread::spawn(move || {
             if let Err(RecvTimeoutError::Timeout) = receiver.recv_timeout(lifetime) {
                 timed_out.store(true, Ordering::SeqCst);
-                kill_process_group(group);
+                kill();
             }
         });
         Self {
@@ -194,11 +192,125 @@ impl LifetimeTimer {
     }
 }
 
+/// What the Host writes to a sandboxed process.
+pub type ChildInput = Box<dyn Write + Send>;
+/// What the Host reads from a sandboxed process.
+pub type ChildOutput = Box<dyn Read + Send>;
+
+/// The OS-specific half of a running sandboxed process: how it is waited for and how its whole
+/// tree is killed.
+enum Process {
+    /// Unix: a process group and an orphan watchdog.
+    #[cfg(unix)]
+    Unix {
+        child: Child,
+        watchdog: Option<OrphanWatchdog>,
+    },
+    /// Windows: the process lives in a Job Object, which the kernel empties if the Host dies.
+    #[cfg(windows)]
+    Windows(sandbox_windows::Process),
+}
+
+impl std::fmt::Debug for Process {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Process")
+    }
+}
+
+impl Process {
+    fn id(&self) -> u32 {
+        match self {
+            #[cfg(unix)]
+            Process::Unix { child, .. } => child.id(),
+            #[cfg(windows)]
+            Process::Windows(process) => process.id(),
+        }
+    }
+
+    fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        match self {
+            #[cfg(unix)]
+            Process::Unix { child, .. } => child.try_wait(),
+            #[cfg(windows)]
+            Process::Windows(process) => Ok(process.try_wait()?.map(exit_status)),
+        }
+    }
+
+    fn wait(&mut self) -> io::Result<ExitStatus> {
+        match self {
+            #[cfg(unix)]
+            Process::Unix { child, .. } => child.wait(),
+            #[cfg(windows)]
+            Process::Windows(process) => process.wait().map(exit_status),
+        }
+    }
+
+    /// Kills the whole tree and reaps the process.
+    fn kill_and_reap(&mut self) {
+        match self {
+            #[cfg(unix)]
+            Process::Unix { child, .. } => {
+                // Not reaped yet, so the pid (and group id) still belongs to our child.
+                if !kill_process_group(child.id()) {
+                    let _ = child.kill();
+                }
+                let _ = child.wait();
+            }
+            #[cfg(windows)]
+            Process::Windows(process) => {
+                process.kill_tree();
+                let _ = process.wait();
+            }
+        }
+    }
+
+    /// The process is gone: kills whatever it left running in its tree, and stops watching.
+    fn clean_up(&mut self) {
+        match self {
+            #[cfg(unix)]
+            Process::Unix { child, watchdog } => {
+                kill_process_group(child.id());
+                if let Some(watchdog) = watchdog.take() {
+                    watchdog.stop();
+                }
+            }
+            #[cfg(windows)]
+            Process::Windows(process) => process.kill_tree(),
+        }
+    }
+
+    /// What kills the tree from the lifetime timer thread.
+    fn killer(&self) -> Box<dyn FnOnce() + Send> {
+        match self {
+            #[cfg(unix)]
+            Process::Unix { child, .. } => {
+                let group = child.id();
+                Box::new(move || {
+                    kill_process_group(group);
+                })
+            }
+            #[cfg(windows)]
+            Process::Windows(process) => {
+                let killer = process.killer();
+                Box::new(move || {
+                    killer.kill();
+                })
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+fn exit_status(code: u32) -> ExitStatus {
+    std::os::windows::process::ExitStatusExt::from_raw(code)
+}
+
 /// A sandboxed process and everything it started. Dropping it kills the whole tree.
-#[derive(Debug)]
 pub struct SandboxedChild {
-    child: Child,
-    watchdog: Option<OrphanWatchdog>,
+    process: Process,
+    stdin: Option<ChildInput>,
+    stdout: Option<ChildOutput>,
+    stderr: Option<ChildOutput>,
     timer: Option<LifetimeTimer>,
     timed_out: Arc<AtomicBool>,
     reaped: bool,
@@ -206,6 +318,15 @@ pub struct SandboxedChild {
     on_finish: Option<FinishHook>,
     /// Declared last: purged after the process tree is gone.
     _tmp: TmpDir,
+}
+
+impl std::fmt::Debug for SandboxedChild {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SandboxedChild")
+            .field("id", &self.process.id())
+            .field("reaped", &self.reaped)
+            .finish_non_exhaustive()
+    }
 }
 
 /// What to do once a run is over.
@@ -224,75 +345,75 @@ impl std::fmt::Debug for FinishHook {
 }
 
 impl SandboxedChild {
-    #[cfg(unix)]
+    /// Starts an already-isolated launch under supervision.
     pub(crate) fn spawn_prepared(
-        mut command: Command,
+        launch: Launch,
         tmp: TmpDir,
         lifetime: Option<Duration>,
         stdin_piped: bool,
         on_finish: Option<FinishHook>,
     ) -> Result<Self, SandboxError> {
-        use std::os::unix::process::CommandExt;
-        use std::process::Stdio;
-        command
-            .process_group(0)
-            .stdin(if stdin_piped {
-                Stdio::piped()
-            } else {
-                Stdio::null()
-            })
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        let child = command.spawn().map_err(SandboxError::Spawn)?;
+        let Started {
+            process,
+            stdin,
+            stdout,
+            stderr,
+        } = match launch {
+            Launch::Command(command) => start_command(command, stdin_piped)?,
+            #[cfg(windows)]
+            Launch::AppContainer(config) => start_app_container(config, stdin_piped)?,
+        };
         let mut supervised = Self {
-            child,
-            watchdog: None,
+            process,
+            stdin,
+            stdout,
+            stderr,
             timer: None,
             timed_out: Arc::new(AtomicBool::new(false)),
             reaped: false,
             on_finish,
             _tmp: tmp,
         };
-        // If the watchdog cannot start, `supervised` is dropped here, which kills the child:
+        // If supervision cannot be completed, `supervised` is dropped, which kills the child:
         // never run unsupervised.
-        supervised.watchdog = Some(OrphanWatchdog::start(supervised.child.id())?);
-        if let Some(lifetime) = lifetime {
-            supervised.timer = Some(LifetimeTimer::start(
-                supervised.child.id(),
-                lifetime,
-                Arc::clone(&supervised.timed_out),
-            ));
-        }
+        supervised.supervise(lifetime)?;
         Ok(supervised)
     }
 
-    #[cfg(not(unix))]
-    pub(crate) fn spawn_prepared(
-        _command: Command,
-        _tmp: TmpDir,
-        _lifetime: Option<Duration>,
-        _stdin_piped: bool,
-        _on_finish: Option<FinishHook>,
-    ) -> Result<Self, SandboxError> {
-        Err(SandboxError::SupervisionUnsupported)
+    /// Completes the supervision of a process that has just started. On Windows the Job Object
+    /// already ties the tree to the Host; on Unix an orphan watchdog does it.
+    fn supervise(&mut self, lifetime: Option<Duration>) -> Result<(), SandboxError> {
+        #[cfg(unix)]
+        {
+            let Process::Unix { child, watchdog } = &mut self.process;
+            *watchdog = Some(OrphanWatchdog::start(child.id())?);
+        }
+        if let Some(lifetime) = lifetime {
+            self.timer = Some(LifetimeTimer::start(
+                self.process.killer(),
+                lifetime,
+                Arc::clone(&self.timed_out),
+            ));
+        }
+        Ok(())
     }
 
-    /// OS process id of the child, which is also its process group id.
+    /// OS process id of the child (on Unix also its process group id).
     #[must_use]
     pub fn id(&self) -> u32 {
-        self.child.id()
+        self.process.id()
     }
 
-    pub fn take_stdin(&mut self) -> Option<ChildStdin> {
-        self.child.stdin.take()
+    pub fn take_stdin(&mut self) -> Option<ChildInput> {
+        self.stdin.take()
     }
 
-    pub fn take_stdout(&mut self) -> Option<ChildStdout> {
-        self.child.stdout.take()
+    pub fn take_stdout(&mut self) -> Option<ChildOutput> {
+        self.stdout.take()
     }
 
-    pub fn take_stderr(&mut self) -> Option<ChildStderr> {
-        self.child.stderr.take()
+    pub fn take_stderr(&mut self) -> Option<ChildOutput> {
+        self.stderr.take()
     }
 
     /// Whether the lifetime budget ran out and the tree was killed (`spawn` only).
@@ -303,7 +424,7 @@ impl SandboxedChild {
 
     /// Exit status if the child has already exited.
     pub fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
-        let status = self.child.try_wait()?;
+        let status = self.process.try_wait()?;
         if status.is_some() {
             self.finish();
         }
@@ -312,7 +433,7 @@ impl SandboxedChild {
 
     /// Waits for the child to exit by itself.
     pub fn wait(&mut self) -> io::Result<ExitStatus> {
-        let status = self.child.wait()?;
+        let status = self.process.wait()?;
         self.finish();
         Ok(status)
     }
@@ -322,11 +443,7 @@ impl SandboxedChild {
         if self.reaped {
             return;
         }
-        // Not reaped yet, so the pid (and group id) still belongs to our child.
-        if !kill_process_group(self.child.id()) {
-            let _ = self.child.kill();
-        }
-        let _ = self.child.wait();
+        self.process.kill_and_reap();
         self.finish();
     }
 
@@ -339,11 +456,8 @@ impl SandboxedChild {
         if let Some(timer) = self.timer.take() {
             timer.stop();
         }
-        // The child is gone; whatever it left running in its group goes too.
-        kill_process_group(self.child.id());
-        if let Some(watchdog) = self.watchdog.take() {
-            watchdog.stop();
-        }
+        // The child is gone; whatever it left running in its tree goes too.
+        self.process.clean_up();
         if let Some(hook) = self.on_finish.take() {
             (hook.0)();
         }
@@ -354,6 +468,69 @@ impl Drop for SandboxedChild {
     fn drop(&mut self) {
         self.kill();
     }
+}
+
+/// A process that has just started, and the Host's ends of its pipes.
+struct Started {
+    process: Process,
+    stdin: Option<ChildInput>,
+    stdout: Option<ChildOutput>,
+    stderr: Option<ChildOutput>,
+}
+
+#[cfg(unix)]
+fn start_command(mut command: Command, stdin_piped: bool) -> Result<Started, SandboxError> {
+    use std::os::unix::process::CommandExt;
+    use std::process::Stdio;
+    command
+        .process_group(0)
+        .stdin(if stdin_piped {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(SandboxError::Spawn)?;
+    Ok(Started {
+        stdin: child.stdin.take().map(|pipe| Box::new(pipe) as ChildInput),
+        stdout: child
+            .stdout
+            .take()
+            .map(|pipe| Box::new(pipe) as ChildOutput),
+        stderr: child
+            .stderr
+            .take()
+            .map(|pipe| Box::new(pipe) as ChildOutput),
+        process: Process::Unix {
+            child,
+            watchdog: None,
+        },
+    })
+}
+
+/// Windows isolates through an AppContainer, never through a wrapped command: a plain command
+/// reaching this point would run unisolated, so it is refused.
+#[cfg(windows)]
+fn start_command(_command: Command, _stdin_piped: bool) -> Result<Started, SandboxError> {
+    Err(SandboxError::unavailable(
+        "a wrapped command cannot be isolated on Windows; the engine must use an AppContainer",
+    ))
+}
+
+#[cfg(windows)]
+fn start_app_container(
+    mut config: Box<sandbox_windows::LaunchConfig>,
+    stdin_piped: bool,
+) -> Result<Started, SandboxError> {
+    config.stdin_piped = stdin_piped;
+    let spawned = sandbox_windows::spawn(&config).map_err(SandboxError::Spawn)?;
+    Ok(Started {
+        process: Process::Windows(spawned.process),
+        stdin: spawned.stdin.map(|pipe| Box::new(pipe) as ChildInput),
+        stdout: Some(Box::new(spawned.stdout)),
+        stderr: Some(Box::new(spawned.stderr)),
+    })
 }
 
 /// How a `run` ended.
@@ -477,7 +654,7 @@ pub(crate) fn run_to_completion(
     drop(done);
 
     let deadline = started + limits.wall_timeout;
-    let termination = loop {
+    let mut termination = loop {
         match child.try_wait() {
             Ok(Some(status)) => break Termination::from_status(status),
             Ok(None) => {}
@@ -506,6 +683,11 @@ pub(crate) fn run_to_completion(
             incomplete = true;
             break;
         }
+    }
+    // The budget decides, not the race: a process that wrote more than its budget and then exited
+    // on its own before the poll noticed is reported the same as one that was stopped.
+    if matches!(termination, Termination::Exited { .. }) && overflow.load(Ordering::SeqCst) {
+        termination = Termination::OutputLimit;
     }
     let take = |capture: Option<Arc<Mutex<Capture>>>| {
         capture.map_or_else(Capture::default, |capture| {

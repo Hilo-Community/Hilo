@@ -29,8 +29,6 @@ pub enum SandboxError {
     Spawn(#[source] io::Error),
     #[error("failed to start the orphan watchdog: {0}")]
     Watchdog(#[source] io::Error),
-    #[error("process supervision is not available on this platform; refusing to run unsupervised")]
-    SupervisionUnsupported,
     #[error("I/O error: {0}")]
     Io(#[from] io::Error),
 }

@@ -5,13 +5,12 @@
 //! the sandbox. The caller (the `PolicyEngine`, `LOT-013`) decides *whether* a command may run,
 //! including the workspace trust; this layer decides *how* it is isolated.
 
-use std::process::Command;
 use std::sync::Arc;
 
 use crate::audit::{AuditSink, SecurityAuditEvent, SecurityEventKind};
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 use crate::detect_native_os_sandbox;
-use crate::engine::{EngineCapabilities, OsSandboxEngine, RunInfo};
+use crate::engine::{EngineCapabilities, Launch, OsSandboxEngine, RunInfo};
 use crate::error::SandboxError;
 use crate::path_guard::PathGuardError;
 use crate::spec::{NetworkPolicy, ResourceLimits, SandboxSpec};
@@ -111,7 +110,7 @@ impl<E: OsSandboxEngine> OsNativeSandbox<E> {
         let tmp = TmpDir::create(&validated.worktree_root)?;
         validated.tmp_dir = tmp.path().to_path_buf();
         validated.run_id = new_run_id();
-        let command = self.engine.prepare(&validated)?;
+        let launch = self.engine.prepare_launch(&validated)?;
         let info = RunInfo {
             run_id: validated.run_id.clone(),
             started: std::time::SystemTime::now(),
@@ -120,7 +119,7 @@ impl<E: OsSandboxEngine> OsNativeSandbox<E> {
         let (engine, audit) = (Arc::clone(&self.engine), Arc::clone(&self.audit));
         let on_finish = FinishHook::new(move || engine.collect_denials(&info, audit));
         Ok(Prepared {
-            command,
+            launch,
             tmp,
             limits: validated.limits,
             on_finish,
@@ -129,7 +128,7 @@ impl<E: OsSandboxEngine> OsNativeSandbox<E> {
 }
 
 struct Prepared {
-    command: Command,
+    launch: Launch,
     tmp: TmpDir,
     limits: ResourceLimits,
     on_finish: FinishHook,
@@ -142,12 +141,12 @@ impl<E: OsSandboxEngine> SandboxRunner for OsNativeSandbox<E> {
 
     fn run(&self, spec: &SandboxSpec) -> Result<RunOutput, SandboxError> {
         let Prepared {
-            command,
+            launch,
             tmp,
             limits,
             on_finish,
         } = self.prepare(spec).map_err(|error| self.refuse(error))?;
-        let mut child = SandboxedChild::spawn_prepared(command, tmp, None, false, Some(on_finish))?;
+        let mut child = SandboxedChild::spawn_prepared(launch, tmp, None, false, Some(on_finish))?;
         let output = run_to_completion(&mut child, &limits)?;
         let program = spec.program.display();
         match output.termination {
@@ -169,13 +168,13 @@ impl<E: OsSandboxEngine> SandboxRunner for OsNativeSandbox<E> {
 
     fn spawn(&self, spec: &SandboxSpec) -> Result<SandboxedChild, SandboxError> {
         let Prepared {
-            command,
+            launch,
             tmp,
             limits,
             on_finish,
         } = self.prepare(spec).map_err(|error| self.refuse(error))?;
         SandboxedChild::spawn_prepared(
-            command,
+            launch,
             tmp,
             Some(limits.wall_timeout),
             true,
@@ -184,9 +183,8 @@ impl<E: OsSandboxEngine> SandboxRunner for OsNativeSandbox<E> {
     }
 }
 
-/// The runner of the current OS, or `SandboxUnavailable`. On macOS this is Seatbelt; the other
-/// engines (`Landlock` + `bubblewrap`, `AppContainer`) follow in this lot, and until they exist
-/// those systems refuse: there is no unisolated fallback.
+/// The runner of the current OS, or `SandboxUnavailable`. On macOS this is Seatbelt (see
+/// `SeatbeltEngine`). There is no unisolated fallback on any system.
 #[cfg(target_os = "macos")]
 pub fn native_sandbox(audit: Arc<dyn AuditSink>) -> Result<Box<dyn SandboxRunner>, SandboxError> {
     let engine = crate::seatbelt::SeatbeltEngine::for_current_user().inspect_err(|error| {
@@ -198,8 +196,34 @@ pub fn native_sandbox(audit: Arc<dyn AuditSink>) -> Result<Box<dyn SandboxRunner
     Ok(Box::new(OsNativeSandbox::new(engine, audit)?))
 }
 
-/// The runner of the current OS, or `SandboxUnavailable` (no engine exists for this OS yet).
-#[cfg(not(target_os = "macos"))]
+/// The runner of the current OS, or `SandboxUnavailable`. On Linux this is bubblewrap (see
+/// `BubblewrapEngine` for what the system must provide).
+#[cfg(target_os = "linux")]
+pub fn native_sandbox(audit: Arc<dyn AuditSink>) -> Result<Box<dyn SandboxRunner>, SandboxError> {
+    let engine = crate::bubblewrap::BubblewrapEngine::for_current_user().inspect_err(|error| {
+        audit.record(SecurityAuditEvent::new(
+            SecurityEventKind::SandboxUnavailable,
+            error.to_string(),
+        ));
+    })?;
+    Ok(Box::new(OsNativeSandbox::new(engine, audit)?))
+}
+
+/// The runner of the current OS, or `SandboxUnavailable`. On Windows this is an AppContainer
+/// inside a Job Object (see `AppContainerEngine`).
+#[cfg(target_os = "windows")]
+pub fn native_sandbox(audit: Arc<dyn AuditSink>) -> Result<Box<dyn SandboxRunner>, SandboxError> {
+    let engine = crate::windows::AppContainerEngine::for_current_user().inspect_err(|error| {
+        audit.record(SecurityAuditEvent::new(
+            SecurityEventKind::SandboxUnavailable,
+            error.to_string(),
+        ));
+    })?;
+    Ok(Box::new(OsNativeSandbox::new(engine, audit)?))
+}
+
+/// The runner of the current OS, or `SandboxUnavailable` (no engine exists for this OS).
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 pub fn native_sandbox(audit: Arc<dyn AuditSink>) -> Result<Box<dyn SandboxRunner>, SandboxError> {
     let error = SandboxError::unavailable(format!(
         "the {:?} engine is not implemented yet",

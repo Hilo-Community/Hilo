@@ -5,6 +5,7 @@ members = [
     "crates/context-engine",
     "crates/judge-orchestrator",
     "crates/sandbox-runner",
+    "crates/sandbox-windows",
     "apps/desktop-tauri/src-tauri",
 ]
 
@@ -34,6 +35,7 @@ host-core = { path = "crates/host-core" }
 context-engine = { path = "crates/context-engine" }
 judge-orchestrator = { path = "crates/judge-orchestrator" }
 sandbox-runner = { path = "crates/sandbox-runner" }
+sandbox-windows = { path = "crates/sandbox-windows" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
