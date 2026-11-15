@@ -17,6 +17,7 @@ import { TitleBar } from "./cockpit/shell/title-bar.js";
 import type { TerminalHost, TerminalViewFactory } from "./cockpit/terminal/terminal-pane.js";
 import { createXtermView } from "./cockpit/terminal/xterm-view.js";
 import { OnboardingModalController, createInitialOnboardingState } from "./onboarding/index.js";
+import { type AgentRegistryHost, SettingsDialog } from "./settings/index.js";
 import { UiPreferences, browserStorage } from "./state/ui-preferences.js";
 import type {
   CockpitAstSymbolItem,
@@ -69,6 +70,8 @@ export interface CockpitDomControllerOptions {
   /** JavaScript debugging (F5). Without it the debugger is not offered. */
   readonly debugHost?: DebugHost;
   readonly agentHost?: AgentHost;
+  /** The ACP agent registry of the Settings screen. Without it there is no Settings button. */
+  readonly agentRegistryHost?: AgentRegistryHost;
   /** The terminal emulator; xterm.js by default. */
   readonly createTerminalView?: TerminalViewFactory;
   readonly searchWorkspace?: (query: string) => Promise<readonly CockpitSearchResultItem[]>;
@@ -98,6 +101,7 @@ export class CockpitDomController {
   private readonly shell: HTMLElement;
   private readonly titleBar: TitleBar;
   private readonly activityBar: ActivityBar;
+  private readonly settings: SettingsDialog | null;
   private readonly sidebar: SidebarPanels;
   private readonly chatGrid: ChatGrid;
   private readonly inspector: Inspector;
@@ -143,7 +147,14 @@ export class CockpitDomController {
     const preferences = new UiPreferences(browserStorage(doc));
     rootContainer.replaceChildren();
     this.titleBar = new TitleBar(doc, rootContainer, stores);
-    this.activityBar = new ActivityBar(doc, stores);
+    this.settings = options.agentRegistryHost
+      ? new SettingsDialog(doc, rootContainer, { agentRegistry: options.agentRegistryHost })
+      : null;
+    this.activityBar = new ActivityBar(
+      doc,
+      stores,
+      this.settings ? () => this.settings?.toggle() : undefined,
+    );
     this.inspector = new Inspector(doc, {
       stores,
       editorView,
@@ -249,6 +260,7 @@ export class CockpitDomController {
         debug: this.debugPanel,
         terminalAvailable: this.terminalAvailable,
         openTerminal: () => this.openTerminal(),
+        ...(this.settings ? { openSettings: () => this.settings?.toggle() } : {}),
         toggleTree: () => this.inspector.toggleTree(),
         save: () => this.saveActiveDocument(),
         reportError: (message) => this.inspector.reportError(message),
@@ -450,6 +462,7 @@ export class CockpitDomController {
   destroy(): void {
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.unsubscribers.length = 0;
+    this.settings?.close();
     this.trustBanner?.destroy();
     this.chatGrid.destroy();
     this.inspector.destroy();

@@ -6,6 +6,8 @@ interface ShellShortcutHost {
   readonly debug: Pick<DebugPanel, "handleKey"> | null;
   readonly terminalAvailable: boolean;
   openTerminal(): void;
+  /** Absent when the host offers no settings. */
+  openSettings?(): void;
   toggleTree(): void;
   save(): Promise<void>;
   reportError(message: string): void;
@@ -30,6 +32,12 @@ function handleShortcut(event: KeyboardEvent, host: ShellShortcutHost): void {
   if (host.terminalAvailable && (backtick || panelKey)) {
     event.preventDefault();
     host.openTerminal();
+    return;
+  }
+  // Ctrl/Cmd+,: Settings, as in most editors.
+  if (host.openSettings && (event.metaKey || event.ctrlKey) && !event.altKey && event.key === ",") {
+    event.preventDefault();
+    host.openSettings();
     return;
   }
   // Ctrl/Cmd+Shift+E: hide or show the file tree.

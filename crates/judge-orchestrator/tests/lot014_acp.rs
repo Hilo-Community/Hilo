@@ -1,3 +1,11 @@
+// The agent-launch tests need the read-only sandbox of macOS and Linux: Windows refuses that mode
+// until its AppContainer backend supports it (see `src/acp/README.md`). There only the fail-closed
+// test runs, and the helpers of the others would be dead code.
+#![cfg_attr(
+    not(any(target_os = "macos", target_os = "linux")),
+    allow(dead_code, unused_imports)
+)]
+
 mod common;
 use host_core::*;
 use judge_orchestrator::{acp::*, policy::HostAuthority, TaskStateRepository};

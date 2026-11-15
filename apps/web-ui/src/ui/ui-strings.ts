@@ -182,6 +182,34 @@ export const UI_STRINGS = {
     reject: "Reject",
     resetDefaults: "Reset to Coloride defaults",
   },
+  settings: {
+    open: "Settings",
+    title: "Settings",
+    close: "Close settings",
+    categories: "Settings categories",
+    agents: "Agents",
+    registryTitle: "ACP Registry",
+    registryIntro:
+      "Agents that speak the Agent Client Protocol. Installing downloads the agent and checks it; it runs later in the sandbox, offline, without your credentials.",
+    search: "Search agents",
+    searchPlaceholder: "Search agents…",
+    filters: "Filter agents",
+    filterAll: "All",
+    filterInstalled: "Installed",
+    filterAvailable: "Not installed",
+    loading: "Loading agents…",
+    install: "Install",
+    update: "Update",
+    remove: "Remove",
+    installing: "Installing…",
+    removing: "Removing…",
+    retry: "Retry",
+    savedCatalog: "The registry could not be reached; showing the catalog saved earlier.",
+    emptySearch: "No agents match your search.",
+    emptyInstalled: "No agents installed yet. Choose All to install your first agent.",
+    emptyAll: "No agents available. Retry to load the catalog.",
+    notInstallable: "Cannot be installed here",
+  },
 } as const;
 
 export const uiText = {
@@ -190,6 +218,12 @@ export const uiText = {
   chatCellHeader: (icon: string, title: string, model: string, state: string) =>
     `${icon} ${title} [${model}] — ${state}`,
   closeTab: (name: string) => `Close ${name}`,
+  installAgent: (name: string, version: string) => `Install ${name} ${version}`,
+  updateAgent: (name: string, version: string) => `Update ${name} to ${version}`,
+  removeAgent: (name: string) => `Remove ${name}`,
+  agentVersion: (version: string) => `v${version}`,
+  agentUpdateAvailable: (installed: string, offered: string) =>
+    `Installed ${installed}; ${offered} is available.`,
   unsavedPrompt: (name: string) => `Do you want to save the changes you made to ${name}?`,
   unsavedCloseAll: (count: number) =>
     `${count} ${count === 1 ? "file has" : "files have"} unsaved changes. Do you want to save ${count === 1 ? "it" : "them"} before closing?`,

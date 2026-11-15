@@ -542,19 +542,18 @@ mod tests {
 
     #[test]
     fn launch_arguments_are_bounded_and_provider_egress_is_refused() {
-        assert!(check_launch("/bin/agent", &[], None).is_ok());
+        // Absolute on every OS: `/bin/agent` has no drive on Windows.
+        let program = if cfg!(windows) {
+            r"C:\agent.exe"
+        } else {
+            "/bin/agent"
+        };
+        assert!(check_launch(program, &[], None).is_ok());
         assert!(check_launch("agent", &[], None).is_err());
-        assert!(check_launch(
-            "/bin/agent",
-            &vec![String::new(); MAX_LAUNCH_ARGS + 1],
-            None
-        )
-        .is_err());
-        assert!(check_launch("/bin/agent", &["x".repeat(MAX_LAUNCH_BYTES)], None).is_err());
-        assert!(
-            check_launch("/bin/agent", &[], Some("https://provider.example"))
-                .unwrap_err()
-                .contains("proxy")
-        );
+        assert!(check_launch(program, &vec![String::new(); MAX_LAUNCH_ARGS + 1], None).is_err());
+        assert!(check_launch(program, &["x".repeat(MAX_LAUNCH_BYTES)], None).is_err());
+        assert!(check_launch(program, &[], Some("https://provider.example"))
+            .unwrap_err()
+            .contains("proxy"));
     }
 }

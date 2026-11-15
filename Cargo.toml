@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/host-core",
+    "crates/agent-registry",
     "crates/context-engine",
     "crates/judge-orchestrator",
     "crates/sandbox-runner",
@@ -31,6 +32,7 @@ ropey = { version = "1.6", default-features = false, features = ["simd", "cr_lin
 proptest = "1.5"
 tempfile = "3.12"
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process"] }
+agent-registry = { path = "crates/agent-registry" }
 host-core = { path = "crates/host-core" }
 context-engine = { path = "crates/context-engine" }
 judge-orchestrator = { path = "crates/judge-orchestrator" }

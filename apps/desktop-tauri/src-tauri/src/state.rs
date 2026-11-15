@@ -17,6 +17,8 @@ pub(crate) struct DesktopAppState {
     pub(crate) agents:
         Mutex<HashMap<u32, Arc<Mutex<judge_orchestrator::acp::AcpSessionSupervisor>>>>,
     pub(crate) next_agent_id: AtomicU32,
+    /// The ACP agent registry of the Settings screen, opened on first use.
+    pub(crate) agent_registry: Mutex<Option<Arc<agent_registry::AgentRegistry>>>,
     pub(crate) workspace_root: Mutex<Option<PathBuf>>,
     /// Trust gate of the open workspace. `None` (no workspace, or a root whose decision cannot
     /// be recorded) means untrusted: nothing may be launched.
@@ -60,6 +62,7 @@ impl DesktopAppState {
             bridge: Arc::new(Mutex::new(bridge)),
             agents: Mutex::new(HashMap::new()),
             next_agent_id: AtomicU32::new(1),
+            agent_registry: Mutex::new(None),
             workspace_root: Mutex::new(None),
             trust_gate: Mutex::new(None),
             language_services: Mutex::new(None),

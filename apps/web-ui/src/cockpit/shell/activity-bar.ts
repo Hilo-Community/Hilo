@@ -4,7 +4,11 @@ import type {
   CockpitStoreBundle,
   Zone1ActivityState,
 } from "../../stores/index.js";
-import { ACTIVITY_BAR_SVG_ICONS, type StatefulActivityIcon } from "../../theme/index.js";
+import {
+  ACTIVITY_BAR_SVG_ICONS,
+  SETTINGS_ICON,
+  type StatefulActivityIcon,
+} from "../../theme/index.js";
 import { UI_STRINGS, uiText } from "../../ui/ui-strings.js";
 
 const ACTIVITY_ITEMS: readonly {
@@ -39,7 +43,8 @@ export class ActivityBar {
   private readonly buttons = new Map<ActivityBarSection, HTMLButtonElement>();
   private readonly persona: HTMLSelectElement;
 
-  constructor(doc: Document, stores: CockpitStoreBundle) {
+  /** `onOpenSettings` adds the Settings button; without it the host offers no settings. */
+  constructor(doc: Document, stores: CockpitStoreBundle, onOpenSettings?: () => void) {
     this.element = doc.createElement("nav");
     this.element.className =
       "coloride-zone-1-activity-bar bg-nav-rail flex flex-col items-center pt-1.5 pb-2.5 px-1 gap-1.5";
@@ -81,6 +86,20 @@ export class ActivityBar {
       stores.setPersona(this.persona.value as CockpitPersonaMode);
     });
     this.element.append(this.persona);
+
+    if (onOpenSettings) {
+      const settings = doc.createElement("button");
+      settings.type = "button";
+      settings.className =
+        "coloride-activity-btn coloride-settings-btn flex items-center justify-center";
+      settings.setAttribute(
+        "aria-label",
+        uiText.activityButton(UI_STRINGS.settings.open, "Cmd/Ctrl+,"),
+      );
+      settings.innerHTML = SETTINGS_ICON;
+      settings.addEventListener("click", onOpenSettings);
+      this.element.append(settings);
+    }
   }
 
   update(z1: Zone1ActivityState): void {
