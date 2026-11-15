@@ -18,6 +18,7 @@ mod journal;
 mod lease;
 mod record;
 mod repository;
+mod settlement;
 mod state;
 pub mod transitions;
 

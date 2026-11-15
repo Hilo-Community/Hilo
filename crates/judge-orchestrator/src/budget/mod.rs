@@ -105,6 +105,18 @@ pub struct BudgetReservationGuard {
 }
 
 impl BudgetReservationGuard {
+    /// One durable frame closes the outbox and charges its spending, avoiding a crash gap.
+    pub(crate) fn settle(
+        self,
+        key: &str,
+        outcome: crate::IntentOutcome,
+        actual: BudgetUsage,
+        now: Millis,
+    ) -> Result<(), BudgetError> {
+        self.repository
+            .settle_budget(&self.lease, self.id, key, outcome, actual, now)
+    }
+
     pub fn commit(self, actual: BudgetUsage) -> Result<(), BudgetError> {
         let now = self.now;
         self.commit_at(actual, now)

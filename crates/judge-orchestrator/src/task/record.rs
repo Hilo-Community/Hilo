@@ -62,6 +62,14 @@ pub(super) enum Record {
         stopped: Option<TaskState>,
         at: Millis,
     },
+    IntentSettled {
+        generation: u64,
+        key: String,
+        outcome: IntentOutcome,
+        usage: BudgetUsage,
+        paused: bool,
+        at: Millis,
+    },
 }
 
 /// What is known about a task, as of its last journal record.
@@ -82,6 +90,8 @@ pub struct TaskSnapshot {
     pub paused_from: Option<TaskState>,
     pub budget_spent: BudgetUsage,
     pub correction_failures: Vec<String>,
+    /// Preserve digests after resolution to reject reuse of a key for a different call.
+    pub call_digests: BTreeMap<String, String>,
 }
 
 pub(super) fn new_snapshot(spec: TaskSpec) -> TaskSnapshot {
@@ -95,6 +105,7 @@ pub(super) fn new_snapshot(spec: TaskSpec) -> TaskSnapshot {
         paused_from: None,
         budget_spent: BudgetUsage::default(),
         correction_failures: Vec::new(),
+        call_digests: BTreeMap::new(),
     }
 }
 
@@ -122,6 +133,9 @@ pub(super) fn apply(snapshot: &mut TaskSnapshot, record: Record) {
         Record::IntentRecorded {
             key, call_digest, ..
         } => {
+            snapshot
+                .call_digests
+                .insert(key.clone(), call_digest.clone());
             snapshot.pending_intents.insert(key, call_digest);
         }
         Record::IntentResolved { key, outcome, .. } => {
@@ -144,6 +158,21 @@ pub(super) fn apply(snapshot: &mut TaskSnapshot, record: Record) {
                     snapshot.paused_from = Some(snapshot.state);
                 }
                 snapshot.state = state;
+            }
+        }
+        Record::IntentSettled {
+            key,
+            outcome,
+            usage,
+            paused,
+            ..
+        } => {
+            snapshot.pending_intents.remove(&key);
+            snapshot.resolved_intents.insert(key, outcome);
+            snapshot.budget_spent = snapshot.budget_spent.add(usage);
+            if paused {
+                snapshot.paused_from = Some(snapshot.state);
+                snapshot.state = TaskState::Paused;
             }
         }
     }

@@ -197,6 +197,19 @@ fn privileged_approvals_bind_exact_call_plan_kind_target_and_expiry() {
             ),
             Decision::Allow
         );
+        let mut other_plan = signed.spec.clone();
+        other_plan.budget_limits.max_tokens += 1;
+        let other_plan = host.sign_task(other_plan).unwrap();
+        assert_ne!(
+            policy.evaluate(
+                &other_plan,
+                &c,
+                std::slice::from_ref(&a),
+                TaskState::Running,
+                1
+            ),
+            Decision::Allow
+        );
         for variant in 0..5 {
             let mut bad = approval.clone();
             match variant {

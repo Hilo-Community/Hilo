@@ -66,11 +66,13 @@ Run this check without concurrent builds; happy-dom results are a fixture measur
 not a claim about physical input latency on all machines. Investigate failed runs
 before classifying them as machine contention; do not raise budgets to make them pass.
 
-`judge-orchestrator` and `sandbox-runner` remain foundations: health checks report
-`policy_engine_operational: false` and `execution_available: false`. The agent queue
-models UI intent, not actual execution. Desktop boot reports no background service
-ready unless an initialization provider supplies that result. Implementing policy
-and OS isolation belongs to later lots, before agent execution can be enabled.
+`judge-orchestrator` exposes the authenticated policy, budget ledger and idempotent
+tool broker (`policy_engine_operational: true`). Its sandbox executor delegates to
+the native fail-closed runner. The sandbox health check still reports
+`execution_available: false`; it is not a live machine probe. The agent queue models
+UI intent, not actual execution. Desktop boot reports no background service ready
+unless an initialization provider supplies that result. Model adapters and the
+desktop execution workflow remain separate integration work.
 
 ### Local context MCP server (LOT-009)
 

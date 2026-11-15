@@ -119,7 +119,7 @@ mod tests {
         assert!(report.host.ready);
         assert!(report.context.zero_mb_boot_ready);
         assert!(report.judge.deterministic_evidence_required);
-        assert!(!report.judge.policy_engine_operational);
+        assert!(report.judge.policy_engine_operational);
         assert!(report.sandbox.fail_closed_enforced);
         assert!(!report.sandbox.execution_available);
     }
