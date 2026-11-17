@@ -110,6 +110,15 @@ fn main() {
                 json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"fake","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":format!("direct-write={wrote}")}}}}),
             );
         }
+        "installation" => {
+            let executable = std::env::current_exe().unwrap();
+            let module = executable.parent().unwrap().join("module.txt");
+            let read = std::fs::read_to_string(&module).unwrap_or_default();
+            let wrote = std::fs::write(&module, "bypass").is_ok();
+            emit(
+                json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"fake","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":format!("module={read}; write={wrote}")}}}}),
+            );
+        }
         "environment" => {
             emit(
                 json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"fake","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":std::env::vars().map(|(k, _)|k).collect::<Vec<_>>().join(",")}}}}),

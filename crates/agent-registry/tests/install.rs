@@ -176,6 +176,10 @@ fn a_verified_binary_installs_and_can_be_started_and_removed() {
     );
 
     let launch = world.registry.launch_command("tool").unwrap();
+    assert_eq!(
+        (launch.name.as_str(), launch.version.as_str()),
+        ("Agent tool", "1.2.3")
+    );
     assert_eq!(launch.args, vec!["acp"]);
     assert!(
         launch.program.ends_with("extract/agent"),
@@ -309,7 +313,11 @@ fn the_catalog_is_read_from_one_address_without_redirects() {
 #[test]
 fn offline_the_saved_catalog_is_shown_and_says_so() {
     let (world, _) = plain_world();
-    assert!(world.registry.listing(false).is_err(), "nothing saved yet");
+    assert!(world.registry.listing(false).unwrap().agents.is_empty());
+    assert!(
+        world.network.requests().is_empty(),
+        "local listing never fetches"
+    );
     world.registry.listing(true).unwrap();
     world.network.drop_all();
     let listing = world.registry.listing(true).unwrap();
@@ -329,7 +337,10 @@ fn a_catalog_that_is_not_one_is_not_saved() {
         .network
         .serve(CATALOG_URL, json!({"agents": "nope"}).to_string());
     assert!(world.registry.listing(true).is_err());
-    assert!(world.registry.listing(false).is_err(), "neither was kept");
+    assert!(
+        world.registry.listing(false).unwrap().agents.is_empty(),
+        "neither was kept"
+    );
 }
 
 #[test]

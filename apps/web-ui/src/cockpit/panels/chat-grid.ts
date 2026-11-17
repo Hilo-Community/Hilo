@@ -1,6 +1,7 @@
 import { AgentPanel } from "../../agent/panel.js";
 import type { AgentHost } from "../../agent/store.js";
 import { type LayoutNode, panel, panelIds, reconcileLayout } from "../../layout/layout-tree.js";
+import type { AgentRegistryHost, InstalledAgent } from "../../settings/agent-registry.js";
 import { PLUS_ICON } from "../../sidebar/icons.js";
 import { sessionDisplayTitle } from "../../sidebar/sidebar-row.js";
 import {
@@ -10,6 +11,7 @@ import {
   resolveGroupLayout,
   resolveGroupMaximized,
 } from "../../stores/index.js";
+import { SETTINGS_ICON } from "../../theme/icons.js";
 import { reconcile } from "../../ui/dom-utils.js";
 import { UI_STRINGS, uiText } from "../../ui/ui-strings.js";
 import { VirtualChatMessageListRenderer } from "../../ui/virtualizer.js";
@@ -74,6 +76,8 @@ interface ChatCellNodes {
 export class ChatGrid {
   readonly element: HTMLElement;
   private readonly grid: HTMLElement;
+  private settingsOpen = false;
+  private settingsActive = false;
   private readonly tabs: HeaderTabs;
   private readonly cells = new Map<string, ChatCellNodes>();
   private readonly empty: HTMLElement;
@@ -96,6 +100,8 @@ export class ChatGrid {
   private readonly panes = new Map<string, TerminalPane>();
   private readonly agentPanes = new Map<string, AgentPanel>();
   private readonly newPanelMenu: NewPanelMenu;
+  private readonly restoredChats: ReadonlySet<string>;
+  private readonly stopOpenRequests: (() => void) | undefined;
   private focusedTerminalId: string | null = null;
   /** Moves a panel by its header. */
   private readonly panelDrag: PanelDrag;
@@ -111,8 +117,12 @@ export class ChatGrid {
       host: AgentHost;
       openLocation: (path: string, line: number) => Promise<void>;
     } | null = null,
+    private readonly settings?: { select(): void; close(): void; selectWorkspace(): void },
+    registry?: AgentRegistryHost,
   ) {
-    this.newPanelMenu = new NewPanelMenu(doc);
+    this.restoredChats = new Set(stores.zone3.getState().chats.map((chat) => chat.chatId));
+    this.newPanelMenu = new NewPanelMenu(doc, registry);
+    this.stopOpenRequests = registry?.onOpenRequested?.((agent) => this.openAgent(agent));
     this.element = doc.createElement("main");
     this.element.className =
       "coloride-zone-3-multichat bg-main border-t border-b border-l border-white/8 flex flex-col h-full";
@@ -161,7 +171,8 @@ export class ChatGrid {
               openTerminal: () => this.stores.createChat({ kind: "terminal", nextToActive: true }),
             }
           : {}),
-        openAgentInterface: () => this.stores.createChat({ nextToActive: true }),
+        openAgentInterface: (agent) => this.openAgent(agent),
+        installAgents: () => this.settings?.select(),
       }),
     );
     this.addButton.setAttribute("aria-label", UI_STRINGS.chat.newMenu);
@@ -171,10 +182,21 @@ export class ChatGrid {
     this.tabs = new HeaderTabs(doc, header, {
       ariaLabel: UI_STRINGS.shell.openSessions,
       dataKey: "chatId",
-      closeLabel: () => UI_STRINGS.chat.closePanel,
+      closeLabel: (label) =>
+        label === "Settings" ? UI_STRINGS.settings.close : UI_STRINGS.chat.closePanel,
       unsavedLabel: UI_STRINGS.editor.unsaved,
-      onSelect: (chatId) => this.stores.selectChat(chatId),
-      onClose: (chatId) => this.stores.closeChat(chatId),
+      onSelect: (chatId) => {
+        if (chatId === "coloride:settings") this.settings?.select();
+        else {
+          this.settings?.selectWorkspace();
+          this.stores.selectChat(chatId);
+          this.agentPanes.get(chatId)?.activate();
+        }
+      },
+      onClose: (chatId) => {
+        if (chatId === "coloride:settings") this.settings?.close();
+        else this.stores.closeChat(chatId);
+      },
       trailing: [this.addButton],
     });
 
@@ -245,6 +267,12 @@ export class ChatGrid {
     }
   }
 
+  setSettingsTab(open: boolean, active: boolean): void {
+    this.settingsOpen = open;
+    this.settingsActive = active;
+    this.updateTabs();
+  }
+
   update(): void {
     this.updateTabs();
     this.updateGrid();
@@ -254,7 +282,8 @@ export class ChatGrid {
   destroy(): void {
     this.panelDrag.cancel();
     this.resizeObserver?.disconnect();
-    this.newPanelMenu.close(false);
+    this.newPanelMenu.destroy();
+    this.stopOpenRequests?.();
     for (const pane of this.panes.values()) pane.destroy();
     this.panes.clear();
     for (const pane of this.agentPanes.values()) pane.destroy();
@@ -275,20 +304,27 @@ export class ChatGrid {
       }
     }
     const chats = (activeGroup?.chatIds ?? []).flatMap((id) => chatsById.get(id) ?? []);
-    this.tabs.update(
-      chats.map((chat): HeaderTabSpec => {
-        const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
-        return {
-          key: chat.chatId,
-          label: sessionDisplayTitle(chat.title),
-          title: chat.kind === "terminal" ? chat.title : `${chat.title} · ${chat.modelName}`,
-          icon: tabIcon(chat, token.icon),
-          selected: chat.chatId === z3.activeChatId,
-          closable: this.canCloseSession(chat.chatId),
-          data: { validationState: chat.validationState },
-        };
-      }),
-    );
+    const specs = chats.map((chat): HeaderTabSpec => {
+      const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
+      return {
+        key: chat.chatId,
+        label: sessionDisplayTitle(chat.title),
+        title: chat.kind === "terminal" ? chat.title : `${chat.title} · ${chat.modelName}`,
+        icon: tabIcon(chat, token.icon),
+        selected: !this.settingsActive && chat.chatId === z3.activeChatId,
+        closable: this.canCloseSession(chat.chatId),
+        data: { validationState: chat.validationState },
+      };
+    });
+    if (this.settingsOpen)
+      specs.push({
+        key: "coloride:settings",
+        label: "Settings",
+        icon: { svg: SETTINGS_ICON },
+        selected: this.settingsActive,
+        data: { view: "settings" },
+      });
+    this.tabs.update(specs);
   }
 
   /** The last session stays, and one with a running or queued agent cannot be closed. */
@@ -423,10 +459,16 @@ export class ChatGrid {
       return cell.el;
     }
     const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
-    if (this.agents) {
+    if (this.agents && chat.agentId) {
       let pane = this.agentPanes.get(chat.chatId);
       if (!pane) {
-        pane = new AgentPanel(this.grid.ownerDocument, this.agents.host, this.agents.openLocation);
+        pane = new AgentPanel(
+          this.grid.ownerDocument,
+          this.agents.host,
+          this.agents.openLocation,
+          { agentId: chat.agentId, name: chat.agentName ?? chat.title },
+          !this.restoredChats.has(chat.chatId),
+        );
         this.agentPanes.set(chat.chatId, pane);
       }
       if (pane.element.parentElement !== cell.el) cell.el.append(pane.element);
@@ -454,6 +496,18 @@ export class ChatGrid {
     cell.logs.dataset.logCount = String(logs.length);
     cell.logs.textContent = logs.slice(-5).join("\n");
     return cell.el;
+  }
+
+  private openAgent(agent: InstalledAgent): void {
+    this.settings?.selectWorkspace();
+    this.stores.createChat({
+      kind: "agent",
+      agentId: agent.agentId,
+      agentName: agent.name,
+      title: agent.name,
+      modelName: agent.name,
+      nextToActive: true,
+    });
   }
 
   private createCell(chatId: string, kind: "agent" | "terminal"): ChatCellNodes {

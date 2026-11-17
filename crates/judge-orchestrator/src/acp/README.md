@@ -36,7 +36,9 @@ The source workspace's trust gate remains authoritative across a switch or revoc
 
 The complete agent environment is empty; sandbox-runner supplies only private temporary-directory
 variables. No inherited BYOK variables, credential fields, `HOME`, writable source workspace,
-external mount or user directory is accepted by the supervisor. Requested CPU/memory/process
+arbitrary external mount or user directory is accepted by the supervisor. The Host may share
+registry-resolved installation folders read-only so agents can load their bundled modules.
+Requested CPU/memory/process
 limits are passed unchanged to sandbox-runner; a backend that cannot enforce them refuses.
 The agent's source reads are also mediated: macOS denies worktree file data except the exact
 executable and scratch directory; Linux exposes only those two paths inside an empty task root.
@@ -121,6 +123,12 @@ renders escaped Markdown, plan checklists, typed tool statuses, location buttons
 line diffs of proposals (only the changes and three lines of context around each), pending
 approvals, denial reasons, prompt and cancel controls. It never owns the editor or publishes streaming updates into Zone 4. Transcript retention is bounded.
 Starting another session fences late events, stops the previous handle and resets the store.
+The desktop starts agents by installed registry id only; the webview supplies no executable,
+arguments or provider. Installation retains its native confirmation; opening an installed agent
+does not ask again. The + menu lists
+local installations without fetching the catalog and refreshes on registry changes from Settings.
+Settings Open sends a targeted event to the main window. Session identity and logos survive a
+restart; restored panels remain dormant until user interaction. Conversations still start fresh.
 
 ## Tests and deliberate mutations
 

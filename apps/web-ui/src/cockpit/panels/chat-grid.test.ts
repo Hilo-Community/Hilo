@@ -9,15 +9,16 @@ import {
 } from "../../index.js";
 import { type LayoutNode, panelIds } from "../../layout/layout-tree.js";
 
-/** The header + opens a menu: Codex, then Interface, creates an agent session. */
-function addSessionFromMenu(root: HTMLElement): void {
+/** The header + offers each locally installed agent. */
+async function addSessionFromMenu(root: HTMLElement): Promise<void> {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
   root.querySelector<HTMLButtonElement>(".coloride-header-tab-add")?.click();
   const pick = (label: string) =>
     Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"))
-      .find((item) => item.textContent?.startsWith(label))
+      .find((item) => item.textContent?.trim().startsWith(label))
       ?.click();
+  pick("Agent");
   pick("Codex");
-  pick("Interface");
 }
 
 describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
@@ -233,7 +234,29 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
     });
-    const controller = new CockpitDomController({ rootContainer: root, stores, editorView });
+    const controller = new CockpitDomController({
+      rootContainer: root,
+      stores,
+      editorView,
+      agentRegistryHost: {
+        list: async () => ({
+          agents: [],
+          installed: [
+            {
+              id: "codex-acp@1",
+              agentId: "codex-acp",
+              name: "Codex",
+              version: "1",
+              distribution: "npm",
+            },
+          ],
+          origin: "saved",
+          refreshError: null,
+        }),
+        install: async () => null,
+        uninstall: async () => {},
+      },
+    });
     const cells = () => Array.from(root.querySelectorAll<HTMLElement>(".coloride-chat-cell"));
     const cleanup = () => {
       controller.destroy();
@@ -243,9 +266,9 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     return { root, stores, cells, editorView, cleanup };
   }
 
-  it("creates sessions from the header + and from each panel's split buttons", () => {
+  it("creates sessions from the header + and from each panel's split buttons", async () => {
     const { root, stores, cells, editorView, cleanup } = mount();
-    addSessionFromMenu(root);
+    await addSessionFromMenu(root);
     expect(cells().map((c) => c.dataset.chatId)).toContain("chat-3");
     expect(stores.zone3.getState().activeChatId).toBe("chat-3");
 
@@ -368,7 +391,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     expect(initialRow?.querySelectorAll(".sidebar-row--session")).toHaveLength(3);
     cleanup();
   });
-  it("shows one header tab per session of the active group instead of the group name", () => {
+  it("shows one header tab per session of the active group instead of the group name", async () => {
     const { root, stores, cells, cleanup } = mount();
     const tabs = () =>
       Array.from(
@@ -385,7 +408,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     expect(tabs()[1]?.getAttribute("aria-selected")).toBe("false");
 
     // New sessions appear as tabs as they are created; closing one removes its tab and panel.
-    addSessionFromMenu(root);
+    await addSessionFromMenu(root);
     expect(tabs().map((tab) => tab.dataset.chatId)).toEqual(["a", "b", "chat-3"]);
     expect(tabs()[2]?.getAttribute("aria-selected")).toBe("true");
     tabs()[1]?.querySelector<HTMLButtonElement>(".coloride-header-tab-close")?.click();

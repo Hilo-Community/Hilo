@@ -36,6 +36,12 @@ export function restoreCachedSession(value: unknown): CockpitChatTab {
   return {
     ...common,
     kind: "agent",
+    ...(typeof legacy.agentId === "string" && legacy.agentId
+      ? {
+          agentId: legacy.agentId,
+          agentName: typeof legacy.agentName === "string" ? legacy.agentName : legacy.title,
+        }
+      : {}),
     modelName: legacy.modelName,
     ...(status === "Idle" || status === "Running" || status === "QueuedSequential"
       ? { agentExecutionStatus: status }

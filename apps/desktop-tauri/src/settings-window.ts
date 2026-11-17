@@ -1,0 +1,29 @@
+import { SettingsPage } from "@coloride/web-ui";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { createTauriAgentRegistryHost } from "./tauri-agent-registry-host.js";
+
+/** Entry point for the independent native Settings window; never boots another editor. */
+export function mountSettingsWindow(root: HTMLElement): void {
+  root.className = "coloride-standalone-settings";
+  const page = new SettingsPage(document, {
+    agentRegistry: createTauriAgentRegistryHost(invoke),
+  });
+  root.replaceChildren(page.element);
+  page.showExternalAgents();
+  let stop: (() => void) | undefined;
+  let disposed = false;
+  void listen("settings-open-external-agents", () => page.showExternalAgents()).then((unlisten) => {
+    if (disposed) unlisten();
+    else stop = unlisten;
+  });
+  window.addEventListener(
+    "pagehide",
+    () => {
+      disposed = true;
+      stop?.();
+      page.destroy();
+    },
+    { once: true },
+  );
+}

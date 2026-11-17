@@ -17,7 +17,7 @@ import { TitleBar } from "./cockpit/shell/title-bar.js";
 import type { TerminalHost, TerminalViewFactory } from "./cockpit/terminal/terminal-pane.js";
 import { createXtermView } from "./cockpit/terminal/xterm-view.js";
 import { OnboardingModalController, createInitialOnboardingState } from "./onboarding/index.js";
-import { type AgentRegistryHost, SettingsDialog } from "./settings/index.js";
+import { type AgentRegistryHost, SettingsPage } from "./settings/index.js";
 import { UiPreferences, browserStorage } from "./state/ui-preferences.js";
 import type {
   CockpitAstSymbolItem,
@@ -72,6 +72,8 @@ export interface CockpitDomControllerOptions {
   readonly agentHost?: AgentHost;
   /** The ACP agent registry of the Settings screen. Without it there is no Settings button. */
   readonly agentRegistryHost?: AgentRegistryHost;
+  /** The desktop host opens a separate native Settings window. */
+  readonly openSettingsWindow?: () => Promise<void>;
   /** The terminal emulator; xterm.js by default. */
   readonly createTerminalView?: TerminalViewFactory;
   readonly searchWorkspace?: (query: string) => Promise<readonly CockpitSearchResultItem[]>;
@@ -101,7 +103,10 @@ export class CockpitDomController {
   private readonly shell: HTMLElement;
   private readonly titleBar: TitleBar;
   private readonly activityBar: ActivityBar;
-  private readonly settings: SettingsDialog | null;
+  private readonly settings: SettingsPage | null;
+  private readonly openSettingsWindow: (() => Promise<void>) | undefined;
+  private settingsOpen = false;
+  private settingsActive = false;
   private readonly sidebar: SidebarPanels;
   private readonly chatGrid: ChatGrid;
   private readonly inspector: Inspector;
@@ -128,6 +133,7 @@ export class CockpitDomController {
     this.editorProjectPath = stores.navigation.getState().projectPath;
     this.analyzeDocument = options.analyzeDocument;
     this.onUnsavedCountChange = options.onUnsavedCountChange;
+    this.openSettingsWindow = options.openSettingsWindow;
     this.ownsOnboardingController = !options.onboardingController;
     this.onboardingController =
       options.onboardingController ??
@@ -148,12 +154,12 @@ export class CockpitDomController {
     rootContainer.replaceChildren();
     this.titleBar = new TitleBar(doc, rootContainer, stores);
     this.settings = options.agentRegistryHost
-      ? new SettingsDialog(doc, rootContainer, { agentRegistry: options.agentRegistryHost })
+      ? new SettingsPage(doc, { agentRegistry: options.agentRegistryHost })
       : null;
     this.activityBar = new ActivityBar(
       doc,
       stores,
-      this.settings ? () => this.settings?.toggle() : undefined,
+      this.settings ? () => this.openSettings() : undefined,
     );
     this.inspector = new Inspector(doc, {
       stores,
@@ -181,6 +187,8 @@ export class CockpitDomController {
       ...(options.searchWorkspace ? { searchWorkspace: options.searchWorkspace } : {}),
       // With a terminal host, "New session" opens a terminal, where the user can run an agent.
       newSessionKind: options.terminalHost ? "terminal" : "agent",
+      ...(options.agentRegistryHost ? { agentRegistryHost: options.agentRegistryHost } : {}),
+      openSettings: () => this.openSettings(),
     });
     this.chatGrid = new ChatGrid(
       doc,
@@ -206,6 +214,14 @@ export class CockpitDomController {
             },
           }
         : null,
+      this.settings
+        ? {
+            select: () => this.openSettings(),
+            close: () => this.closeSettings(),
+            selectWorkspace: () => this.showWorkspace(),
+          }
+        : undefined,
+      options.agentRegistryHost,
     );
 
     this.shell = doc.createElement("div");
@@ -229,6 +245,10 @@ export class CockpitDomController {
       this.inspector.element,
       preferences,
     );
+    if (this.settings) this.shell.append(this.settings.element);
+    this.activityBar.element.addEventListener("click", (event) => {
+      if (!(event.target as HTMLElement).closest(".coloride-settings-btn")) this.showWorkspace();
+    });
     rootContainer.append(this.shell);
     this.terminalAvailable = options.terminalHost !== undefined;
     this.debugPanel = options.debugHost
@@ -260,7 +280,7 @@ export class CockpitDomController {
         debug: this.debugPanel,
         terminalAvailable: this.terminalAvailable,
         openTerminal: () => this.openTerminal(),
-        ...(this.settings ? { openSettings: () => this.settings?.toggle() } : {}),
+        ...(this.settings ? { openSettings: () => this.openSettings() } : {}),
         toggleTree: () => this.inspector.toggleTree(),
         save: () => this.saveActiveDocument(),
         reportError: (message) => this.inspector.reportError(message),
@@ -303,6 +323,7 @@ export class CockpitDomController {
       stores.zone3.subscribe((next, prev) => {
         this.chatGrid.update();
         if (next.activeChatId !== prev.activeChatId) {
+          this.showWorkspace();
           this.titleBar.recordChatVisit(next.activeChatId);
         } else if (next.chats !== prev.chats) {
           this.titleBar.refreshHistory();
@@ -462,7 +483,7 @@ export class CockpitDomController {
   destroy(): void {
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.unsubscribers.length = 0;
-    this.settings?.close();
+    this.settings?.destroy();
     this.trustBanner?.destroy();
     this.chatGrid.destroy();
     this.inspector.destroy();
@@ -470,16 +491,52 @@ export class CockpitDomController {
     if (this.ownsOnboardingController) this.onboardingController.destroy();
   }
 
+  private openSettings(): void {
+    if (this.openSettingsWindow) {
+      void this.openSettingsWindow().catch((error: unknown) =>
+        this.inspector.reportError(
+          error instanceof Error ? error.message : "Could not open Settings.",
+        ),
+      );
+      return;
+    }
+    if (!this.settings) return;
+    this.settingsOpen = true;
+    this.settingsActive = true;
+    this.settings.showExternalAgents();
+    this.chatGrid.setSettingsTab(true, true);
+    this.renderLayout();
+  }
+
+  private showWorkspace(): void {
+    if (!this.settingsActive) return;
+    this.settingsActive = false;
+    this.settings?.hide();
+    this.chatGrid.setSettingsTab(this.settingsOpen, false);
+    this.renderLayout();
+  }
+
+  private closeSettings(): void {
+    this.settingsOpen = false;
+    this.showWorkspace();
+    this.chatGrid.setSettingsTab(false, false);
+    this.titleBar.zone3Header
+      .querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+      ?.focus();
+  }
+
   private renderLayout(): void {
     const z1 = this.stores.zone1.getState();
     const columns = this.layout.update(z1);
+    this.shell.dataset.settingsActive = String(this.settingsActive);
+    this.titleBar.element.dataset.settingsActive = String(this.settingsActive);
     this.shell.dataset.uiZoomPercent = String(z1.uiZoomPercent);
     this.shell.dataset.activePersona = z1.activePersona;
     this.shell.dataset.sidebarOpen = String(z1.sidebarOpen);
     this.shell.dataset.inspectorOpen = String(z1.inspectorOpen);
     this.shell.style.fontSize = `${(z1.uiZoomPercent / 100).toFixed(2)}rem`;
     this.shell.style.gridTemplateColumns = columns;
-    this.titleBar.update(z1, columns);
+    this.titleBar.update(z1, this.settingsActive ? "48px 228px minmax(0, 1fr) 0px" : columns);
     this.activityBar.update(z1);
     this.inspector.setOpen(z1.inspectorOpen);
   }

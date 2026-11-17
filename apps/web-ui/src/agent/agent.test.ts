@@ -2,6 +2,7 @@
 import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CockpitDomController, createCockpitStoreBundle } from "../index.js";
+import type { AgentRegistryHost, InstalledAgent } from "../settings/agent-registry.js";
 import { AgentPanel } from "./panel.js";
 import { type AcpEvent, type AgentHandle, type AgentHost, AgentStore } from "./store.js";
 
@@ -11,7 +12,9 @@ const chunk = (text: string): AcpEvent => ({
   update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
 });
 const button = (root: HTMLElement, label: string) =>
-  [...root.querySelectorAll("button")].find((b) => b.textContent === label) as HTMLButtonElement;
+  [...root.querySelectorAll("button")].find(
+    (b) => b.textContent === label || b.getAttribute("aria-label") === label,
+  ) as HTMLButtonElement;
 const settle = async () => {
   for (let i = 0; i < 10; i++) await Promise.resolve();
 };
@@ -32,6 +35,103 @@ function host() {
   return { host, handle, emit: (event: AcpEvent) => receive(event) };
 }
 describe("LOT-014 agent panel", () => {
+  it("opens a named panel from a Settings event and starts it while preserving the editor", async () => {
+    const fake = host();
+    let open = (_agent: InstalledAgent) => {};
+    const stop = vi.fn();
+    const registry: AgentRegistryHost = {
+      list: async () => ({ agents: [], installed: [], origin: "saved", refreshError: null }),
+      install: async () => null,
+      uninstall: async () => {},
+      onOpenRequested: (listener) => {
+        open = listener;
+        return stop;
+      },
+    };
+    const root = document.createElement("div");
+    document.body.replaceChildren(root);
+    const stores = createCockpitStoreBundle();
+    const editor = new ColorideEditorView({
+      initialDocumentId: "file.ts",
+      initialContent: "",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const cockpit = new CockpitDomController({
+      rootContainer: root,
+      stores,
+      editorView: editor,
+      agentHost: fake.host,
+      agentRegistryHost: registry,
+    });
+    const view = editor.getEditorView();
+    const parent = view.dom.parentElement;
+    open({
+      id: "claude-acp@1",
+      agentId: "claude-acp",
+      name: "Claude Agent",
+      version: "1",
+      distribution: "npm",
+    });
+    await settle();
+    expect(fake.host.start).toHaveBeenCalledWith(
+      { installedAgentId: "claude-acp" },
+      expect.any(Function),
+    );
+    expect(stores.zone3.getState().chats.at(-1)).toMatchObject({
+      agentId: "claude-acp",
+      agentName: "Claude Agent",
+      title: "Claude Agent",
+    });
+    const tab = [...root.querySelectorAll<HTMLElement>(".coloride-header-tab")].find((tab) =>
+      tab.textContent?.includes("Claude Agent"),
+    );
+    expect(tab?.querySelector(".coloride-registry-mark svg")).not.toBeNull();
+    expect(editor.getEditorView()).toBe(view);
+    expect(view.dom.parentElement).toBe(parent);
+    cockpit.destroy();
+    editor.destroy();
+    root.remove();
+    expect(stop).toHaveBeenCalledOnce();
+  });
+  it.each(["Agent missing", "Node missing", "Sandbox unavailable", "Agent launch cancelled"])(
+    "shows %s and retries by installed id without a setup form",
+    async (reason) => {
+      const fake = host();
+      vi.mocked(fake.host.start).mockRejectedValueOnce(new Error(reason));
+      const panel = new AgentPanel(document, fake.host, async () => {}, {
+        agentId: "codex",
+        name: "Codex",
+      });
+      expect(panel.element.textContent).toContain("Connecting…");
+      await settle();
+      expect(panel.element.textContent).toContain(reason);
+      expect(panel.element.querySelector("input, details")).toBeNull();
+      button(panel.element, "Retry").click();
+      await settle();
+      expect(fake.host.start).toHaveBeenCalledTimes(2);
+      expect(fake.host.start).toHaveBeenLastCalledWith(
+        { installedAgentId: "codex" },
+        expect.any(Function),
+      );
+      panel.destroy();
+    },
+  );
+  it("restores a panel dormant until the user uses it", async () => {
+    const fake = host();
+    const panel = new AgentPanel(
+      document,
+      fake.host,
+      async () => {},
+      { agentId: "codex", name: "Codex" },
+      false,
+    );
+    await settle();
+    expect(fake.host.start).not.toHaveBeenCalled();
+    panel.activate();
+    await settle();
+    expect(fake.host.start).toHaveBeenCalledOnce();
+    panel.destroy();
+  });
   it("batches tokens into one independent atomic update and escapes hostile Markdown", () => {
     const frames: (() => void)[] = [];
     const store = new AgentStore((cb) => frames.push(cb));
@@ -84,13 +184,25 @@ describe("LOT-014 agent panel", () => {
     const fake = host();
     const open = vi.fn(async () => undefined);
     const store = new AgentStore(() => undefined);
-    const panel = new AgentPanel(document, fake.host, open, store);
+    const panel = new AgentPanel(
+      document,
+      fake.host,
+      open,
+      { agentId: "codex", name: "Codex" },
+      true,
+      store,
+    );
     document.body.append(panel.element);
-    button(panel.element, "Start agent").click();
+    expect(panel.element.querySelector("details")).toBeNull();
     await settle();
+    expect(fake.host.start).toHaveBeenCalledWith(
+      { installedAgentId: "codex" },
+      expect.any(Function),
+    );
     fake.emit({ type: "ready", sessionId: "s" });
     store.flush();
     const prompt = panel.element.querySelector("textarea") as HTMLTextAreaElement;
+    expect(prompt.spellcheck).toBe(false);
     prompt.value = "Repair tests";
     panel.element.querySelector("form")?.dispatchEvent(new Event("submit", { cancelable: true }));
     await settle();
@@ -130,7 +242,19 @@ describe("LOT-014 agent panel", () => {
     const fake = host();
     const root = document.createElement("div");
     document.body.append(root);
-    const stores = createCockpitStoreBundle();
+    const stores = createCockpitStoreBundle({
+      initialChats: [
+        {
+          kind: "agent",
+          chatId: "installed",
+          title: "Codex",
+          modelName: "Codex",
+          agentId: "codex",
+          agentName: "Codex",
+          validationState: "UnchangedBlue",
+        },
+      ],
+    });
     const editor = new ColorideEditorView({
       initialDocumentId: "src/file.ts",
       initialContent: "const a = 1;",
@@ -145,7 +269,7 @@ describe("LOT-014 agent panel", () => {
     const instance = editor.getEditorView();
     const parent = instance.dom.parentElement;
     const zone4Updates = stores.zone4.getUpdateCount();
-    const start = button(root, "Start agent");
+    const start = button(root, "Connect");
     expect(start).toBeDefined();
     start.click();
     await settle();

@@ -1,18 +1,20 @@
-//! Settings: the ACP agent registry. The webview asks; the Host downloads and installs, and a
-//! native dialog (which the webview cannot answer) confirms before anything is fetched.
+//! Settings: the ACP agent registry. The webview asks; the Host checks the request against the
+//! registry (offered, installable here, exact version), downloads, verifies and installs.
 use std::sync::Arc;
 
-use agent_registry::{AgentRegistry, InstallPlan, InstalledAgent, Listing};
-use tauri::Manager;
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+use agent_registry::{AgentRegistry, InstalledAgent, Listing};
+use tauri::{Emitter, Manager};
 
 use crate::state::DesktopAppState;
+
+/// Emitted when an install starts; the payload is the agent id.
+const INSTALL_CONFIRMED_EVENT: &str = "agent-registry-install-confirmed";
 
 /// Where the registry keeps its catalog cache, installation list and agent folders.
 const REGISTRY_DIR: &str = "agent-registry";
 
 /// The registry, opened the first time Settings needs it.
-fn registry(state: &DesktopAppState) -> Result<Arc<AgentRegistry>, String> {
+pub(super) fn registry(state: &DesktopAppState) -> Result<Arc<AgentRegistry>, String> {
     let mut slot = state
         .agent_registry
         .lock()
@@ -25,14 +27,6 @@ fn registry(state: &DesktopAppState) -> Result<Arc<AgentRegistry>, String> {
     );
     *slot = Some(Arc::clone(&opened));
     Ok(opened)
-}
-
-fn confirmation_text(plan: &InstallPlan) -> String {
-    format!(
-        "Install {} {}?\n\n{}\n\nThe agent is kept in Coloride's own folder. It does not run now: \
-         when started it runs in the sandbox, offline and without your credentials.",
-        plan.name, plan.version, plan.summary
-    )
 }
 
 #[tauri::command]
@@ -49,8 +43,8 @@ pub async fn agent_registry_list_command(
     .map_err(|e| e.to_string())?
 }
 
-/// Installs `agent_id` at exactly `version`, the one the user saw. `None` when the user
-/// declined the native confirmation.
+/// Installs `agent_id` at exactly `version`, the one the user saw. Always `Some` now that there
+/// is no confirmation dialog; the `Option` stays so the webview contract does not change.
 #[tauri::command]
 pub async fn agent_registry_install_command(
     app: tauri::AppHandle,
@@ -59,26 +53,17 @@ pub async fn agent_registry_install_command(
 ) -> Result<Option<InstalledAgent>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let registry = registry(&app.state::<DesktopAppState>())?;
-        // Refused here, before any dialog, if the agent is hidden, blocked or has changed.
-        let plan = registry
+        // Refused here if the agent is hidden, blocked on this computer or its version changed.
+        registry
             .plan(&agent_id, &version)
             .map_err(|e| e.to_string())?;
-        let confirmed = app
-            .dialog()
-            .message(confirmation_text(&plan))
-            .title("Install ACP agent")
-            .buttons(MessageDialogButtons::OkCancelCustom(
-                "Install".into(),
-                "Cancel".into(),
-            ))
-            .blocking_show();
-        if !confirmed {
-            return Ok(None);
-        }
-        registry
+        // Tells Settings the download has started.
+        let _ = app.emit(INSTALL_CONFIRMED_EVENT, &agent_id);
+        let installed = registry
             .install(&agent_id, &version)
-            .map(Some)
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+        let _ = app.emit("agent-registry-changed", ());
+        Ok(Some(installed))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -92,10 +77,32 @@ pub async fn agent_registry_uninstall_command(
     tauri::async_runtime::spawn_blocking(move || {
         registry(&app.state::<DesktopAppState>())?
             .uninstall(&installation_id)
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+        let _ = app.emit("agent-registry-changed", ());
+        Ok(())
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Settings requests a panel; only the main window owns the chat stores and editor.
+#[tauri::command]
+pub fn agent_registry_open_command(app: tauri::AppHandle, agent_id: String) -> Result<(), String> {
+    let installed = registry(&app.state::<DesktopAppState>())?
+        .listing(false)
+        .map_err(|e| e.to_string())?
+        .installed
+        .into_iter()
+        .find(|agent| agent.agent_id == agent_id)
+        .ok_or("The agent is no longer installed")?;
+    let main = app
+        .get_webview_window("main")
+        .ok_or("Main window is unavailable")?;
+    main.show().map_err(|e| e.to_string())?;
+    main.unminimize().map_err(|e| e.to_string())?;
+    main.set_focus().map_err(|e| e.to_string())?;
+    app.emit_to("main", "agent-open-requested", installed)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -110,17 +117,5 @@ mod tests {
         let second = registry(&state).unwrap();
         assert!(Arc::ptr_eq(&first, &second));
         assert!(data.path().join(REGISTRY_DIR).join("packages").is_dir());
-    }
-
-    #[test]
-    fn the_confirmation_names_the_agent_its_version_and_where_the_code_comes_from() {
-        let text = confirmation_text(&InstallPlan {
-            name: "Codex".into(),
-            version: "2.6.0".into(),
-            summary: "Installs the npm package codex-acp@2.6.0.".into(),
-        });
-        for expected in ["Codex 2.6.0", "codex-acp@2.6.0", "sandbox", "offline"] {
-            assert!(text.contains(expected), "{expected} in {text}");
-        }
     }
 }

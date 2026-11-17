@@ -20,6 +20,8 @@ import { TauriBinaryHostBridge } from "./tauri-binary-host-bridge.js";
 import { createTauriDebugHost } from "./tauri-debug-host.js";
 import { createTauriTerminalHost } from "./tauri-terminal-host.js";
 
+import { mountSettingsWindow } from "./settings-window.js";
+
 interface NativeWorkspaceNode {
   readonly path: string;
   readonly name: string;
@@ -151,6 +153,7 @@ function ColorideDesktopApp() {
           terminalHost: createTauriTerminalHost(invoke, () => new Channel<ArrayBuffer>()),
           agentHost: createTauriAgentHost(invoke, () => new Channel<AcpEvent>()),
           agentRegistryHost: createTauriAgentRegistryHost(invoke),
+          openSettingsWindow: () => invoke<void>("open_settings_window_command"),
           // F5: debug the shown JavaScript file (vscode-js-debug, trusted workspaces only).
           debugHost: createTauriDebugHost(invoke, () => new Channel<ArrayBuffer>()),
           // The decision is taken in a native dialog owned by the Rust side (commands/trust.rs).
@@ -224,8 +227,12 @@ function ColorideDesktopApp() {
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Missing #root desktop mount point");
 
-createRoot(rootElement).render(
-  <StrictMode>
-    <ColorideDesktopApp />
-  </StrictMode>,
-);
+if (new URLSearchParams(window.location.search).get("view") === "settings") {
+  mountSettingsWindow(rootElement);
+} else {
+  createRoot(rootElement).render(
+    <StrictMode>
+      <ColorideDesktopApp />
+    </StrictMode>,
+  );
+}

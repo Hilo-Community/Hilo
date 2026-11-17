@@ -82,6 +82,7 @@ impl Fixture {
     }
     fn launch(&self, mode: &str) -> AcpLaunch {
         AcpLaunch {
+            read_only_paths: vec![],
             program: self.root.path().join("fake-agent"),
             args: vec![mode.into()],
             credentials: AgentCredentials::Unauthenticated,
@@ -112,6 +113,44 @@ impl Fixture {
 fn next(rx: &Receiver<AcpEvent>) -> AcpEvent {
     rx.recv_timeout(Duration::from_secs(5))
         .expect("ACP must not hang")
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn installed_agent_modules_are_shared_read_only_through_the_launch_broker() {
+    let f = Fixture::new();
+    let installation = tempfile::tempdir().unwrap();
+    let binary = installation.path().join("agent");
+    std::fs::copy(env!("CARGO_BIN_EXE_coloride-acp-test-agent"), &binary).unwrap();
+    let module = installation.path().join("module.txt");
+    std::fs::write(&module, "installed code").unwrap();
+    let runner = sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).unwrap();
+    let (host, rx) = f.host(Arc::from(runner));
+    let mut launch = f.launch("installation");
+    launch.program = binary;
+    launch.read_only_paths = vec![installation.path().to_path_buf()];
+    let mut session = AcpSessionSupervisor::start(host, launch).unwrap();
+    assert!(matches!(next(&rx), AcpEvent::Ready { .. }));
+    session.prompt("test".into()).unwrap();
+    loop {
+        if let AcpEvent::Update { update } = next(&rx) {
+            assert_eq!(
+                update["content"]["text"],
+                "module=installed code; write=false"
+            );
+            break;
+        }
+    }
+    session.stop();
+    assert_eq!(std::fs::read_to_string(module).unwrap(), "installed code");
+    assert_eq!(
+        f.repository
+            .snapshot("task")
+            .unwrap()
+            .resolved_intents
+            .len(),
+        1
+    );
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]

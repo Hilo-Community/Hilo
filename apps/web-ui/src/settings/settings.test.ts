@@ -12,7 +12,7 @@ import {
   type RegistryAgent,
   visibleRows,
 } from "./agent-registry.js";
-import { SettingsDialog } from "./settings-dialog.js";
+import { SettingsPage } from "./settings-page.js";
 
 const settle = async () => {
   for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -92,6 +92,38 @@ const cards = (root: ParentNode) => [
 ];
 
 describe("agent registry state", () => {
+  it("returns an existing Settings page to External Agents after a filtered search", async () => {
+    const { host } = fakeHost(listing([agent("codex")]));
+    const page = new SettingsPage(document, { agentRegistry: host });
+    page.show();
+    const search = page.element.querySelector<HTMLInputElement>('[aria-label="Search settings"]');
+    if (search) {
+      search.value = "no matching section";
+      search.dispatchEvent(new Event("input"));
+    }
+    expect(page.element.textContent).toContain("No settings found");
+    page.showExternalAgents();
+    await settle();
+    expect(search?.value).toBe("");
+    expect(page.element.querySelector(".coloride-registry")).not.toBeNull();
+    page.destroy();
+  });
+  it("opens installed agents only when Open is clicked, alongside the current action", async () => {
+    const fake = fakeHost(listing([agent("codex")], [installed("codex")]));
+    const open = vi.fn(async () => {});
+    const panel = new AgentRegistryPanel(document, { ...fake.host, open });
+    await settle();
+    expect(open).not.toHaveBeenCalled();
+    const button = buttons(panel.element, "Open CODEX")[0];
+    expect(button?.textContent).toBe("Open");
+    expect(button?.querySelector("svg")).toBeNull();
+    expect(button?.classList.contains("coloride-registry-ghost")).toBe(false);
+    expect(buttons(panel.element, "Remove CODEX")).toHaveLength(1);
+    button?.click();
+    await settle();
+    expect(open).toHaveBeenCalledWith("codex");
+    panel.destroy();
+  });
   it("loads the catalog and the installed agents", async () => {
     const { host } = fakeHost(listing([agent("a")], [installed("a")]));
     const store = new AgentRegistryStore(host);
@@ -126,6 +158,20 @@ describe("agent registry state", () => {
     expect(store.getState().installed[0]?.version).toBe("2.0.0");
     expect(store.getState().notice).toContain("installed");
     expect(store.getState().pending).toEqual({});
+  });
+
+  it("does not report the registry as unreachable after an install that did not refresh", async () => {
+    const { host } = fakeHost(listing([agent("a")]));
+    // The Host answers from its saved catalog whenever the registry is not asked.
+    host.list = vi.fn(async (refresh: boolean) => ({
+      ...listing([agent("a")]),
+      origin: refresh ? ("network" as const) : ("saved" as const),
+    }));
+    const store = new AgentRegistryStore(host);
+    await store.load(true);
+    await store.install(store.getState().agents[0] as RegistryAgent);
+    expect(store.getState().origin).toBe("network");
+    expect(store.getState().refreshError).toBeNull();
   });
 
   it("does nothing when the user declines the Host's confirmation", async () => {
@@ -226,6 +272,7 @@ describe("agent registry rows", () => {
     query: "",
     filter: "all" as const,
     pending: {},
+    awaiting: {},
     failures: {},
     error: "",
     notice: "",
@@ -310,13 +357,15 @@ describe("agent registry panel", () => {
     panel.destroy();
   });
 
-  it("offers an update beside Remove when another version is on offer", async () => {
+  it("turns the button into Update, with the new version in green, when one is on offer", async () => {
     const { panel, host } = await mount(
       listing([agent("a", { version: "2.0.0" })], [installed("a", "1.0.0")]),
     );
     const card = cards(panel.element)[0] as HTMLElement;
-    expect(card.textContent).toContain("v1.0.0");
-    expect(card.textContent).toContain("Installed 1.0.0; 2.0.0 is available.");
+    expect(card.textContent).toContain("v2.0.0");
+    const version = card.querySelector(".coloride-registry-version--update") as HTMLElement;
+    expect(version.title).toBe("Installed 1.0.0; 2.0.0 is available.");
+    expect(buttons(panel.element, "Remove A")).toHaveLength(0);
     click(panel.element, "Update A to 2.0.0");
     await settle();
     expect(host.install).toHaveBeenCalledWith("a", "2.0.0");
@@ -409,91 +458,72 @@ describe("agent registry panel", () => {
   });
 });
 
-describe("settings dialog", () => {
-  function open(initial = listing([agent("a")])) {
-    const fake = fakeHost(initial);
-    const parent = document.createElement("div");
-    document.body.append(parent);
-    const trigger = document.createElement("button");
-    parent.append(trigger);
-    trigger.focus();
-    const dialog = new SettingsDialog(document, parent, { agentRegistry: fake.host });
-    return { ...fake, parent, trigger, dialog };
+describe("settings page", () => {
+  function mount() {
+    const fake = fakeHost(listing([agent("a")]));
+    const root = document.createElement("div");
+    document.body.append(root);
+    const page = new SettingsPage(document, { agentRegistry: fake.host });
+    root.append(page.element);
+    page.show();
+    return {
+      ...fake,
+      root,
+      page,
+      cleanup: () => {
+        page.destroy();
+        root.remove();
+      },
+    };
   }
 
-  it("opens as a labelled modal dialog on the registry and focuses its search", async () => {
-    const { dialog, parent } = open();
-    dialog.open();
+  it("shows the sidebar with External Agents as its only category", async () => {
+    const { root, cleanup } = mount();
     await settle();
-    const shown = parent.querySelector('[role="dialog"]') as HTMLElement;
-    expect(shown.getAttribute("aria-modal")).toBe("true");
-    expect(shown.getAttribute("aria-labelledby")).toBe("coloride-settings-title");
-    expect(parent.querySelector("#coloride-settings-title")?.textContent).toBe("Settings");
-    expect(parent.querySelector(".coloride-registry")).not.toBeNull();
-    expect(document.activeElement?.getAttribute("aria-label")).toBe("Search agents");
-    dialog.close();
+    const labels = [...root.querySelectorAll(".coloride-settings-nav-label")];
+    expect(labels.map((l) => l.textContent)).toEqual(["External Agents"]);
+    expect(root.querySelector(".coloride-settings-subnav")?.textContent).toBe("ACP Registry");
+    expect(root.querySelector(".coloride-registry")).not.toBeNull();
+    expect(cards(root).map((c) => c.dataset.agent)).toEqual(["a"]);
+    cleanup();
   });
 
-  it("closes with Escape, the close button or a click outside, and returns the focus", async () => {
-    for (const how of ["escape", "button", "backdrop"] as const) {
-      const { dialog, parent, trigger } = open();
-      dialog.open();
-      await settle();
-      const overlay = parent.querySelector(".coloride-settings-overlay") as HTMLElement;
-      if (how === "escape")
-        overlay.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-      else if (how === "button")
-        (parent.querySelector(".coloride-settings-close") as HTMLButtonElement).click();
-      else overlay.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-      expect(dialog.isOpen, how).toBe(false);
-      expect(parent.querySelector(".coloride-settings-overlay"), how).toBeNull();
-      expect(document.activeElement, how).toBe(trigger);
-    }
+  it("searches the sidebar and reports when nothing matches", async () => {
+    const { root, cleanup } = mount();
+    await settle();
+    const search = root.querySelector<HTMLInputElement>(
+      '[aria-label="Search settings"]',
+    ) as HTMLInputElement;
+    search.value = "registry";
+    search.dispatchEvent(new Event("input"));
+    expect(root.querySelector(".coloride-registry")).not.toBeNull();
+    search.value = "xyzxyz";
+    search.dispatchEvent(new Event("input"));
+    expect(root.querySelector(".coloride-registry")).toBeNull();
+    expect(root.querySelector('[role="status"]')?.textContent).toContain("No settings found");
+    search.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(search.value).toBe("");
+    expect(root.querySelector(".coloride-registry")).not.toBeNull();
+    cleanup();
   });
 
-  it("keeps Tab inside the dialog", async () => {
-    const { dialog, parent } = open();
-    dialog.open();
+  it("keeps the registry and pending operations alive when hidden and shown again", async () => {
+    const { root, page, host, cleanup } = mount();
     await settle();
-    const shown = parent.querySelector('[role="dialog"]') as HTMLElement;
-    const focusable = [
-      ...shown.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled])"),
-    ];
-    const first = focusable[0] as HTMLElement;
-    const last = focusable[focusable.length - 1] as HTMLElement;
-    last.focus();
-    const forward = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
-    last.dispatchEvent(forward);
-    expect(forward.defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(first);
-    const back = new KeyboardEvent("keydown", {
-      key: "Tab",
-      shiftKey: true,
-      bubbles: true,
-      cancelable: true,
-    });
-    first.dispatchEvent(back);
-    expect(back.defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(last);
-    dialog.close();
-  });
-
-  it("reads the registry afresh each time it is opened", async () => {
-    const { dialog, host } = open();
-    dialog.open();
+    const registry = root.querySelector(".coloride-registry");
+    click(root, "Install A 1.0.0");
+    page.hide();
+    page.show();
     await settle();
-    dialog.close();
-    dialog.open();
-    await settle();
-    expect(host.list).toHaveBeenCalledTimes(2);
-    expect(host.list).toHaveBeenCalledWith(true);
-    dialog.toggle();
-    expect(dialog.isOpen).toBe(false);
+    expect(root.querySelector(".coloride-registry")).toBe(registry);
+    expect(host.install).toHaveBeenCalledWith("a", "1.0.0");
+    expect(buttons(root, "Remove A")).toHaveLength(1);
+    cleanup();
   });
 });
 
-describe("settings in the cockpit", () => {
-  function mount(registry?: AgentRegistryHost) {
+describe("settings tab in the cockpit", () => {
+  function mount(registry?: AgentRegistryHost, openSettingsWindow?: () => Promise<void>) {
     const root = document.createElement("div");
     document.body.append(root);
     const stores = createCockpitStoreBundle();
@@ -507,12 +537,12 @@ describe("settings in the cockpit", () => {
       stores,
       editorView: editor,
       ...(registry ? { agentRegistryHost: registry } : {}),
+      ...(openSettingsWindow ? { openSettingsWindow } : {}),
     });
     return {
       root,
       stores,
       editor,
-      cockpit,
       cleanup: () => {
         cockpit.destroy();
         editor.destroy();
@@ -521,39 +551,94 @@ describe("settings in the cockpit", () => {
     };
   }
 
-  it("offers no Settings button or shortcut without a Host registry", () => {
+  it("offers no Settings button without a registry host", () => {
     const { root, cleanup } = mount();
     expect(root.querySelector(".coloride-settings-btn")).toBeNull();
     document.dispatchEvent(new KeyboardEvent("keydown", { key: ",", metaKey: true }));
-    expect(root.querySelector(".coloride-settings-overlay")).toBeNull();
+    expect(root.querySelector(".coloride-settings-page")).toBeNull();
     cleanup();
   });
 
-  it("opens from the activity bar and from Cmd/Ctrl+, without remounting the editor", async () => {
+  it("opens the host window from the gear and shortcut without adding a workspace tab", async () => {
+    const { host } = fakeHost(listing([agent("a")]));
+    const openSettingsWindow = vi.fn(async () => {});
+    const { root, editor, cleanup } = mount(host, openSettingsWindow);
+    const instance = editor.getEditorView();
+    (root.querySelector(".coloride-settings-btn") as HTMLButtonElement).click();
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: ",", metaKey: true, bubbles: true }),
+    );
+    await settle();
+    expect(openSettingsWindow).toHaveBeenCalledTimes(2);
+    expect(root.querySelector('[data-view="settings"]')).toBeNull();
+    expect((root.querySelector(".coloride-settings-page") as HTMLElement).hidden).toBe(true);
+    expect(editor.getEditorView()).toBe(instance);
+    expect(editor.getStoreSnapshot().mountCount).toBe(1);
+    cleanup();
+  });
+
+  it("opens a single closable tab, switches back to sessions and preserves the editor", () => {
     const { host } = fakeHost(listing([agent("a")]));
     const { root, stores, editor, cleanup } = mount(host);
     const instance = editor.getEditorView();
     const parent = instance.dom.parentElement;
-    const zone4Updates = stores.zone4.getUpdateCount();
-
-    (root.querySelector(".coloride-settings-btn") as HTMLButtonElement).click();
-    await settle();
-    expect(root.querySelector(".coloride-settings-overlay")).not.toBeNull();
-    expect(cards(root).map((c) => c.dataset.agent)).toEqual(["a"]);
-    document.dispatchEvent(
-      new KeyboardEvent("keydown", { key: ",", ctrlKey: true, bubbles: true }),
+    const updates = stores.zone4.getUpdateCount();
+    const open = () => (root.querySelector(".coloride-settings-btn") as HTMLButtonElement).click();
+    open();
+    open();
+    expect(stores.zone4.getUpdateCount()).toBe(updates);
+    const page = root.querySelector<HTMLElement>(".coloride-settings-page") as HTMLElement;
+    expect(page.hidden).toBe(false);
+    expect(root.querySelectorAll('[data-view="settings"]')).toHaveLength(1);
+    expect(root.querySelector('[data-view="settings"]')?.getAttribute("aria-selected")).toBe(
+      "true",
     );
-    expect(root.querySelector(".coloride-settings-overlay")).toBeNull();
+    expect(page.getAttribute("role")).not.toBe("dialog");
+    (root.querySelector('[role="tab"][data-chat-id]:not([data-view])') as HTMLElement).click();
+    expect(page.hidden).toBe(true);
+    expect(root.querySelector('[data-view="settings"]')).not.toBeNull();
     document.dispatchEvent(
       new KeyboardEvent("keydown", { key: ",", metaKey: true, bubbles: true }),
     );
-    expect(root.querySelector(".coloride-settings-overlay")).not.toBeNull();
-
+    expect(page.hidden).toBe(false);
+    (root.querySelector('[data-view="settings"] button') as HTMLButtonElement).click();
+    expect(page.hidden).toBe(true);
+    expect(root.querySelector('[data-view="settings"]')).toBeNull();
     expect(editor.getEditorView()).toBe(instance);
     expect(instance.dom.parentElement).toBe(parent);
     expect(editor.getStoreSnapshot().mountCount).toBe(1);
-    expect(stores.zone4.getUpdateCount()).toBe(zone4Updates);
     cleanup();
-    expect(document.querySelector(".coloride-settings-overlay")).toBeNull();
+  });
+});
+
+describe("agent logos", () => {
+  it("bundles only inert, monochrome markup", async () => {
+    const { AGENT_ICONS } = await import("./agent-icons.js");
+    expect(Object.keys(AGENT_ICONS).length).toBeGreaterThan(10);
+    for (const [id, svg] of Object.entries(AGENT_ICONS)) {
+      expect(svg.startsWith("<svg"), id).toBe(true);
+      expect(svg, id).not.toMatch(/<script|<image|<style|<foreignObject|<use|href|on\w+=|url\(/i);
+    }
+  });
+
+  it("draws the logo of a known agent and the first letter of an unknown one", async () => {
+    const { agentMark } = await import("./agent-marks.js");
+    expect(agentMark(document, "codex-acp", "Codex").querySelector("svg")).not.toBeNull();
+    const letter = agentMark(document, "brand-new-agent", "Zed");
+    expect(letter.querySelector("svg")).toBeNull();
+    expect(letter.textContent).toBe("Z");
+  });
+});
+
+describe("hidden agents", () => {
+  it("leaves out little-used agents unless they are installed", () => {
+    const state = {
+      ...new AgentRegistryStore(fakeHost(listing([])).host).getState(),
+      agents: [agent("opencode"), agent("goose"), agent("sigit")],
+      installed: [
+        { id: "i1", agentId: "sigit", name: "Sigit", version: "1.0.0", distribution: "npm" },
+      ],
+    };
+    expect(visibleRows(state).map((row) => row.agent.id)).toEqual(["opencode", "sigit"]);
   });
 });

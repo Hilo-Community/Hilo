@@ -159,41 +159,25 @@ pub(crate) fn close_all_agents(state: &DesktopAppState) {
     }
 }
 
-fn check_launch(program: &str, args: &[String], provider: Option<&str>) -> Result<(), String> {
+fn check_launch(program: &str, args: &[String]) -> Result<(), String> {
     let bytes = program.len() + args.iter().map(String::len).sum::<usize>();
     if !Path::new(program).is_absolute() || args.len() > MAX_LAUNCH_ARGS || bytes > MAX_LAUNCH_BYTES
     {
         return Err("Invalid agent launch arguments".into());
     }
-    if provider.is_some() {
-        return Err(
-            "Provider-only egress requires a destination-filtering Host proxy; no agent was started"
-                .into(),
-        );
-    }
     Ok(())
 }
 
-/// The user confirms the exact program in a native dialog; the webview cannot answer it.
-fn confirm_launch(app: &tauri::AppHandle, program: &str, args: &[String]) -> Result<(), String> {
-    let confirmed = app
-        .dialog()
-        .message(format!(
-            "Start this ACP program in a read-only sandbox?\n\nProgram: {program}\n\
-             Arguments: {args:?}\n\nNetwork and credentials are unavailable in this task. \
-             File writes become proposals for review."
-        ))
-        .title("Start ACP agent")
-        .buttons(MessageDialogButtons::OkCancelCustom(
-            "Start agent".into(),
-            "Cancel".into(),
-        ))
-        .blocking_show();
-    if confirmed {
-        Ok(())
-    } else {
-        Err("Agent launch cancelled".into())
-    }
+fn resolve_launch(
+    state: &DesktopAppState,
+    installed_agent_id: &str,
+) -> Result<agent_registry::LaunchCommand, String> {
+    gate(state)?;
+    let launch = super::agent_registry::registry(state)?
+        .launch_command(installed_agent_id)
+        .map_err(|e| e.to_string())?;
+    check_launch(&launch.program.to_string_lossy(), &launch.args)?;
+    Ok(launch)
 }
 
 fn task_spec(task_id: &str, workspace: &Path, base_snapshot_id: String) -> TaskSpec {
@@ -312,23 +296,21 @@ fn start_task(
 
 fn start_session(
     app: &tauri::AppHandle,
-    program: String,
-    args: Vec<String>,
-    provider: Option<String>,
+    installed_agent_id: String,
     events: Channel<AcpEvent>,
 ) -> Result<u32, String> {
     let state = app.state::<DesktopAppState>();
     let gate = gate(&state)?;
-    check_launch(&program, &args, provider.as_deref())?;
-    confirm_launch(app, &program, &args)?;
-    // The dialog may have stayed open while the workspace was switched or its trust revoked.
+    // The program comes from the registry by id, never from the webview, and the user already
+    // confirmed it when installing; it still runs only in the read-only sandbox.
+    let launch = resolve_launch(&state, &installed_agent_id)?;
     gate.authorize(GatedCapability::WorkspaceLocalBinary)
         .map_err(|e| e.to_string())?;
     let id = state.next_agent_id.fetch_add(1, Ordering::SeqCst);
     let root = gate.workspace_root().to_path_buf();
     let task = provision(&state, &root, id)?;
     // A program inside the workspace runs from the task snapshot, not from the live workspace.
-    let program = PathBuf::from(&program);
+    let program = launch.program;
     let program = program
         .strip_prefix(&root)
         .map_or_else(|_| program.clone(), |p| task.worktree.join(p));
@@ -368,7 +350,8 @@ fn start_session(
     };
     let launch = AcpLaunch {
         program,
-        args,
+        args: launch.args,
+        read_only_paths: launch.read_only_paths,
         credentials: AgentCredentials::Unauthenticated,
         network: AgentNetwork::Offline,
         limits: ResourceLimits {
@@ -390,16 +373,12 @@ fn start_session(
 #[tauri::command]
 pub async fn agent_start_command(
     app: tauri::AppHandle,
-    program: String,
-    args: Vec<String>,
-    provider: Option<String>,
+    installed_agent_id: String,
     events: Channel<AcpEvent>,
 ) -> Result<u32, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        start_session(&app, program, args, provider, events)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || start_session(&app, installed_agent_id, events))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -505,6 +484,66 @@ mod tests {
         crate::commands::workspace::load_workspace(&state, root.path().to_str().unwrap()).unwrap();
         assert!(gate(&state).is_err());
         assert!(agent(&state, 1).is_err());
+        assert!(resolve_launch(&state, "codex").is_err());
+    }
+
+    #[test]
+    fn installed_ids_are_resolved_by_the_host_after_the_trust_gate() {
+        let data = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let state = crate::state::test_state(data.path());
+        crate::commands::workspace::load_workspace(&state, root.path().to_str().unwrap()).unwrap();
+        state
+            .trust_gate
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .grant()
+            .unwrap();
+        assert!(resolve_launch(&state, "missing")
+            .unwrap_err()
+            .contains("no installation"));
+        assert!(resolve_launch(&state, "goose")
+            .unwrap_err()
+            .contains("blocked"));
+        let location = data.path().join("agent-registry/packages/codex/1.0");
+        std::fs::create_dir_all(&location).unwrap();
+        let installation = agent_registry::Installation {
+            id: "codex@1.0".into(),
+            agent_id: "codex".into(),
+            name: "Codex".into(),
+            version: "1.0".into(),
+            distribution: "binary".into(),
+            installed_at_ms: 0,
+            location: location.clone(),
+            launch: agent_registry::Launch::Executable {
+                path: "agent".into(),
+                args: vec!["--acp".into()],
+            },
+        };
+        std::fs::write(
+            data.path().join("agent-registry/installations.json"),
+            serde_json::to_vec(&vec![installation]).unwrap(),
+        )
+        .unwrap();
+        let launch = resolve_launch(&state, "codex").unwrap();
+        assert_eq!(launch.program, location.join("agent"));
+        assert_eq!(launch.args, ["--acp"]);
+        assert_eq!(launch.read_only_paths, [location]);
+        assert_eq!(
+            (launch.name.as_str(), launch.version.as_str()),
+            ("Codex", "1.0")
+        );
+        state
+            .trust_gate
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .revoke()
+            .unwrap();
+        assert!(resolve_launch(&state, "codex").is_err());
     }
 
     #[test]
@@ -541,19 +580,16 @@ mod tests {
     }
 
     #[test]
-    fn launch_arguments_are_bounded_and_provider_egress_is_refused() {
+    fn launch_arguments_are_bounded() {
         // Absolute on every OS: `/bin/agent` has no drive on Windows.
         let program = if cfg!(windows) {
             r"C:\agent.exe"
         } else {
             "/bin/agent"
         };
-        assert!(check_launch(program, &[], None).is_ok());
-        assert!(check_launch("agent", &[], None).is_err());
-        assert!(check_launch(program, &vec![String::new(); MAX_LAUNCH_ARGS + 1], None).is_err());
-        assert!(check_launch(program, &["x".repeat(MAX_LAUNCH_BYTES)], None).is_err());
-        assert!(check_launch(program, &[], Some("https://provider.example"))
-            .unwrap_err()
-            .contains("proxy"));
+        assert!(check_launch(program, &[]).is_ok());
+        assert!(check_launch("agent", &[]).is_err());
+        assert!(check_launch(program, &vec![String::new(); MAX_LAUNCH_ARGS + 1]).is_err());
+        assert!(check_launch(program, &["x".repeat(MAX_LAUNCH_BYTES)]).is_err());
     }
 }
