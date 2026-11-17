@@ -75,6 +75,8 @@ pub struct Listing {
 /// A program to start an installed agent, and the folder it needs to read.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LaunchCommand {
+    pub name: String,
+    pub version: String,
     pub program: PathBuf,
     pub args: Vec<String>,
     pub read_only_paths: Vec<PathBuf>,

@@ -1,4 +1,5 @@
 import { UI_STRINGS, uiText } from "../ui/ui-strings.js";
+import { SEARCH_ICON, SPINNER_ICON, agentMark } from "./agent-marks.js";
 import {
   type AgentRegistryHost,
   AgentRegistryStore,
@@ -12,24 +13,6 @@ const FILTERS: readonly (readonly [RegistryFilter, string])[] = [
   ["installed", UI_STRINGS.settings.filterInstalled],
   ["available", UI_STRINGS.settings.filterAvailable],
 ];
-
-/** A round mark with the initials of the agent, in a colour taken from its name. */
-function agentMark(doc: Document, name: string): HTMLElement {
-  const mark = doc.createElement("span");
-  mark.className = "coloride-registry-mark";
-  mark.setAttribute("aria-hidden", "true");
-  const initials = name
-    .split(/[\s-]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word.charAt(0).toUpperCase())
-    .join("");
-  mark.textContent = initials || "?";
-  let hue = 0;
-  for (const char of name) hue = (hue * 31 + char.charCodeAt(0)) % 360;
-  mark.style.setProperty("--mark-hue", String(hue));
-  return mark;
-}
 
 /**
  * The ACP registry of the Settings screen: search, filters and one card per agent with its
@@ -77,7 +60,11 @@ export class AgentRegistryPanel {
       this.filters.set(filter, button);
       group.append(button);
     }
-    toolbar.append(this.search, group);
+    const searchBox = doc.createElement("label");
+    searchBox.className = "coloride-registry-search";
+    searchBox.insertAdjacentHTML("afterbegin", SEARCH_ICON);
+    searchBox.append(this.search);
+    toolbar.append(searchBox, group);
 
     this.status = doc.createElement("p");
     this.status.className = "coloride-registry-status";
@@ -99,11 +86,24 @@ export class AgentRegistryPanel {
     ariaLabel: string,
     key: string,
     click: () => void,
-    options: { disabled: boolean; primary?: boolean },
+    options: {
+      disabled: boolean;
+      primary?: boolean;
+      icon?: string;
+      ghost?: boolean;
+      busy?: boolean;
+    },
   ): HTMLButtonElement {
     const button = this.element.ownerDocument.createElement("button");
     button.type = "button";
-    button.textContent = label;
+    // The icon is a constant of this app (agent-marks.ts), never agent-supplied text.
+    if (options.icon) button.insertAdjacentHTML("afterbegin", options.icon);
+    // A running install, update or removal: a spinner in place of the icon.
+    if (options.busy) button.dataset.busy = "true";
+    // A running operation shows only the spinner, so the button keeps its width.
+    if (options.busy) button.title = label;
+    else button.append(label);
+    if (options.ghost) button.classList.add("coloride-registry-ghost");
     button.setAttribute("aria-label", ariaLabel);
     button.dataset.key = key;
     button.disabled = options.disabled;
@@ -127,12 +127,19 @@ export class AgentRegistryPanel {
 
     const heading = doc.createElement("div");
     heading.className = "coloride-registry-title";
+    // Name and version are one line of text: "Claude Agent v0.107.0".
     const name = doc.createElement("h3");
-    name.textContent = agent.name;
     const version = doc.createElement("span");
     version.className = "coloride-registry-version";
     version.textContent = uiText.agentVersion(installed?.version ?? agent.version);
-    heading.append(agentMark(doc, agent.name), name, version);
+    if (updatable && installed) {
+      // An update shows as the new version, in green; the button below becomes Update.
+      version.textContent = uiText.agentVersion(agent.version);
+      version.classList.add("coloride-registry-version--update");
+      version.title = uiText.agentUpdateAvailable(installed.version, agent.version);
+    }
+    name.append(`${agent.name} `, version);
+    heading.append(agentMark(doc, agent.id, agent.name), name);
     if (agent.license) {
       const license = doc.createElement("span");
       license.className = "coloride-registry-license";
@@ -144,14 +151,9 @@ export class AgentRegistryPanel {
     const description = doc.createElement("p");
     description.className = "coloride-registry-description";
     description.textContent = agent.description;
+    description.title = agent.description;
     card.append(description);
 
-    if (updatable && installed) {
-      const note = doc.createElement("p");
-      note.className = "coloride-registry-note";
-      note.textContent = uiText.agentUpdateAvailable(installed.version, agent.version);
-      card.append(note);
-    }
     // A blocked agent that is not installed says why; one that is installed can still be removed.
     if (agent.blocked) {
       const blocked = doc.createElement("p");
@@ -171,6 +173,11 @@ export class AgentRegistryPanel {
     const actions = doc.createElement("div");
     actions.className = "coloride-registry-actions";
     const busy = pending !== undefined;
+    if (busy) {
+      card.dataset.pending = pending;
+      // Gray while the Host waits for the user's answer, green once it is working.
+      card.dataset.phase = state.awaiting[agent.id] ? "waiting" : "running";
+    }
     if (!installed) {
       actions.append(
         this.button(
@@ -178,10 +185,25 @@ export class AgentRegistryPanel {
           uiText.installAgent(agent.name, agent.version),
           `${agent.id}:install`,
           () => void this.store.install(agent),
-          { disabled: busy || agent.blocked !== null, primary: true },
+          {
+            disabled: busy || agent.blocked !== null,
+            primary: true,
+            // No icon at rest; a spinner while it runs.
+            ...(pending === "installing" ? { icon: SPINNER_ICON, busy: true } : {}),
+          },
         ),
       );
     } else {
+      actions.append(
+        this.button(
+          text.openAgent,
+          uiText.openAgent(installed.name),
+          `${agent.id}:open`,
+          () => void this.store.open(installed),
+          { disabled: busy },
+        ),
+      );
+      // One button at a time: Update while a newer version is on offer, Remove otherwise.
       if (updatable && !agent.blocked) {
         actions.append(
           this.button(
@@ -189,19 +211,28 @@ export class AgentRegistryPanel {
             uiText.updateAgent(agent.name, agent.version),
             `${agent.id}:install`,
             () => void this.store.install(agent),
-            { disabled: busy, primary: true },
+            {
+              disabled: busy,
+              primary: true,
+              ...(pending === "installing" ? { icon: SPINNER_ICON, busy: true } : {}),
+            },
+          ),
+        );
+      } else {
+        actions.append(
+          this.button(
+            pending === "removing" ? text.removing : text.remove,
+            uiText.removeAgent(agent.name),
+            `${agent.id}:remove`,
+            () => void this.store.uninstall(installed),
+            {
+              disabled: busy,
+              ghost: true,
+              ...(pending === "removing" ? { icon: SPINNER_ICON, busy: true } : {}),
+            },
           ),
         );
       }
-      actions.append(
-        this.button(
-          pending === "removing" ? text.removing : text.remove,
-          uiText.removeAgent(agent.name),
-          `${agent.id}:remove`,
-          () => void this.store.uninstall(installed),
-          { disabled: busy },
-        ),
-      );
     }
     card.append(actions);
     return card;
@@ -231,6 +262,8 @@ export class AgentRegistryPanel {
     this.alert.replaceChildren(...alert);
     this.alert.hidden = alert.length === 0;
     this.status.textContent = state.loading ? text.loading : state.notice;
+    // "Codex installed." is announced to screen readers only; the card already shows the result.
+    this.status.dataset.kind = state.loading ? "loading" : "notice";
 
     const rows = visibleRows(state);
     const children: Node[] = rows.map((row) => this.card(row));

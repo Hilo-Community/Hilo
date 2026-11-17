@@ -161,6 +161,13 @@ export function createChatActions(ctx: StoreContext): ChatActions {
       // A new session takes the model of the one next to it, but a shell has no model to share.
       const sibling = neighbour?.kind === "terminal" ? undefined : neighbour;
       const kind = options?.kind ?? "agent";
+      const agentId = options?.agentId ?? sibling?.agentId;
+      const agentName =
+        options?.agentName ??
+        sibling?.agentName ??
+        options?.modelName ??
+        sibling?.modelName ??
+        "Codex";
       const chat: CockpitChatTab =
         kind === "terminal"
           ? {
@@ -174,7 +181,12 @@ export function createChatActions(ctx: StoreContext): ChatActions {
           : {
               chatId,
               kind: "agent",
-              title: options?.title?.trim() || `#${z3.chats.length + 1} New session`,
+              ...(agentId ? { agentId, agentName } : {}),
+              title:
+                options?.title?.trim() ||
+                options?.agentName ||
+                sibling?.agentName ||
+                `#${z3.chats.length + 1} New session`,
               modelName: options?.modelName ?? sibling?.modelName ?? "Codex",
               validationState: "UnchangedBlue",
               agentExecutionStatus: "Idle",

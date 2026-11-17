@@ -1,3 +1,5 @@
+import { agentMark } from "../../settings/agent-marks.js";
+import type { AgentRegistryHost, InstalledAgent } from "../../settings/agent-registry.js";
 import { UI_STRINGS } from "../../ui/ui-strings.js";
 import { CODEX_ICON, TERMINAL_ICON } from "./panel-icons.js";
 
@@ -7,20 +9,50 @@ const CHEVRON_RIGHT =
 export interface NewPanelMenuActions {
   /** A plain shell panel; absent when the host offers no terminal. */
   readonly openTerminal?: () => void;
-  readonly openAgentInterface: () => void;
+  readonly openAgentInterface: (agent: InstalledAgent) => void;
+  readonly installAgents: () => void;
 }
 
 /**
- * The menu of the "+" button of Zone 3: a terminal, or an agent (Codex) that opens as an
- * interface or, later, as a terminal. The agent entry opens a second level to its right.
+ * The "+" menu offers a terminal and a submenu of locally installed agents.
  */
 export class NewPanelMenu {
   private menu: HTMLElement | null = null;
   private submenu: HTMLElement | null = null;
   private anchor: HTMLElement | null = null;
   private cleanup: (() => void) | null = null;
+  private installed: readonly InstalledAgent[] = [];
+  private request = 0;
+  private disposed = false;
+  private refreshSubmenu: (() => void) | null = null;
+  private readonly stopListening: (() => void) | undefined;
 
-  constructor(private readonly doc: Document) {}
+  constructor(
+    private readonly doc: Document,
+    private readonly registry?: AgentRegistryHost,
+  ) {
+    this.stopListening = registry?.onChanged?.(() => void this.refresh());
+    void this.refresh();
+  }
+
+  private async refresh(): Promise<void> {
+    if (!this.registry) return;
+    const request = ++this.request;
+    try {
+      const listing = await this.registry.list(false);
+      if (this.disposed || request !== this.request) return;
+      this.installed = listing.installed;
+      this.refreshSubmenu?.();
+    } catch {
+      // Settings remains available to diagnose the local registry or install an agent.
+    }
+  }
+
+  destroy(): void {
+    this.disposed = true;
+    this.stopListening?.();
+    this.close(false);
+  }
 
   isOpen(): boolean {
     return this.menu !== null;
@@ -96,18 +128,32 @@ export class NewPanelMenu {
     chevron.className = "coloride-new-panel-chevron";
     chevron.innerHTML = CHEVRON_RIGHT;
     agent.append(chevron);
+    const populate = (sub: HTMLElement) => {
+      sub.replaceChildren();
+      for (const installed of this.installed) {
+        const entry = this.item(
+          installed.name,
+          () => actions.openAgentInterface(installed),
+          installed.version,
+        );
+        entry
+          .querySelector(".coloride-new-panel-label")
+          ?.prepend(agentMark(this.doc, installed.agentId, installed.name));
+        sub.append(entry);
+      }
+      sub.append(
+        this.item(
+          this.installed.length ? UI_STRINGS.chat.installMoreAgents : UI_STRINGS.chat.installAgent,
+          actions.installAgents,
+        ),
+      );
+    };
     const showSubmenu = () => {
       if (this.submenu) return;
       const sub = this.panel(UI_STRINGS.chat.newAgent);
       sub.classList.add("coloride-new-panel-submenu");
-      sub.append(
-        this.item(UI_STRINGS.chat.asInterface, actions.openAgentInterface),
-        // An agent in a terminal must run inside the sandbox runner, which does not exist yet.
-        this.item(UI_STRINGS.chat.asTerminal, null, UI_STRINGS.chat.soon),
-      );
-      for (const button of sub.querySelectorAll<HTMLButtonElement>("button:disabled")) {
-        button.title = UI_STRINGS.chat.terminalNeedsIsolation;
-      }
+      populate(sub);
+      this.refreshSubmenu = () => populate(sub);
       this.doc.body.append(sub);
       const rect = agent.getBoundingClientRect();
       sub.style.left = `${rect.right + 4}px`;
@@ -117,6 +163,7 @@ export class NewPanelMenu {
       sub.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
     };
     const hideSubmenu = () => {
+      this.refreshSubmenu = null;
       this.submenu?.remove();
       this.submenu = null;
       agent.setAttribute("aria-expanded", "false");
@@ -181,6 +228,7 @@ export class NewPanelMenu {
     const anchor = this.anchor;
     this.cleanup?.();
     this.cleanup = null;
+    this.refreshSubmenu = null;
     this.submenu?.remove();
     this.submenu = null;
     this.menu?.remove();

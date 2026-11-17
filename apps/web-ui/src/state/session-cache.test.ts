@@ -2,6 +2,27 @@ import { expect, it } from "vitest";
 import { createCockpitStoreBundle } from "../stores/index.js";
 import { restoreCachedSession } from "./session-cache.js";
 const base = { chatId: "legacy", title: "My session", validationState: "UnchangedBlue" };
+it("persists the installed agent identity and inherits it when splitting", () => {
+  const stores = createCockpitStoreBundle();
+  const id = stores.createChat({
+    agentId: "claude-acp",
+    agentName: "Claude Agent",
+    modelName: "Claude Agent",
+  });
+  const chat = stores.zone3.getState().chats.find((item) => item.chatId === id);
+  const restored = restoreCachedSession(JSON.parse(JSON.stringify(chat)));
+  expect(restored).toMatchObject({
+    kind: "agent",
+    agentId: "claude-acp",
+    agentName: "Claude Agent",
+    title: "Claude Agent",
+  });
+  const split = stores.createChat({ from: id as string });
+  expect(stores.zone3.getState().chats.find((item) => item.chatId === split)).toMatchObject({
+    agentId: "claude-acp",
+    agentName: "Claude Agent",
+  });
+});
 it("normalizes legacy agents and shells, and strips model/execution state from terminals", () => {
   expect(restoreCachedSession({ ...base, modelName: "Codex" })).toMatchObject({
     kind: "agent",

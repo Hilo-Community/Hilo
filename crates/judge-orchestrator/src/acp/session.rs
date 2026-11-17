@@ -42,6 +42,8 @@ pub enum AgentNetwork {
 pub struct AcpLaunch {
     pub program: PathBuf,
     pub args: Vec<String>,
+    /// Host-resolved installation files, never supplied by the webview.
+    pub read_only_paths: Vec<PathBuf>,
     pub credentials: AgentCredentials,
     pub network: AgentNetwork,
     pub limits: ResourceLimits,
@@ -107,6 +109,7 @@ impl AcpSessionSupervisor {
         spec.worktree_read_only = true;
         spec.mediate_worktree_reads = true;
         spec.args = launch.args.iter().map(Into::into).collect();
+        spec.read_only_paths = launch.read_only_paths;
         spec.limits = launch.limits;
         // The complete environment is empty. The runner adds only its private TMP variables.
         let launch_executor = Arc::new(LaunchExecutor {

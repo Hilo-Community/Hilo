@@ -89,6 +89,24 @@ function setup(refuse?: string) {
     stores,
     editorView,
     terminalHost: host,
+    agentRegistryHost: {
+      list: async () => ({
+        agents: [],
+        installed: [
+          {
+            id: "codex-acp@1",
+            agentId: "codex-acp",
+            name: "Codex",
+            version: "1",
+            distribution: "npm",
+          },
+        ],
+        origin: "saved",
+        refreshError: null,
+      }),
+      install: async () => null,
+      uninstall: async () => {},
+    },
     createTerminalView: () => {
       const view = new FakeView();
       views.push(view);
@@ -112,7 +130,7 @@ function setup(refuse?: string) {
   const menuItems = () =>
     Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"));
   const item = (label: string) =>
-    menuItems().find((candidate) => candidate.textContent?.startsWith(label));
+    menuItems().find((candidate) => candidate.textContent?.trim().startsWith(label));
   return { controller, stores, views, opened, press, pressKey, terminals, panes, plus, item };
 }
 
@@ -148,24 +166,24 @@ describe("terminal as a Zone 3 panel", () => {
     expect(terminals()).toHaveLength(1);
   });
 
-  it("the + button offers Terminal and Codex, and Codex opens to Interface or Terminal", async () => {
+  it("the + button offers Terminal and Agent, with the installed agents in its submenu", async () => {
     const { plus, item, terminals, stores, opened } = setup();
     const sessionsBefore = stores.zone3.getState().chats.length;
+    await settle();
     plus()?.click();
     expect(item("Terminal")).toBeDefined();
+    expect(item("Agent")).toBeDefined();
+    expect(item("Codex")).toBeUndefined();
+    item("Agent")?.click();
     expect(item("Codex")).toBeDefined();
-    expect(item("Interface")).toBeUndefined();
-    item("Codex")?.click();
-    expect(item("Interface")).toBeDefined();
-    // An agent in a terminal needs the sandbox runner: offered but not available.
     expect(item("Terminal")?.disabled ?? false).toBe(false);
     const agentTerminal = Array.from(
       document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-submenu button"),
     ).find((button) => button.textContent?.startsWith("Terminal"));
-    expect(agentTerminal?.disabled).toBe(true);
+    expect(agentTerminal).toBeUndefined();
     agentTerminal?.click();
     expect(stores.zone3.getState().chats).toHaveLength(sessionsBefore);
-    item("Interface")?.click();
+    item("Codex")?.click();
     expect(stores.zone3.getState().chats).toHaveLength(sessionsBefore + 1);
     expect(terminals()).toHaveLength(0);
     expect(opened).toHaveLength(0);
@@ -237,6 +255,7 @@ describe("terminal as a Zone 3 panel", () => {
 
   it("panels open in the order of the tabs: each new one goes to the right of the active one", async () => {
     const { plus, item, stores } = setup();
+    await settle();
     const layoutIds = () => {
       const group = stores.navigation
         .getState()
@@ -247,8 +266,8 @@ describe("terminal as a Zone 3 panel", () => {
         : null;
     };
     plus()?.click();
+    item("Agent")?.click();
     item("Codex")?.click();
-    item("Interface")?.click();
     plus()?.click();
     item("Terminal")?.click();
     await settle();
@@ -306,7 +325,7 @@ describe("terminal as a Zone 3 panel", () => {
       Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"));
     expect(entries().map((item) => item.textContent)).toEqual([
       expect.stringMatching(/Terminal/),
-      expect.stringMatching(/Codex/),
+      expect.stringMatching(/Agent/),
     ]);
     entries()[0]?.click();
     await settle();
@@ -323,10 +342,10 @@ describe("terminal as a Zone 3 panel", () => {
     const before = stores.zone3.getState().chats.length;
     document.querySelector<HTMLButtonElement>(".coloride-header-tab-add")?.click();
     Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"))
-      .find((item) => item.textContent?.startsWith("Codex"))
+      .find((item) => item.textContent?.startsWith("Agent"))
       ?.click();
     Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"))
-      .find((item) => item.textContent?.startsWith("Interface"))
+      .find((item) => item.textContent?.trim().startsWith("Codex"))
       ?.click();
     expect(stores.zone3.getState().chats).toHaveLength(before + 1);
     expect(terminals()).toHaveLength(2);

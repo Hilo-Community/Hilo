@@ -139,7 +139,14 @@ impl AgentRegistry {
 
     /// The agents on offer and the ones installed.
     pub fn listing(&self, refresh: bool) -> Result<Listing, RegistryError> {
-        let (entries, origin, refresh_error) = self.load_catalog(refresh)?;
+        let (entries, origin, refresh_error) = match self.load_catalog(refresh) {
+            Ok(listing) => listing,
+            // Local menus must work before Settings has ever fetched a catalog.
+            Err(RegistryError::CatalogUnavailable(_)) if !refresh => {
+                (Vec::new(), CatalogOrigin::Saved, None)
+            }
+            Err(error) => return Err(error),
+        };
         let node = self.parts.node.status();
         let mut agents: Vec<AgentCard> = entries
             .iter()
@@ -238,6 +245,12 @@ impl AgentRegistry {
     /// How to start an installed agent. The caller runs it through the sandbox, sharing
     /// `read_only_paths` read-only.
     pub fn launch_command(&self, agent_id: &str) -> Result<LaunchCommand, RegistryError> {
+        if !is_offered(agent_id) {
+            return Err(RegistryError::NotInstallable {
+                name: agent_id.into(),
+                reason: "This agent is blocked by the registry policy".into(),
+            });
+        }
         let installation = self
             .store
             .installations()?
@@ -265,6 +278,8 @@ impl AgentRegistry {
                 }
             };
         Ok(LaunchCommand {
+            name: installation.name,
+            version: installation.version,
             program,
             args,
             read_only_paths: vec![installation.location],

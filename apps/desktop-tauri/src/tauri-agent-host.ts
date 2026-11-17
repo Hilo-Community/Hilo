@@ -8,7 +8,10 @@ export function createTauriAgentHost(invoke: Invoke, channel: () => AgentChannel
     async start(config, onEvent) {
       const events = channel();
       events.onmessage = onEvent;
-      const id = await invoke<number>("agent_start_command", { ...config, events });
+      const id = await invoke<number>("agent_start_command", {
+        installedAgentId: config.installedAgentId,
+        events,
+      });
       return {
         prompt: (text) => invoke("agent_prompt_command", { id, text }),
         cancel: () => invoke("agent_cancel_command", { id }),

@@ -6,7 +6,7 @@
 
 use std::sync::atomic::Ordering;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 use crate::state::DesktopAppState;
 
@@ -25,9 +25,34 @@ pub fn confirm_exit_command(app: AppHandle, state: State<'_, DesktopAppState>) {
     app.exit(0);
 }
 
+/// One independent Settings window. Reopening focuses the existing window.
+#[tauri::command]
+pub async fn open_settings_window_command(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("settings") {
+        app.emit_to("settings", "settings-open-external-agents", ())
+            .map_err(|error| error.to_string())?;
+        window.show().map_err(|error| error.to_string())?;
+        window.unminimize().map_err(|error| error.to_string())?;
+        return window.set_focus().map_err(|error| error.to_string());
+    }
+    WebviewWindowBuilder::new(
+        &app,
+        "settings",
+        WebviewUrl::App("index.html?view=settings".into()),
+    )
+    .title("Settings — Coloride")
+    .inner_size(1060.0, 760.0)
+    .min_inner_size(640.0, 480.0)
+    .resizable(true)
+    .center()
+    .build()
+    .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 /// Asks the UI to confirm a close that has just been held back.
 pub(crate) fn request_close_confirmation(app: &AppHandle) {
-    let _ = app.emit(CLOSE_REQUESTED_EVENT, ());
+    let _ = app.emit_to("main", CLOSE_REQUESTED_EVENT, ());
 }
 
 #[cfg(test)]
