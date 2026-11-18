@@ -135,7 +135,9 @@ impl AppContainerEngine {
             args: spec.args.clone(),
             cwd: plain(&spec.cwd),
             env: environment(&spec.env, &plain(&spec.tmp_dir)),
-            writable_dirs: vec![plain(&spec.worktree_root)],
+            writable_dirs: std::iter::once(plain(&spec.worktree_root))
+                .chain(spec.writable_paths.iter().map(|path| plain(path)))
+                .collect(),
             journal_dir: self.journal_dir.clone(),
             limits: JobLimits {
                 max_processes: spec.limits.max_processes,

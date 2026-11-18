@@ -1,4 +1,5 @@
 use super::{
+    auth::{self, AgentCredentials, AuthMethod, AuthenticationPlan},
     executor::{AgentToolExecutor, EventSink, WorkspaceText},
     protocol::*,
 };
@@ -16,8 +17,9 @@ use sandbox_runner::{ChildInput, ResourceLimits, SandboxRunner, SandboxSpec, San
 use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
+    ffi::OsString,
     io::{BufReader, Read},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         atomic::Ordering,
         mpsc::{self, Receiver, SyncSender, TryRecvError},
@@ -27,29 +29,32 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Authentication remains an explicit Host decision. No key, environment or home mount is accepted.
-#[derive(Debug, Clone)]
-pub enum AgentCredentials {
-    Unauthenticated,
-    HostMediated { description: String },
-}
 #[derive(Debug, Clone)]
 pub enum AgentNetwork {
     Offline,
     ProviderOnly { destination: String },
+    Proxy { address: std::net::SocketAddr },
 }
 
 pub struct AcpLaunch {
+    pub identity: String,
     pub program: PathBuf,
     pub args: Vec<String>,
     /// Host-resolved installation files, never supplied by the webview.
     pub read_only_paths: Vec<PathBuf>,
+    /// Explicit Host-built environment. Contains session tokens, never provider API keys.
+    pub environment: BTreeMap<OsString, OsString>,
+    pub writable_paths: Vec<PathBuf>,
+    /// macOS preference domains the agent may read (from its reviewed profile).
+    pub preference_domains: Vec<String>,
     pub credentials: AgentCredentials,
     pub network: AgentNetwork,
     pub limits: ResourceLimits,
 }
 
 pub struct AcpHost {
+    /// Host-owned resources (egress listener, home lease) dropped when the session worker ends.
+    pub session_resources: Vec<Box<dyn Send>>,
     pub gate: WorkspaceTrustGate,
     /// Host-provisioned task snapshot, separate from the workspace whose trust gate is held.
     pub worktree_root: PathBuf,
@@ -64,16 +69,23 @@ pub struct AcpHost {
 }
 
 enum Control {
+    TerminalResize(u16, u16),
+    StartTerminalAuth,
+    TerminalInput(String),
     Prompt(String),
     Permission(String, bool),
+    Elicitation(String, String),
     CancelTurn,
 }
 
 pub struct AcpSessionSupervisor {
+    login_terminal: Arc<Mutex<Option<Box<dyn sandbox_runner::SandboxedTerminal>>>>,
+    identity: String,
     controls: SyncSender<Control>,
     executor: Arc<AgentToolExecutor>,
     thread: Option<JoinHandle<()>>,
     permissions: Arc<Mutex<BTreeMap<String, String>>>,
+    elicitation_urls: Arc<Mutex<BTreeMap<String, String>>>,
 }
 
 impl AcpSessionSupervisor {
@@ -81,9 +93,10 @@ impl AcpSessionSupervisor {
         host.gate
             .authorize(GatedCapability::WorkspaceLocalBinary)
             .map_err(|e| AcpError::Launch(e.to_string()))?;
-        match launch.credentials {
-            AgentCredentials::Unauthenticated => {},
-            AgentCredentials::HostMediated { .. } => return Err(AcpError::Launch("Host-mediated agent authentication is not implemented; no keys or home directories will be shared".into())),
+        if matches!(launch.credentials, AgentCredentials::HostMediated { .. }) {
+            return Err(AcpError::Launch(
+                "Host-mediated authentication requires a session proxy".into(),
+            ));
         }
         if let AgentNetwork::ProviderOnly { destination } = launch.network {
             return Err(AcpError::Launch(format!("provider-only egress to {destination} cannot be enforced: sandbox-runner accepts only Denied or LocalProxyOnly; a Host destination-filtering proxy is missing")));
@@ -107,12 +120,38 @@ impl AcpSessionSupervisor {
             .map_err(|e| AcpError::Launch(e.to_string()))?;
         let mut spec = SandboxSpec::new(root, &program);
         spec.worktree_read_only = true;
-        spec.mediate_worktree_reads = true;
+        // Installed agents execute their own read tools against the disposable task snapshot.
+        // Kernel-enforced read-only access keeps every direct write a refused operation.
+        spec.mediate_worktree_reads = false;
+        if !host
+            .signed
+            .spec
+            .policy
+            .allowed_paths
+            .iter()
+            .any(|path| crate::policy::paths::normalize(path).as_deref() == Some(""))
+        {
+            return Err(AcpError::Launch(
+                "Direct agent reads require an explicitly authorized whole-worktree scope".into(),
+            ));
+        }
+        spec.denied_read_paths = forbidden_read_paths(
+            &spec.worktree_root,
+            &host.signed.spec.policy.forbidden_paths,
+        )?;
         spec.args = launch.args.iter().map(Into::into).collect();
         spec.read_only_paths = launch.read_only_paths;
+        spec.writable_paths = launch.writable_paths;
+        spec.preference_domains = launch.preference_domains;
+        spec.env = launch.environment;
+        if let AgentNetwork::Proxy { address } = launch.network {
+            spec.network = sandbox_runner::NetworkPolicy::LocalProxyOnly(address);
+        }
         spec.limits = launch.limits;
-        // The complete environment is empty. The runner adds only its private TMP variables.
+        let base_spec = spec.clone();
         let launch_executor = Arc::new(LaunchExecutor {
+            interactive: false,
+            terminal: Mutex::new(None),
             spec,
             runner: host.runner.clone(),
             child: Mutex::new(None),
@@ -193,14 +232,33 @@ impl AcpSessionSupervisor {
         let (controls, control_rx) = mpsc::sync_channel(MAX_PENDING_REQUESTS);
         let permissions = Arc::new(Mutex::new(BTreeMap::new()));
         let worker_permissions = permissions.clone();
+        let elicitation_urls = Arc::new(Mutex::new(BTreeMap::new()));
+        let worker_urls = elicitation_urls.clone();
         let worker_executor = executor.clone();
+        let identity = launch.identity;
+        let login_terminal = Arc::new(Mutex::new(None));
+        let worker_terminal = login_terminal.clone();
         let thread = thread::spawn(move || {
-            let mut session =
-                Session::new(host, worker_executor.clone(), input, worker_permissions);
+            let mut session = Session::new(
+                host,
+                worker_executor.clone(),
+                input,
+                SessionUi {
+                    permissions: worker_permissions,
+                    elicitation_urls: worker_urls,
+                    login_terminal: worker_terminal,
+                },
+                launch.credentials,
+                base_spec,
+            );
             let result = session.run(messages_rx, control_rx);
             session.cancel_pending();
             let cancelled = worker_executor.cancelled.load(Ordering::SeqCst);
             worker_executor.stop();
+            session.stop_terminal();
+            for reader in session.restart_readers.drain(..) {
+                let _ = reader.join();
+            }
             // Every intent was recorded by the broker. Unknown outcomes stay recorded for
             // reconciliation; we never invent a success when cancellation interrupts a tool.
             let snapshot = session
@@ -245,10 +303,13 @@ impl AcpSessionSupervisor {
             let _ = error_reader.join();
         });
         Ok(Self {
+            login_terminal,
+            identity,
             controls,
             executor,
             thread: Some(thread),
             permissions,
+            elicitation_urls,
         })
     }
 
@@ -260,10 +321,49 @@ impl AcpSessionSupervisor {
             .try_send(Control::Prompt(text))
             .map_err(|_| bad("session closed or pending request limit"))
     }
+    pub fn identity(&self) -> &str {
+        &self.identity
+    }
+    pub fn start_terminal_auth(&self) -> Result<(), AcpError> {
+        self.controls
+            .try_send(Control::StartTerminalAuth)
+            .map_err(|_| bad("session closed or pending request limit"))
+    }
+    pub fn resize_terminal_auth(&self, cols: u16, rows: u16) -> Result<(), AcpError> {
+        if !(2..=500).contains(&cols) || !(1..=200).contains(&rows) {
+            return Err(bad("terminal size limit"));
+        }
+        self.controls
+            .try_send(Control::TerminalResize(cols, rows))
+            .map_err(|_| bad("session closed or pending request limit"))
+    }
+    pub fn write_terminal_auth(&self, text: String) -> Result<(), AcpError> {
+        if text.is_empty() || text.len() > 8192 {
+            return Err(bad("terminal input size limit"));
+        }
+        self.controls
+            .try_send(Control::TerminalInput(text))
+            .map_err(|_| bad("session closed or pending request limit"))
+    }
     /// Trusted Host UI entry point only. The agent transport cannot call it or sign approvals.
     pub fn answer_permission(&self, id: String, allow: bool) -> Result<(), AcpError> {
         self.controls
             .try_send(Control::Permission(id, allow))
+            .map_err(|_| bad("session closed or pending request limit"))
+    }
+    pub fn elicitation_url(&self, id: &str) -> Option<String> {
+        self.elicitation_urls
+            .lock()
+            .expect("elicitation lock")
+            .get(id)
+            .cloned()
+    }
+    pub fn answer_elicitation(&self, id: String, action: String) -> Result<(), AcpError> {
+        if !matches!(action.as_str(), "accept" | "decline" | "cancel") {
+            return Err(bad("invalid elicitation action"));
+        }
+        self.controls
+            .try_send(Control::Elicitation(id, action))
             .map_err(|_| bad("session closed or pending request limit"))
     }
     /// Cancels the current turn (ACP `session/cancel`): running commands are killed and pending
@@ -276,6 +376,14 @@ impl AcpSessionSupervisor {
     }
     /// Ends the session: the agent and every command are killed.
     pub fn stop(&mut self) {
+        if let Some(terminal) = self
+            .login_terminal
+            .lock()
+            .expect("login terminal lock")
+            .as_mut()
+        {
+            terminal.kill();
+        }
         self.executor.stop();
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
@@ -301,7 +409,50 @@ impl Drop for AcpSessionSupervisor {
     }
 }
 
+fn forbidden_read_paths(root: &Path, forbidden: &[String]) -> Result<Vec<PathBuf>, AcpError> {
+    let mut denied = Vec::new();
+    for relative in forbidden {
+        let normalized = crate::policy::paths::normalize(relative)
+            .ok_or_else(|| bad("invalid forbidden read scope"))?;
+        if normalized.is_empty() {
+            return Err(bad("the entire worktree is forbidden"));
+        }
+        // This runner-owned directory did not exist in the snapshot. It holds only this
+        // run's private scratch, which is an explicit runtime write allowance.
+        if normalized == sandbox_runner::TMP_DIR_NAME {
+            continue;
+        }
+        let mut candidates = vec![root.to_path_buf()];
+        for component in normalized.split('/') {
+            let mut next = Vec::new();
+            for parent in candidates {
+                if !parent.is_dir() {
+                    continue;
+                }
+                for entry in std::fs::read_dir(parent)? {
+                    let entry = entry?;
+                    if entry.file_name().to_string_lossy().to_lowercase()
+                        == component.to_lowercase()
+                    {
+                        next.push(
+                            sandbox_runner::PathGuard::verify_within_worktree(root, &entry.path())
+                                .map_err(|e| AcpError::Launch(e.to_string()))?,
+                        );
+                    }
+                }
+            }
+            candidates = next;
+        }
+        denied.extend(candidates);
+    }
+    denied.sort();
+    denied.dedup();
+    Ok(denied)
+}
+
 struct LaunchExecutor {
+    interactive: bool,
+    terminal: Mutex<Option<Box<dyn sandbox_runner::SandboxedTerminal>>>,
     spec: SandboxSpec,
     runner: Arc<dyn SandboxRunner>,
     child: Mutex<Option<SandboxedChild>>,
@@ -327,11 +478,19 @@ impl ToolExecutor for LaunchExecutor {
         call: &ToolCall,
         _reserved: BudgetUsage,
     ) -> Result<ExecutionReport, ExecutionError> {
-        let child = self
-            .runner
-            .spawn(&self.spec)
-            .map_err(super::executor::spawn_error)?;
-        *self.child.lock().expect("launch lock") = Some(child);
+        if self.interactive {
+            let terminal = self
+                .runner
+                .spawn_terminal(&self.spec)
+                .map_err(super::executor::spawn_error)?;
+            *self.terminal.lock().expect("terminal launch lock") = Some(terminal);
+        } else {
+            let child = self
+                .runner
+                .spawn(&self.spec)
+                .map_err(super::executor::spawn_error)?;
+            *self.child.lock().expect("launch lock") = Some(child);
+        }
         Ok(ExecutionReport {
             outcome: IntentOutcome {
                 succeeded: true,
@@ -348,7 +507,25 @@ struct Pending {
     call: Option<ToolCall>,
     options: Value,
 }
+struct UrlElicitation {
+    request: Value,
+    elicitation_id: String,
+    answered: bool,
+}
+struct SessionUi {
+    permissions: Arc<Mutex<BTreeMap<String, String>>>,
+    elicitation_urls: Arc<Mutex<BTreeMap<String, String>>>,
+    login_terminal: Arc<Mutex<Option<Box<dyn sandbox_runner::SandboxedTerminal>>>>,
+}
 struct Session {
+    auth_methods: Vec<AuthMethod>,
+    login_attempted: bool,
+    base_spec: SandboxSpec,
+    login_method: Option<AuthMethod>,
+    login_terminal: Arc<Mutex<Option<Box<dyn sandbox_runner::SandboxedTerminal>>>>,
+    login_input: Option<ChildInput>,
+    restart_readers: Vec<JoinHandle<()>>,
+    terminal_authenticated: bool,
     host: AcpHost,
     executor: Arc<AgentToolExecutor>,
     broker: ToolBroker,
@@ -361,13 +538,18 @@ struct Session {
     terminals: BTreeMap<String, (Value, ToolCall, Vec<crate::policy::SignedApproval>)>,
     prompt_active: bool,
     permissions: Arc<Mutex<BTreeMap<String, String>>>,
+    elicitation_urls: Arc<Mutex<BTreeMap<String, String>>>,
+    elicitations: BTreeMap<String, UrlElicitation>,
+    credentials: AgentCredentials,
 }
 impl Session {
     fn new(
         host: AcpHost,
         executor: Arc<AgentToolExecutor>,
         input: ChildInput,
-        permissions: Arc<Mutex<BTreeMap<String, String>>>,
+        ui: SessionUi,
+        credentials: AgentCredentials,
+        base_spec: SandboxSpec,
     ) -> Self {
         let broker = ToolBroker::new(
             host.repository.clone(),
@@ -376,6 +558,20 @@ impl Session {
             host.clock.clone(),
         );
         Self {
+            auth_methods: vec![],
+            login_attempted: false,
+            base_spec,
+            login_method: None,
+            login_terminal: ui.login_terminal,
+            login_input: None,
+            restart_readers: vec![],
+            terminal_authenticated: matches!(
+                &credentials,
+                AgentCredentials::Account {
+                    use_stored_credentials: true,
+                    ..
+                }
+            ),
             host,
             executor,
             broker,
@@ -387,7 +583,10 @@ impl Session {
             pending: BTreeMap::new(),
             terminals: BTreeMap::new(),
             prompt_active: false,
-            permissions,
+            permissions: ui.permissions,
+            elicitation_urls: ui.elicitation_urls,
+            elicitations: BTreeMap::new(),
+            credentials,
         }
     }
     fn request(&mut self, method: &str, params: Value) -> Result<(), AcpError> {
@@ -414,11 +613,18 @@ impl Session {
     }
     fn run(
         &mut self,
-        messages: Receiver<Result<Option<Value>, AcpError>>,
+        mut messages: Receiver<Result<Option<Value>, AcpError>>,
         controls: Receiver<Control>,
     ) -> Result<(), AcpError> {
-        self.request("initialize", json!({"protocolVersion":1,"clientInfo":{"name":"Coloride","version":"0.1.0"},"clientCapabilities":{"fs":{"readTextFile":true,"writeTextFile":true},"terminal":true,"_meta":{"writesAreProposals":true}}}))?;
-        let mut deadline = Instant::now() + Duration::from_secs(10);
+        self.initialize()?;
+        let timeout = Duration::from_secs(
+            if matches!(self.credentials, AgentCredentials::Account { .. }) {
+                600
+            } else {
+                10
+            },
+        );
+        let mut deadline = Instant::now() + timeout;
         loop {
             if self.executor.cancelled.load(Ordering::SeqCst)
                 || self
@@ -435,6 +641,26 @@ impl Session {
                 return Err(bad("handshake timeout"));
             }
             match controls.try_recv() {
+                Ok(Control::TerminalResize(cols, rows)) => {
+                    if let Some(terminal) = self
+                        .login_terminal
+                        .lock()
+                        .expect("login terminal lock")
+                        .as_ref()
+                    {
+                        terminal.resize(cols, rows)?;
+                    }
+                }
+                Ok(Control::StartTerminalAuth) => self.start_terminal()?,
+                Ok(Control::TerminalInput(text)) => {
+                    use std::io::Write;
+                    let input = self
+                        .login_input
+                        .as_mut()
+                        .ok_or_else(|| bad("no interactive login is running"))?;
+                    input.write_all(text.as_bytes())?;
+                    input.flush()?;
+                }
                 Ok(Control::Prompt(text)) => {
                     if self.session_id.is_none() || self.prompt_active {
                         (self.host.events)(AcpEvent::Error {
@@ -450,14 +676,48 @@ impl Session {
                     }
                 }
                 Ok(Control::Permission(id, allow)) => self.permission(&id, allow)?,
+                Ok(Control::Elicitation(id, action)) => {
+                    if let Some(elicitation) = self.elicitations.get_mut(&id) {
+                        if !elicitation.answered {
+                            elicitation.answered = true;
+                            let request = elicitation.request.clone();
+                            self.elicitation_urls
+                                .lock()
+                                .expect("elicitation lock")
+                                .remove(&id);
+                            self.reply(&request, Ok(json!({"action":action})))?;
+                        }
+                    }
+                }
                 Ok(Control::CancelTurn) => self.cancel_pending(),
                 Err(TryRecvError::Disconnected) => return Ok(()),
                 Err(TryRecvError::Empty) => {}
             }
+            let terminal_status = self
+                .login_terminal
+                .lock()
+                .expect("login terminal lock")
+                .as_mut()
+                .map(|terminal| terminal.try_wait())
+                .transpose()?
+                .flatten();
+            if let Some(status) = terminal_status {
+                self.stop_terminal();
+                (self.host.events)(AcpEvent::TerminalAuthComplete {
+                    success: status.success,
+                });
+                if !status.success {
+                    return Err(bad("interactive account login exited without success"));
+                }
+                self.terminal_authenticated = true;
+                messages = self.reconnect()?;
+                self.initialize()?;
+                deadline = Instant::now() + timeout;
+            }
             match messages.recv_timeout(Duration::from_millis(10)) {
                 Ok(Ok(Some(message))) => {
                     self.message(message)?;
-                    deadline = Instant::now() + Duration::from_secs(10);
+                    deadline = Instant::now() + timeout;
                 }
                 Ok(Ok(None)) => return Ok(()),
                 Ok(Err(error)) => return Err(error),
@@ -466,7 +726,313 @@ impl Session {
             }
         }
     }
+    fn initialize(&mut self) -> Result<(), AcpError> {
+        self.request("initialize", json!({"protocolVersion":1,"clientInfo":{"name":"Coloride","version":"0.1.0"},"clientCapabilities":{"auth":{"terminal":self.host.runner.supports_terminal(),"_meta":{"gateway":true}},"elicitation":{"url":{}},"fs":{"readTextFile":true,"writeTextFile":true},"terminal":true,"_meta":{"writesAreProposals":true}}}))
+    }
+    fn stop_terminal(&mut self) {
+        self.login_input.take();
+        if let Some(mut terminal) = self
+            .login_terminal
+            .lock()
+            .expect("login terminal lock")
+            .take()
+        {
+            terminal.kill();
+        }
+    }
+    fn start_terminal(&mut self) -> Result<(), AcpError> {
+        self.login_attempted = true;
+        let method = self
+            .login_method
+            .take()
+            .ok_or_else(|| bad("no terminal login is pending"))?;
+        let spec = auth::terminal_spec(&self.base_spec, &method)?;
+        let launch = Arc::new(LaunchExecutor {
+            spec: spec.clone(),
+            runner: self.host.runner.clone(),
+            child: Mutex::new(None),
+            interactive: true,
+            terminal: Mutex::new(None),
+        });
+        let broker = ToolBroker::new(
+            self.host.repository.clone(),
+            PolicyEngine::new(self.host.authority.clone()),
+            launch.clone(),
+            self.host.clock.clone(),
+        );
+        let call = tool_call(
+            &self.host,
+            "interactive-login",
+            "run_sandbox_command",
+            ToolCapability::RunSandboxCommand,
+            BTreeMap::from([
+                (
+                    "program".into(),
+                    ToolArgValue::Text(spec.program.to_string_lossy().into_owned()),
+                ),
+                ("cwd".into(), ToolArgValue::Text(".".into())),
+                (
+                    "args".into(),
+                    ToolArgValue::StringList(
+                        spec.args
+                            .iter()
+                            .map(|arg| arg.to_string_lossy().into_owned())
+                            .collect(),
+                    ),
+                ),
+            ]),
+            false,
+        );
+        broker
+            .execute(
+                &self.host.lease,
+                &self.host.signed,
+                &call,
+                &[],
+                (self.host.clock)(),
+            )
+            .map_err(|e| AcpError::Launch(e.to_string()))?;
+        let mut terminal = launch
+            .terminal
+            .lock()
+            .expect("terminal launch lock")
+            .take()
+            .ok_or_else(|| bad("login launch replay refused"))?;
+        self.login_input = Some(
+            terminal
+                .take_stdin()
+                .ok_or_else(|| bad("login stdin unavailable"))?,
+        );
+        let mut output = terminal
+            .take_stdout()
+            .ok_or_else(|| bad("login stdout unavailable"))?;
+        *self.login_terminal.lock().expect("login terminal lock") = Some(terminal);
+        let terminal = self.login_terminal.clone();
+        let events = self.host.events.clone();
+        let limit = self.base_spec.limits.max_output_bytes;
+        self.restart_readers.push(thread::spawn(move || {
+            let mut bytes = 0u64;
+            let mut buffer = [0u8; 4096];
+            while let Ok(count) = output.read(&mut buffer) {
+                if count == 0 {
+                    break;
+                }
+                bytes = bytes.saturating_add(count as u64);
+                if bytes > limit {
+                    if let Some(terminal) = terminal.lock().expect("login terminal lock").as_mut() {
+                        terminal.kill();
+                    }
+                    break;
+                }
+                events(AcpEvent::TerminalAuthOutput {
+                    data: buffer[..count].to_vec(),
+                });
+            }
+        }));
+        Ok(())
+    }
+    fn reconnect(&mut self) -> Result<Receiver<Result<Option<Value>, AcpError>>, AcpError> {
+        if let Some(previous) = self.executor.agent.lock().expect("agent lock").take() {
+            previous.lock().expect("child lock").kill();
+        }
+        let launch = Arc::new(LaunchExecutor {
+            spec: self.base_spec.clone(),
+            runner: self.host.runner.clone(),
+            child: Mutex::new(None),
+            interactive: false,
+            terminal: Mutex::new(None),
+        });
+        let broker = ToolBroker::new(
+            self.host.repository.clone(),
+            PolicyEngine::new(self.host.authority.clone()),
+            launch.clone(),
+            self.host.clock.clone(),
+        );
+        let call = tool_call(
+            &self.host,
+            "launch-after-login",
+            "run_sandbox_command",
+            ToolCapability::RunSandboxCommand,
+            BTreeMap::from([
+                (
+                    "program".into(),
+                    ToolArgValue::Text(self.base_spec.program.to_string_lossy().into_owned()),
+                ),
+                ("cwd".into(), ToolArgValue::Text(".".into())),
+                (
+                    "args".into(),
+                    ToolArgValue::StringList(
+                        self.base_spec
+                            .args
+                            .iter()
+                            .map(|arg| arg.to_string_lossy().into_owned())
+                            .collect(),
+                    ),
+                ),
+            ]),
+            false,
+        );
+        broker
+            .execute(
+                &self.host.lease,
+                &self.host.signed,
+                &call,
+                &[],
+                (self.host.clock)(),
+            )
+            .map_err(|e| AcpError::Launch(e.to_string()))?;
+        let mut child = launch
+            .child
+            .lock()
+            .expect("launch lock")
+            .take()
+            .ok_or_else(|| bad("reconnect launch replay refused"))?;
+        self.input = child.take_stdin().ok_or_else(|| bad("stdin unavailable"))?;
+        let output = child
+            .take_stdout()
+            .ok_or_else(|| bad("stdout unavailable"))?;
+        let mut errors = child
+            .take_stderr()
+            .ok_or_else(|| bad("stderr unavailable"))?;
+        let child = Arc::new(Mutex::new(child));
+        *self.executor.agent.lock().expect("agent lock") = Some(child.clone());
+        let (tx, rx) = mpsc::sync_channel(MAX_PENDING_REQUESTS);
+        let limit = self.base_spec.limits.max_output_bytes;
+        let output_child = child.clone();
+        self.restart_readers.push(thread::spawn(move || {
+            let mut input = BufReader::new(OutputBudget::new(output, limit));
+            loop {
+                let item = read_message(&mut input);
+                let ended = !matches!(&item, Ok(Some(_)));
+                if ended {
+                    output_child.lock().expect("child lock").kill();
+                }
+                if tx.send(item).is_err() || ended {
+                    break;
+                }
+            }
+        }));
+        self.restart_readers.push(thread::spawn(move || {
+            let mut bytes = 0u64;
+            let mut buffer = [0u8; 4096];
+            while let Ok(count) = errors.read(&mut buffer) {
+                if count == 0 {
+                    break;
+                }
+                bytes = bytes.saturating_add(count as u64);
+                if bytes > limit {
+                    child.lock().expect("child lock").kill();
+                    break;
+                }
+            }
+        }));
+        self.outgoing.clear();
+        self.next_id = 0;
+        self.seen.clear();
+        Ok(rx)
+    }
+    fn choose_authentication(&mut self) -> Result<(), AcpError> {
+        match auth::authentication(&self.credentials, &self.auth_methods)? {
+            AuthenticationPlan::Skip => self.new_session(),
+            AuthenticationPlan::Request(params) => self.request("authenticate", params),
+            AuthenticationPlan::Terminal(method) => {
+                if !self.host.runner.supports_terminal() {
+                    return Err(bad(
+                        "interactive sandboxed login is unavailable on this engine",
+                    ));
+                }
+                auth::terminal_spec(&self.base_spec, &method)?;
+                (self.host.events)(AcpEvent::TerminalAuth {
+                    name: method.name.clone(),
+                    args: method.args.clone(),
+                    env: method.env.clone(),
+                });
+                self.login_method = Some(method);
+                Ok(())
+            }
+        }
+    }
+    fn new_session(&mut self) -> Result<(), AcpError> {
+        self.request(
+            "session/new",
+            json!({"cwd":self.host.worktree_root,"mcpServers":[]}),
+        )
+    }
+    fn elicit(&mut self, message: Value) -> Result<(), AcpError> {
+        if message.get("id").is_none() {
+            return Err(bad("elicitation must be a request"));
+        }
+        let key = message["id"].to_string();
+        if self.seen.len() >= MAX_SESSION_ITEMS
+            || !self.seen.insert(key.clone())
+            || self.elicitations.len() >= MAX_PENDING_REQUESTS
+        {
+            return Err(bad("elicitation request limit or duplicate id"));
+        }
+        let params = &message["params"];
+        let in_session = self.session_id.is_some() && params["sessionId"] == json!(self.session_id);
+        let in_auth = params["requestId"]
+            .as_u64()
+            .is_some_and(|id| self.outgoing.get(&id).is_some_and(|m| m == "authenticate"));
+        if !in_session && !in_auth {
+            return Err(bad("elicitation has no active request or session"));
+        }
+        if params["mode"] != "url" {
+            return self.reply(&message, Err("Unsupported elicitation mode".into()));
+        }
+        let url = params["url"]
+            .as_str()
+            .filter(|url| url.len() <= 8192)
+            .ok_or_else(|| bad("invalid elicitation URL"))?
+            .to_owned();
+        auth::browser_url(&self.credentials, &url)?;
+        let elicitation_id = params["elicitationId"]
+            .as_str()
+            .filter(|id| !id.is_empty() && id.len() <= 256)
+            .ok_or_else(|| bad("invalid elicitation id"))?
+            .to_owned();
+        if self
+            .elicitations
+            .values()
+            .any(|e| e.elicitation_id == elicitation_id)
+        {
+            return Err(bad("duplicate elicitation id"));
+        }
+        let text = params["message"]
+            .as_str()
+            .filter(|text| text.len() <= MAX_TEXT_BYTES)
+            .ok_or_else(|| bad("invalid elicitation message"))?
+            .to_owned();
+        self.elicitation_urls
+            .lock()
+            .expect("elicitation lock")
+            .insert(key.clone(), url.clone());
+        self.elicitations.insert(
+            key.clone(),
+            UrlElicitation {
+                request: message,
+                elicitation_id,
+                answered: false,
+            },
+        );
+        (self.host.events)(AcpEvent::Elicitation {
+            id: key,
+            url,
+            message: text,
+        });
+        Ok(())
+    }
     fn cancel_pending(&mut self) {
+        self.elicitation_urls
+            .lock()
+            .expect("elicitation lock")
+            .clear();
+        for (id, elicitation) in std::mem::take(&mut self.elicitations) {
+            if !elicitation.answered {
+                let _ = self.reply(&elicitation.request, Ok(json!({"action":"cancel"})));
+            }
+            (self.host.events)(AcpEvent::ElicitationComplete { id });
+        }
         self.permissions.lock().expect("permissions lock").clear();
         let pending = std::mem::take(&mut self.pending);
         for (id, item) in pending {
@@ -499,6 +1065,16 @@ impl Session {
                 .remove(&id)
                 .ok_or_else(|| bad("unsolicited response"))?;
             if let Some(error) = message.get("error") {
+                // A saved successful terminal login is only a hint. An expired/revoked login
+                // must go through the agent's advertised flow again, once, without a fallback.
+                if method == "session/new"
+                    && self.terminal_authenticated
+                    && !self.login_attempted
+                    && error["code"] == -32000
+                {
+                    self.terminal_authenticated = false;
+                    return self.choose_authentication();
+                }
                 return Err(AcpError::Protocol(format!("{method}: {error}")));
             }
             match method.as_str() {
@@ -506,11 +1082,18 @@ impl Session {
                     if message["result"]["protocolVersion"] != 1 {
                         return Err(bad("unsupported protocol version"));
                     }
-                    self.request(
-                        "session/new",
-                        json!({"cwd":self.host.worktree_root,"mcpServers":[]}),
-                    )?;
+                    let methods = auth::methods(&message["result"]["authMethods"])?;
+                    (self.host.events)(AcpEvent::AuthMethods {
+                        methods: methods.clone(),
+                    });
+                    self.auth_methods = methods;
+                    if self.terminal_authenticated {
+                        self.new_session()?;
+                    } else {
+                        self.choose_authentication()?;
+                    }
                 }
+                "authenticate" => self.new_session()?,
                 "session/new" => {
                     let id = message["result"]["sessionId"]
                         .as_str()
@@ -530,8 +1113,37 @@ impl Session {
             }
             return Ok(());
         };
+        // ACP extension notifications are optional. They may describe connection-level
+        // state before session/new; ignoring an unknown one never grants a capability.
+        if (method.starts_with('_') || method == "auth/status_update")
+            && message.get("id").is_none()
+        {
+            return Ok(());
+        }
+        if method == "elicitation/create" {
+            return self.elicit(message);
+        }
+        if method == "elicitation/complete" && message.get("id").is_none() {
+            let elicitation_id = message["params"]["elicitationId"]
+                .as_str()
+                .unwrap_or_default();
+            let key = self
+                .elicitations
+                .iter()
+                .find(|(_, e)| e.elicitation_id == elicitation_id)
+                .map(|(id, _)| id.clone());
+            if let Some(id) = key {
+                self.elicitations.remove(&id);
+                self.elicitation_urls
+                    .lock()
+                    .expect("elicitation lock")
+                    .remove(&id);
+                (self.host.events)(AcpEvent::ElicitationComplete { id });
+            }
+            return Ok(());
+        }
         if self.session_id.is_none() || message["params"]["sessionId"] != json!(self.session_id) {
-            return Err(bad("wrong session"));
+            return Err(bad(&format!("wrong session for {method}")));
         }
         if method == "session/update" && message.get("id").is_none() {
             let mut update = message["params"]["update"].clone();

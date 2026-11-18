@@ -27,3 +27,4 @@ zip = { version = "=4.2.0", default-features = false, features = ["deflate-flate
 
 [dev-dependencies]
 tempfile.workspace = true
+sandbox-runner.workspace = true

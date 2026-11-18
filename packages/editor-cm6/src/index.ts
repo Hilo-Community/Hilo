@@ -10,3 +10,4 @@ export * from "./languages.js";
 export * from "./onboarding-vsix.js";
 export * from "./scope-guides.js";
 export * from "./selection.js";
+export * from "./prompt-input.js";

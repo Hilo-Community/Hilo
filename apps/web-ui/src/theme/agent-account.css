@@ -1,0 +1,67 @@
+.coloride-agent-account {
+  grid-column: 1 / -1;
+  width: 100%;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color, #333);
+}
+
+.coloride-agent-account[hidden] {
+  display: none;
+}
+
+.coloride-agent-account > div,
+.coloride-agent-account > div > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.coloride-agent-account h4,
+.coloride-agent-account p,
+.coloride-agent-account label {
+  width: 100%;
+  margin: 0;
+}
+
+.coloride-agent-account p {
+  color: var(--text-secondary, #aaa);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.coloride-agent-account label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.coloride-agent-account input,
+.coloride-agent-account textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-color, #333);
+  border-radius: 5px;
+  background: var(--background-color, #151515);
+  color: inherit;
+}
+
+.coloride-agent-authentication-url {
+  overflow-wrap: anywhere;
+  font-family: monospace;
+  user-select: text;
+}
+
+.coloride-agent-login-screen {
+  min-width: 0;
+  height: 360px;
+  margin-top: 12px;
+  width: 100%;
+}
+
+.coloride-agent-terminal-login pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

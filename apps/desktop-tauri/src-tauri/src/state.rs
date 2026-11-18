@@ -19,6 +19,8 @@ pub(crate) struct DesktopAppState {
     pub(crate) next_agent_id: AtomicU32,
     /// The ACP agent registry of the Settings screen, opened on first use.
     pub(crate) agent_registry: Mutex<Option<Arc<agent_registry::AgentRegistry>>>,
+    /// Serializes account resets against session startup/home provisioning.
+    pub(crate) agent_account_lock: Mutex<()>,
     pub(crate) workspace_root: Mutex<Option<PathBuf>>,
     /// Trust gate of the open workspace. `None` (no workspace, or a root whose decision cannot
     /// be recorded) means untrusted: nothing may be launched.
@@ -63,6 +65,7 @@ impl DesktopAppState {
             agents: Mutex::new(HashMap::new()),
             next_agent_id: AtomicU32::new(1),
             agent_registry: Mutex::new(None),
+            agent_account_lock: Mutex::new(()),
             workspace_root: Mutex::new(None),
             trust_gate: Mutex::new(None),
             language_services: Mutex::new(None),

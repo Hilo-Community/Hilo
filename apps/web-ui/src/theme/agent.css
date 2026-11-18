@@ -77,69 +77,72 @@
 .coloride-agent-status {
   box-sizing: border-box;
 }
-.coloride-agent-panel[data-mode="empty"] {
-  justify-content: center;
-  padding-inline: 20px;
-}
-.coloride-agent-panel[data-mode="empty"] .coloride-agent-output {
-  display: none;
-}
-.coloride-agent-panel[data-mode="empty"] .coloride-agent-meta {
-  order: 1;
-}
-.coloride-agent-panel[data-mode="empty"] .coloride-agent-composer {
-  order: 2;
-}
-.coloride-agent-panel[data-mode="empty"] .coloride-agent-status {
-  order: 3;
-}
+/* One plain input bar in every state (no roomy card before the first message): on one line the
+   text sits centred on the left, the agent and the send button on the right. Once the text needs
+   several lines (`is-multiline`, set by the prompt input) it takes the whole width on top and
+   the agent and send button move to a row under it. */
 .coloride-agent-composer {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
   flex: none;
   width: 100%;
   max-width: 820px;
+  min-height: 38px;
   margin: 0 auto;
-  padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  padding: 6px 7px 6px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
   /* The sidebar's gray, as the reference composer uses. */
   background: var(--color-sidebar, #212121);
 }
 .coloride-agent-composer:focus-within {
   border-color: rgba(255, 255, 255, 0.18);
 }
-.coloride-agent-panel .coloride-agent-composer textarea {
-  width: 100%;
-  min-height: 26px;
-  max-height: 220px;
-  margin: 0;
-  padding: 12px;
-  border: 0;
-  outline: none;
-  resize: none;
-  background: transparent;
+/* The text field is a small CodeMirror view (editor-cm6 createPromptInput), so the caret is
+   CodeMirror's thin one rather than the system's. */
+.coloride-agent-composer .cm-editor {
+  flex: 1;
+  min-width: 0;
+  /* Undo the code editor's global look (editor.css: editor background, monospace 13px, full
+     height): this is a chat field in the UI font on the composer's own gray. */
+  width: auto;
+  height: auto;
+  font-family: inherit;
+  padding: 1px 0;
   color: var(--color-text-primary, #e8e8ea);
-  font: inherit;
   font-size: 14px;
   line-height: 1.5;
 }
-/* Reference: the text area is 90px tall, never under 72px. */
-.coloride-agent-panel[data-mode="empty"] .coloride-agent-composer textarea {
-  min-height: 90px;
+/* editor.css paints every .cm-editor with `!bg-main` inside @layer components, and an important
+   declaration in a layer beats an unlayered one, so the override lives in the same layer with
+   a more specific selector. */
+.coloride-agent-composer.is-multiline {
+  padding-top: 9px;
+  border-radius: 18px;
 }
-.coloride-agent-panel .coloride-agent-composer textarea::placeholder {
-  color: var(--color-text-secondary, #878888);
+.coloride-agent-composer.is-multiline .cm-editor {
+  flex-basis: 100%;
+  padding-right: 7px;
 }
-.coloride-agent-panel .coloride-agent-composer textarea:focus-visible {
-  outline: none;
+.coloride-agent-composer.is-multiline .coloride-agent-bar {
+  margin-left: auto;
+}
+@layer components {
+  .coloride-agent-composer .cm-editor {
+    background: transparent !important;
+  }
 }
 .coloride-agent-bar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex: none;
   gap: 12px;
-  padding: 0 12px 12px;
+  padding: 0;
+  margin-bottom: 0;
 }
 /* The agent, where the reference has its model picker: 24px tall, 8px left and 6px right. */
 .coloride-agent-who {
@@ -258,28 +261,10 @@
   height: 11px;
 }
 
-/* In conversation the composer is one line, like the reference: text on the left, the agent and
-   the send button on the right; it grows upward as the text wraps. */
 .coloride-agent-panel {
   container-type: inline-size;
 }
-.coloride-agent-panel[data-mode="chat"] .coloride-agent-composer {
-  flex-direction: row;
-  align-items: flex-end;
-  gap: 12px;
-  padding: 8px 8px 8px 16px;
-  border-radius: 22px;
-}
-.coloride-agent-panel[data-mode="chat"] .coloride-agent-composer textarea {
-  flex: 1;
-  min-width: 0;
-  padding: 2px 0;
-}
-.coloride-agent-panel[data-mode="chat"] .coloride-agent-bar {
-  flex: none;
-  padding: 0;
-}
-.coloride-agent-panel[data-mode="chat"] .coloride-agent-who {
+.coloride-agent-who {
   margin-right: 0;
 }
 .coloride-agent-meta,

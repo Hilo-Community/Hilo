@@ -300,10 +300,35 @@ fn start_session(
     events: Channel<AcpEvent>,
 ) -> Result<u32, String> {
     let state = app.state::<DesktopAppState>();
+    let _account_lock = state
+        .agent_account_lock
+        .lock()
+        .map_err(|_| "account lock poisoned")?;
     let gate = gate(&state)?;
     // The program comes from the registry by id, never from the webview, and the user already
     // confirmed it when installing; it still runs only in the read-only sandbox.
-    let launch = resolve_launch(&state, &installed_agent_id)?;
+    let mut launch = resolve_launch(&state, &installed_agent_id)?;
+    let registry = super::agent_registry::registry(&state)?;
+    let account = registry
+        .account(&launch.installation_id)
+        .map_err(|e| e.to_string())?;
+    let mut runtime = super::agent_account::runtime(
+        &state.app_data_dir,
+        &installed_agent_id,
+        &launch,
+        &account.preferences,
+        account.terminal_authenticated,
+    )?;
+    if let Some(prepared) = registry
+        .prepare_runtime(&installed_agent_id)
+        .map_err(|error| error.to_string())?
+    {
+        runtime
+            .environment
+            .insert(prepared.variable, prepared.program.into_os_string());
+        launch.read_only_paths.push(prepared.read_only_path);
+    }
+    let installation_id = launch.installation_id.clone();
     gate.authorize(GatedCapability::WorkspaceLocalBinary)
         .map_err(|e| e.to_string())?;
     let id = state.next_agent_id.fetch_add(1, Ordering::SeqCst);
@@ -314,8 +339,9 @@ fn start_session(
     let program = program
         .strip_prefix(&root)
         .map_or_else(|_| program.clone(), |p| task.worktree.join(p));
-    let (repository, lease, signed, authority) =
-        start_task(&state, task_spec(&task.task_id, &root, task.checkpoint))?;
+    let mut spec = task_spec(&task.task_id, &root, task.checkpoint);
+    spec.policy.network_allowed = matches!(runtime.network, AgentNetwork::Proxy { .. });
+    let (repository, lease, signed, authority) = start_task(&state, spec)?;
     let runner =
         sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).map_err(|e| e.to_string())?;
     let engine = context_engine::SqliteWalContextEngine::open_or_rebuild_from_workspace(
@@ -335,6 +361,11 @@ fn start_session(
         _task: Some(task.files),
     };
     let host = AcpHost {
+        session_resources: runtime
+            .gateway
+            .into_iter()
+            .map(|gateway| Box::new(gateway) as Box<dyn Send>)
+            .collect(),
         gate: gate.clone(),
         worktree_root: task.worktree,
         repository,
@@ -345,15 +376,43 @@ fn start_session(
         text: Arc::new(text),
         clock: Arc::new(now),
         events: Arc::new(move |event| {
+            if let AcpEvent::TerminalAuthComplete { success } = &event {
+                if let Err(error) =
+                    registry.record_terminal_authentication(&installation_id, *success)
+                {
+                    tracing::warn!(%error, "could not save terminal authentication state");
+                }
+            }
+            if let AcpEvent::AuthMethods { methods } = &event {
+                match methods
+                    .iter()
+                    .map(serde_json::to_value)
+                    .collect::<Result<Vec<_>, _>>()
+                {
+                    Ok(methods) => {
+                        if let Err(error) = registry.record_auth_methods(&installation_id, methods)
+                        {
+                            tracing::warn!(%error, "could not save agent authentication methods");
+                        }
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, "could not serialize agent authentication methods")
+                    }
+                }
+            }
             let _ = events.send(event);
         }),
     };
     let launch = AcpLaunch {
+        identity: launch.installation_id,
         program,
         args: launch.args,
         read_only_paths: launch.read_only_paths,
-        credentials: AgentCredentials::Unauthenticated,
-        network: AgentNetwork::Offline,
+        writable_paths: vec![runtime.home],
+        preference_domains: runtime.preference_domains,
+        environment: runtime.environment,
+        credentials: runtime.credentials,
+        network: runtime.network,
         limits: ResourceLimits {
             wall_timeout: SESSION_LIFETIME,
             max_cpu_time: Some(CPU_ALLOWANCE),
@@ -425,6 +484,68 @@ pub async fn agent_stop_command(app: tauri::AppHandle, id: u32) -> Result<(), St
     .map_err(|e| e.to_string())?
 }
 
+/// Opens only a URL retained from this agent's pending, allowlisted elicitation. The request
+/// carries an opaque request ID, never a URL supplied by the webview.
+#[tauri::command]
+pub async fn agent_elicitation_command(
+    app: tauri::AppHandle,
+    id: u32,
+    request_id: String,
+    action: String,
+) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let agent = agent(&app.state::<DesktopAppState>(), id)?;
+    let agent = agent.lock().map_err(|_| "agent lock poisoned")?;
+    if action == "accept" {
+        let url = agent
+            .elicitation_url(&request_id)
+            .ok_or("Authentication request is no longer pending")?;
+        app.opener()
+            .open_url(url, None::<&str>)
+            .map_err(|_| "Could not open the authentication URL")?;
+    }
+    agent
+        .answer_elicitation(request_id, action)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn agent_terminal_auth_start_command(
+    state: tauri::State<'_, DesktopAppState>,
+    id: u32,
+) -> Result<(), String> {
+    agent(&state, id)?
+        .lock()
+        .map_err(|_| "agent lock poisoned")?
+        .start_terminal_auth()
+        .map_err(|e| e.to_string())
+}
+#[tauri::command]
+pub fn agent_terminal_auth_input_command(
+    state: tauri::State<'_, DesktopAppState>,
+    id: u32,
+    data: String,
+) -> Result<(), String> {
+    agent(&state, id)?
+        .lock()
+        .map_err(|_| "agent lock poisoned")?
+        .write_terminal_auth(data)
+        .map_err(|e| e.to_string())
+}
+#[tauri::command]
+pub fn agent_terminal_auth_resize_command(
+    state: tauri::State<'_, DesktopAppState>,
+    id: u32,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
+    agent(&state, id)?
+        .lock()
+        .map_err(|_| "agent lock poisoned")?
+        .resize_terminal_auth(cols, rows)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn agent_permission_command(
     app: tauri::AppHandle,
@@ -466,6 +587,174 @@ pub async fn agent_permission_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Opt-in transport diagnostic using a deliberately invalid key. This does not satisfy
+    /// the real-provider acceptance turn; it detects home, gateway, TLS and adapter failures
+    /// without accessing any user credential or project.
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "requires installed ACP packages and provider network; uses a synthetic invalid key"]
+    fn installed_gateway_transport_smoke() {
+        let registry_path =
+            std::env::var_os("COLORIDE_SMOKE_REGISTRY").expect("set COLORIDE_SMOKE_REGISTRY");
+        let agent_id = std::env::var("COLORIDE_SMOKE_AGENT").expect("set COLORIDE_SMOKE_AGENT");
+        // `account`: the agent's own login through the CONNECT allowlist; the test stops at the
+        // verification request and never completes a sign-in.
+        let account_mode = std::env::var("COLORIDE_SMOKE_MODE").as_deref() == Ok("account");
+        let registry = agent_registry::AgentRegistry::open(registry_path).unwrap();
+        let mut launch = registry.launch_command(&agent_id).unwrap();
+        let data = tempfile::tempdir().unwrap();
+        let work = tempfile::tempdir().unwrap();
+        let root = work.path().canonicalize().unwrap();
+        std::fs::write(
+            root.join("README.md"),
+            "Disposable authentication transport fixture.\n",
+        )
+        .unwrap();
+        let mut runtime = crate::commands::agent_account::runtime_with_key_reader(
+            data.path(),
+            &agent_id,
+            &launch,
+            &agent_registry::accounts::AccountPreferences {
+                mode: if account_mode {
+                    agent_registry::accounts::AccountMode::Account
+                } else {
+                    agent_registry::accounts::AccountMode::ApiKey
+                },
+                ..Default::default()
+            },
+            false,
+            |_| {
+                Ok(Some(zeroize::Zeroizing::new(
+                    "coloride-synthetic-invalid-key".into(),
+                )))
+            },
+        )
+        .unwrap();
+        if let (Ok(variable), Some(path)) = (
+            std::env::var("COLORIDE_SMOKE_OVERRIDE_NAME"),
+            std::env::var_os("COLORIDE_SMOKE_OVERRIDE_PATH"),
+        ) {
+            let path = PathBuf::from(path).canonicalize().unwrap();
+            runtime
+                .environment
+                .insert(variable.into(), path.clone().into_os_string());
+            launch
+                .read_only_paths
+                .push(path.parent().unwrap().to_path_buf());
+        }
+        let state = crate::state::test_state(data.path());
+        let metrics = runtime.gateway.as_ref().unwrap().metrics();
+        let mut spec = task_spec("installed-smoke", &root, "fixture".into());
+        spec.policy.network_allowed = true;
+        let (repository, lease, signed, authority) = start_task(&state, spec).unwrap();
+        let gate = WorkspaceTrustGate::open(data.path().join("trust"), &root).unwrap();
+        gate.grant().unwrap();
+        let runner = sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let host = AcpHost {
+            session_resources: runtime
+                .gateway
+                .into_iter()
+                .map(|gateway| Box::new(gateway) as Box<dyn Send>)
+                .collect(),
+            gate,
+            worktree_root: root.clone(),
+            repository,
+            lease,
+            signed,
+            authority,
+            runner: Arc::from(runner),
+            text: Arc::new(HostText {
+                root,
+                bridge: state.bridge.clone(),
+                mcp: None,
+                _task: None,
+            }),
+            clock: Arc::new(now),
+            events: Arc::new(move |event| {
+                let _ = tx.send(event);
+            }),
+        };
+        let mut session = AcpSessionSupervisor::start(
+            host,
+            AcpLaunch {
+                identity: launch.installation_id,
+                program: launch.program,
+                args: launch.args,
+                read_only_paths: launch.read_only_paths,
+                environment: runtime.environment,
+                writable_paths: vec![runtime.home],
+                preference_domains: runtime.preference_domains,
+                credentials: runtime.credentials,
+                network: runtime.network,
+                limits: ResourceLimits {
+                    wall_timeout: Duration::from_secs(90),
+                    max_cpu_time: Some(CPU_ALLOWANCE),
+                    ..Default::default()
+                },
+            },
+        )
+        .unwrap();
+        let mut ready = false;
+        loop {
+            match rx
+                .recv_timeout(Duration::from_secs(45))
+                .expect("installed agent stalled")
+            {
+                AcpEvent::Ready { .. } => {
+                    ready = true;
+                    eprintln!("{agent_id}: gateway-authenticated session ready");
+                    session
+                        .prompt("Reply with the single word READY. Do not use tools.".into())
+                        .unwrap();
+                }
+                AcpEvent::Stopped { reason } => {
+                    eprintln!("{agent_id}: {reason}");
+                    let traffic = metrics.snapshot();
+                    eprintln!("{agent_id}: gateway evidence: {traffic:?}");
+                    let reason = reason.to_lowercase();
+                    assert!(
+                        reason.contains("401")
+                            || reason.contains("unauthorized")
+                            || reason.contains("invalid_api_key")
+                            || (ready && traffic.last_status == Some(401)),
+                        "unexpected transport failure"
+                    );
+                    break;
+                }
+                AcpEvent::Update { update } if update["sessionUpdate"] == "turn_complete" => {
+                    let traffic = metrics.snapshot();
+                    eprintln!(
+                        "{agent_id}: turn completed; session-ready={ready}; gateway={traffic:?}; stopReason={}",
+                        update["stopReason"]
+                    );
+                    assert!(ready);
+                    assert!(
+                        traffic.responses > 0,
+                        "agent did not reach the Host gateway"
+                    );
+                    assert_eq!(traffic.last_status, Some(401));
+                    break;
+                }
+                AcpEvent::AuthMethods { methods } => {
+                    eprintln!("{agent_id}: {} advertised auth methods", methods.len())
+                }
+                AcpEvent::Elicitation { url, .. } if account_mode => {
+                    let host = url
+                        .strip_prefix("https://")
+                        .and_then(|rest| rest.split(['/', '?', '#']).next())
+                        .filter(|host| !host.is_empty());
+                    eprintln!("{agent_id}: login verification requested on {host:?}");
+                    assert!(host.is_some());
+                    break;
+                }
+                AcpEvent::Error { reason } => eprintln!("{agent_id}: {reason}"),
+                _ => {}
+            }
+        }
+        session.stop();
+    }
 
     fn host_text(root: &Path, bridge: DesktopBinaryEditorBridge) -> HostText {
         HostText {

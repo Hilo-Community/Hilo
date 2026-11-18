@@ -13,10 +13,16 @@ export function createTauriAgentHost(invoke: Invoke, channel: () => AgentChannel
         events,
       });
       return {
+        startLogin: () => invoke("agent_terminal_auth_start_command", { id }),
+        writeLogin: (data) => invoke("agent_terminal_auth_input_command", { id, data }),
+        resizeLogin: (cols, rows) =>
+          invoke("agent_terminal_auth_resize_command", { id, cols, rows }),
         prompt: (text) => invoke("agent_prompt_command", { id, text }),
         cancel: () => invoke("agent_cancel_command", { id }),
         stop: () => invoke("agent_stop_command", { id }),
         answer: (requestId, allow) => invoke("agent_permission_command", { id, requestId, allow }),
+        elicit: (requestId, action) =>
+          invoke("agent_elicitation_command", { id, requestId, action }),
       };
     },
   };

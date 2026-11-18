@@ -48,7 +48,11 @@ const SYSTEM_READ_ROOTS: &[&str] = &[
     "/System",
     "/Library",
     "/opt",
-    "/private/etc",
+    "/private/etc/ssl",
+    "/private/etc/resolv.conf",
+    "/private/etc/hosts",
+    "/private/etc/services",
+    "/private/etc/protocols",
     "/private/var/select",
     "/dev",
     "/Applications/Xcode.app/Contents/Developer",
@@ -133,6 +137,7 @@ fn readable_roots(spec: &ValidatedSpec) -> Vec<PathBuf> {
         .map(PathBuf::from)
         .chain(std::iter::once(spec.worktree_root.clone()))
         .chain(spec.read_only_paths.iter().cloned())
+        .chain(spec.writable_paths.iter().cloned())
         .collect()
 }
 
@@ -163,11 +168,19 @@ pub(crate) fn render_profile(spec: &ValidatedSpec, home: &Path) -> Result<Profil
         .iter()
         .map(|path| profile.subpath("RO", path))
         .collect();
+    let private: Vec<String> = spec
+        .writable_paths
+        .iter()
+        .map(|path| profile.subpath("PRIVATE", path))
+        .collect();
 
     // Ancestors of everything allowed: `stat` of each directory on the way, nothing more (so
     // that `cd` and path resolution work, without listing or reading the siblings).
     let mut ancestors = BTreeSet::new();
-    for path in std::iter::once(&spec.worktree_root).chain(&spec.read_only_paths) {
+    for path in std::iter::once(&spec.worktree_root)
+        .chain(&spec.read_only_paths)
+        .chain(&spec.writable_paths)
+    {
         ancestors.extend(
             path.ancestors()
                 .skip(1)
@@ -216,30 +229,61 @@ pub(crate) fn render_profile(spec: &ValidatedSpec, home: &Path) -> Result<Profil
     text.push_str("(allow process-exec)\n(allow process-fork)\n");
     text.push_str("(allow signal (target self))\n(allow process-info* (target self))\n");
     text.push_str("(allow sysctl-read)\n");
+    // Reading the listed preference domains goes through `cfprefsd`; Seatbelt still checks
+    // each domain the process asks for, so no other app's preferences are readable.
+    if !spec.preference_domains.is_empty() {
+        let domains: Vec<String> = spec
+            .preference_domains
+            .iter()
+            .map(|domain| format!("(preference-domain \"{domain}\")"))
+            .collect();
+        text.push_str(&format!(
+            "(allow mach-lookup (global-name \"com.apple.cfprefsd.daemon\") (global-name \"com.apple.cfprefsd.agent\"))\n\
+             (allow ipc-posix-shm-read* (ipc-posix-name-prefix \"apple.cfprefs.\"))\n\
+             (allow user-preference-read {})\n",
+            domains.join(" ")
+        ));
+    }
     text.push_str(&format!(
-        "(allow file-read-metadata (literal \"/\") {system} {})\n",
+        "(allow file-read-metadata (literal \"/\") (literal \"/private\") (literal \"/private/etc\") (literal \"/etc\") {system} {})\n",
         ancestors.join(" ")
     ));
     text.push_str(&format!(
         "(allow file-read* (literal \"/\") {system} {worktree} {})\n",
-        read_only.join(" ")
+        read_only
+            .iter()
+            .chain(&private)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" ")
     ));
     text.push_str(&format!(
-        "(allow file-write* {writable} {})\n",
-        devices.join(" ")
+        "(allow file-write* {writable} {} {})\n",
+        devices.join(" "),
+        private.join(" ")
     ));
     text.push_str("(allow file-ioctl (literal \"/dev/dtracehelper\"))\n");
-    text.push_str(&mediated);
+    if let Some(device) = &spec.terminal_device {
+        let device = profile.literal("PTY", device);
+        profile.text.push_str(&format!("(allow file-read* file-write* file-ioctl {device})\n(allow file-ioctl (literal \"/dev/tty\"))\n"));
+    }
+    profile.text.push_str(&mediated);
+    for path in &spec.denied_read_paths {
+        let path = profile.subpath("DENIED_READ", path);
+        profile
+            .text
+            .push_str(&format!("(deny file-read-data {path})\n"));
+    }
     // No `network` rule means no network. The proxy is the one exception.
     if let NetworkPolicy::LocalProxyOnly(addr) = spec.network {
-        text.push_str(&format!(
+        profile.text.push_str(&format!(
             "(allow network-outbound (remote ip \"localhost:{}\"))\n",
             addr.port()
         ));
     }
     // Last, so that they win over everything above.
     // Tagged like the default rule: the log query filters on the tag.
-    text.push_str(&format!(
+    profile.text.push_str(&format!(
         "(deny file-read* file-write* {} (with message \"coloride-run-{}\"))\n",
         secrets.join(" "),
         spec.run_id
@@ -387,6 +431,7 @@ mod tests {
 
     fn spec() -> ValidatedSpec {
         ValidatedSpec {
+            terminal_device: None,
             mediate_worktree_reads: false,
             worktree_read_only: false,
             worktree_root: "/Users/u/Library/Caches/Coloride/wt".into(),
@@ -395,6 +440,9 @@ mod tests {
             cwd: "/Users/u/Library/Caches/Coloride/wt".into(),
             env: BTreeMap::new(),
             read_only_paths: vec!["/Users/u/project/node_modules".into()],
+            writable_paths: Vec::new(),
+            denied_read_paths: Vec::new(),
+            preference_domains: Vec::new(),
             network: NetworkPolicy::Denied,
             limits: ResourceLimits::default(),
             tmp_dir: "/Users/u/Library/Caches/Coloride/wt/.coloride-tmp/x".into(),
@@ -414,6 +462,23 @@ mod tests {
             !profile.text.contains("/Users/u"),
             "paths must be parameters"
         );
+    }
+
+    #[test]
+    fn preferences_are_reachable_only_for_the_listed_domains_and_only_for_reading() {
+        let profile = render_profile(&spec(), Path::new("/Users/u")).unwrap();
+        assert!(!profile.text.contains("cfprefsd"));
+        assert!(!profile.text.contains("preference"));
+
+        let mut with_domain = spec();
+        with_domain.preference_domains = vec!["com.openai.codex".into()];
+        let profile = render_profile(&with_domain, Path::new("/Users/u")).unwrap();
+        assert!(profile
+            .text
+            .contains("(allow user-preference-read (preference-domain \"com.openai.codex\"))"));
+        assert!(profile.text.contains("com.apple.cfprefsd.daemon"));
+        assert!(!profile.text.contains("user-preference-write"));
+        assert!(!profile.text.contains("preference-domain-regex"));
     }
 
     #[test]

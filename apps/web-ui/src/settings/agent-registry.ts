@@ -1,4 +1,5 @@
 import { AtomicStore } from "../state/atomic-store.js";
+import type { AgentAccountHost } from "./agent-account-panel.js";
 
 /** One agent of the public ACP registry, as the Host offers it on this computer. */
 export interface RegistryAgent {
@@ -36,6 +37,7 @@ export interface AgentRegistryListing {
  * Host also asks the user to confirm an install in a native dialog.
  */
 export interface AgentRegistryHost {
+  account?: AgentAccountHost;
   list(refresh: boolean): Promise<AgentRegistryListing>;
   /** Null when the user declined the confirmation. */
   install(agentId: string, version: string): Promise<InstalledAgent | null>;

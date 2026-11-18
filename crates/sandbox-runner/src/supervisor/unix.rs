@@ -10,7 +10,7 @@ use super::{ChildInput, ChildOutput, Started};
 use crate::error::SandboxError;
 
 /// Sends `SIGKILL` to process group `group`. Returns false if it could not be signalled.
-fn kill_process_group(group: u32) -> bool {
+pub(super) fn kill_process_group(group: u32) -> bool {
     use rustix::process::{kill_process_group, Pid, Signal};
     i32::try_from(group)
         .ok()
@@ -22,13 +22,13 @@ fn kill_process_group(group: u32) -> bool {
 /// reading a pipe whose only write end the Host holds. The kernel closes that end when the Host
 /// dies, whatever the cause; the watchdog then kills the group.
 #[derive(Debug)]
-struct OrphanWatchdog {
+pub(super) struct OrphanWatchdog {
     process: Child,
     _trigger: Option<ChildStdin>,
 }
 
 impl OrphanWatchdog {
-    fn start(group: u32) -> Result<Self, SandboxError> {
+    pub(super) fn start(group: u32) -> Result<Self, SandboxError> {
         // `-s KILL --` is the form dash (the `/bin/sh` of Debian and Ubuntu) accepts for a
         // group id.
         let mut process = Command::new("/bin/sh")
@@ -51,7 +51,7 @@ impl OrphanWatchdog {
     }
 
     /// The group is gone: stop watching before its id can be reused.
-    fn stop(mut self) {
+    pub(super) fn stop(mut self) {
         let _ = self.process.kill();
         let _ = self.process.wait();
     }

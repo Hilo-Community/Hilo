@@ -1,4 +1,5 @@
 import { UI_STRINGS, uiText } from "../ui/ui-strings.js";
+import { AgentAccountPanel } from "./agent-account-panel.js";
 import { SEARCH_ICON, SPINNER_ICON, agentMark } from "./agent-marks.js";
 import {
   type AgentRegistryHost,
@@ -27,8 +28,13 @@ export class AgentRegistryPanel {
   private readonly status: HTMLElement;
   private readonly alert: HTMLElement;
   private readonly list: HTMLElement;
+  private readonly accounts = new Map<string, AgentAccountPanel>();
 
-  constructor(doc: Document, host: AgentRegistryHost, store = new AgentRegistryStore(host)) {
+  constructor(
+    doc: Document,
+    private readonly host: AgentRegistryHost,
+    store = new AgentRegistryStore(host),
+  ) {
     this.store = store;
     const text = UI_STRINGS.settings;
     this.element = doc.createElement("section");
@@ -235,6 +241,27 @@ export class AgentRegistryPanel {
       }
     }
     card.append(actions);
+    if (installed && this.host.account) {
+      actions.append(
+        this.button(
+          "Account",
+          `${installed.name} account`,
+          `${agent.id}:account`,
+          () => {
+            let account = this.accounts.get(installed.id);
+            if (account) account.element.hidden = !account.element.hidden;
+            else if (this.host.account) {
+              account = new AgentAccountPanel(doc, this.host.account, this.host, installed);
+              this.accounts.set(installed.id, account);
+              card.append(account.element);
+            }
+          },
+          { disabled: busy },
+        ),
+      );
+      const account = this.accounts.get(installed.id);
+      if (account) card.append(account.element);
+    }
     return card;
   }
 
@@ -266,6 +293,12 @@ export class AgentRegistryPanel {
     this.status.dataset.kind = state.loading ? "loading" : "notice";
 
     const rows = visibleRows(state);
+    for (const [id, account] of this.accounts) {
+      if (!state.installed.some((agent) => agent.id === id)) {
+        account.dispose();
+        this.accounts.delete(id);
+      }
+    }
     const children: Node[] = rows.map((row) => this.card(row));
     if (!state.loading && rows.length === 0 && !state.error) {
       const empty = doc.createElement("p");
@@ -302,6 +335,8 @@ export class AgentRegistryPanel {
   }
 
   destroy(): void {
+    for (const account of this.accounts.values()) account.dispose();
+    this.accounts.clear();
     this.unsubscribe();
     this.store.dispose();
     this.element.remove();

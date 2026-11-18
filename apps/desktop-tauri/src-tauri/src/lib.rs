@@ -21,6 +21,7 @@ pub(crate) const DOCUMENT_DIAGNOSTICS_EVENT: &str = "coloride-document-diagnosti
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         // Closing the window with unsaved changes: hold it back and ask the UI first.
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -58,6 +59,14 @@ pub fn run() {
             commands::agent::agent_cancel_command,
             commands::agent::agent_stop_command,
             commands::agent::agent_permission_command,
+            commands::agent::agent_elicitation_command,
+            commands::agent::agent_terminal_auth_start_command,
+            commands::agent::agent_terminal_auth_input_command,
+            commands::agent::agent_terminal_auth_resize_command,
+            commands::agent_account::agent_account_status_command,
+            commands::agent_account::agent_provider_key_command,
+            commands::agent_account::agent_account_save_command,
+            commands::agent_account::agent_account_sign_out_command,
             commands::agent_registry::agent_registry_list_command,
             commands::agent_registry::agent_registry_install_command,
             commands::agent_registry::agent_registry_uninstall_command,

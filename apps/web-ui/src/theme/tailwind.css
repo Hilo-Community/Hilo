@@ -15,6 +15,7 @@
 @import "./editor.css";
 @import "./agent.css";
 @import "./settings.css";
+@import "./agent-account.css";
 @source "../**/*.ts";
 
 @theme {

@@ -30,6 +30,17 @@ pub trait SandboxRunner: Send + Sync {
     /// budget is its lifetime; the caller owns the pipes and their volume. Dropping the child
     /// kills its whole tree.
     fn spawn(&self, spec: &SandboxSpec) -> Result<SandboxedChild, SandboxError>;
+    fn supports_terminal(&self) -> bool {
+        false
+    }
+    fn spawn_terminal(
+        &self,
+        _spec: &SandboxSpec,
+    ) -> Result<Box<dyn crate::SandboxedTerminal>, SandboxError> {
+        Err(SandboxError::unavailable(
+            "interactive sandboxed login is unavailable on this engine",
+        ))
+    }
 }
 
 /// A runner over the isolation mechanism of the current OS.
@@ -104,8 +115,16 @@ impl<E: OsSandboxEngine> OsNativeSandbox<E> {
     /// Everything needed to start the run: the isolated command, its private temporary
     /// directory, its limits, and what to do once it is over.
     fn prepare(&self, spec: &SandboxSpec) -> Result<Prepared, SandboxError> {
+        self.prepare_with_terminal(spec, None)
+    }
+    fn prepare_with_terminal(
+        &self,
+        spec: &SandboxSpec,
+        terminal_device: Option<std::path::PathBuf>,
+    ) -> Result<Prepared, SandboxError> {
         // A malformed request is reported as such before asking what the engine can enforce.
         let mut validated = spec.validate()?;
+        validated.terminal_device = terminal_device;
         self.check_capabilities(spec)?;
         let tmp = TmpDir::create(&validated.worktree_root)?;
         validated.tmp_dir = tmp.path().to_path_buf();
@@ -135,6 +154,40 @@ struct Prepared {
 }
 
 impl<E: OsSandboxEngine> SandboxRunner for OsNativeSandbox<E> {
+    fn supports_terminal(&self) -> bool {
+        cfg!(target_os = "macos")
+            && self.engine.capabilities().kind == crate::OsSandboxKind::MacOsSeatbelt
+    }
+    fn spawn_terminal(
+        &self,
+        spec: &SandboxSpec,
+    ) -> Result<Box<dyn crate::SandboxedTerminal>, SandboxError> {
+        if !self.supports_terminal() {
+            return Err(SandboxError::unavailable(
+                "interactive sandboxed login is unavailable on this engine",
+            ));
+        }
+        #[cfg(unix)]
+        {
+            let pty = crate::supervisor::terminal::PreparedPty::open()?;
+            let Prepared {
+                launch,
+                tmp,
+                limits,
+                on_finish,
+            } = self
+                .prepare_with_terminal(spec, Some(pty.device.clone()))
+                .map_err(|error| self.refuse(error))?;
+            pty.spawn(launch, tmp, limits.wall_timeout, on_finish)
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = spec;
+            Err(SandboxError::unavailable(
+                "interactive sandboxed login is unavailable on this engine",
+            ))
+        }
+    }
     fn capabilities(&self) -> EngineCapabilities {
         self.engine.capabilities()
     }

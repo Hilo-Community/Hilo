@@ -7,7 +7,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use serde_json::Value;
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256, Sha512};
 
 use crate::archive::{self, Limits};
 use crate::catalog::{parse_exact_package, CatalogEntry, Source};
@@ -134,10 +134,31 @@ fn download_verified(
     sha256: &str,
     destination: &Path,
 ) -> Result<(), RegistryError> {
+    download_digest::<Sha256>(fetch, url, sha256, destination)
+}
+
+pub(crate) fn download_sha512(
+    fetch: &dyn Fetch,
+    url: &str,
+    digest: &str,
+    destination: &Path,
+) -> Result<(), RegistryError> {
+    if digest.len() != 128 || !digest.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(RegistryError::ChecksumMismatch);
+    }
+    download_digest::<Sha512>(fetch, url, digest, destination)
+}
+
+fn download_digest<D: Digest + std::fmt::Debug>(
+    fetch: &dyn Fetch,
+    url: &str,
+    digest: &str,
+    destination: &Path,
+) -> Result<(), RegistryError> {
     let reader = fetch.open(url, Redirects::Follow)?;
     let mut reader = reader.take(MAX_DOWNLOAD_BYTES + 1);
     let mut file = File::create(destination).map_err(RegistryError::io("Creating the download"))?;
-    let mut hasher = Sha256::new();
+    let mut hasher = D::new();
     let mut total = 0u64;
     let mut buffer = vec![0u8; 256 * 1024];
     loop {
@@ -159,14 +180,19 @@ fn download_verified(
     }
     file.sync_all()
         .map_err(RegistryError::io("Writing the download"))?;
-    if format!("{:x}", hasher.finalize()) != sha256.to_ascii_lowercase() {
+    let actual: String = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    if actual != digest.to_ascii_lowercase() {
         return Err(RegistryError::ChecksumMismatch);
     }
     Ok(())
 }
 
 #[cfg(unix)]
-fn make_executable(path: &Path) -> Result<(), RegistryError> {
+pub(crate) fn make_executable(path: &Path) -> Result<(), RegistryError> {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(path, fs::Permissions::from_mode(0o755))
         .map_err(RegistryError::io("Making the agent executable"))
@@ -174,7 +200,7 @@ fn make_executable(path: &Path) -> Result<(), RegistryError> {
 
 #[cfg(not(unix))]
 #[allow(clippy::unnecessary_wraps)]
-fn make_executable(_path: &Path) -> Result<(), RegistryError> {
+pub(crate) fn make_executable(_path: &Path) -> Result<(), RegistryError> {
     Ok(())
 }
 
