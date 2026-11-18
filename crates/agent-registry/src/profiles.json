@@ -1,0 +1,125 @@
+{
+  "providers": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "protocol": "openai",
+      "upstream": "https://api.openai.com/v1",
+      "keyHeader": "authorization",
+      "keyPrefix": "Bearer ",
+      "accountHosts": ["auth.openai.com", "api.openai.com", "chatgpt.com", "ab.chatgpt.com"]
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "protocol": "anthropic",
+      "upstream": "https://api.anthropic.com",
+      "keyHeader": "x-api-key",
+      "keyPrefix": "",
+      "accountHosts": [
+        "claude.ai",
+        "console.anthropic.com",
+        "platform.claude.com",
+        "api.anthropic.com"
+      ]
+    },
+    {
+      "id": "google",
+      "name": "Google",
+      "protocol": "google",
+      "upstream": "https://generativelanguage.googleapis.com",
+      "keyHeader": "x-goog-api-key",
+      "keyPrefix": "",
+      "accountHosts": [
+        "accounts.google.com",
+        "oauth2.googleapis.com",
+        "generativelanguage.googleapis.com"
+      ]
+    },
+    {
+      "id": "xai",
+      "name": "xAI",
+      "protocol": "openai",
+      "upstream": "https://api.x.ai/v1",
+      "keyHeader": "authorization",
+      "keyPrefix": "Bearer ",
+      "accountHosts": ["auth.x.ai", "cli-chat-proxy.grok.com", "api.x.ai", "grok.com"]
+    }
+  ],
+  "agents": [
+    {
+      "id": "codex-acp",
+      "providers": ["openai"],
+      "homeVariables": {
+        "CODEX_HOME": ".codex"
+      },
+      "environment": {
+        "NO_BROWSER": "1"
+      },
+      "setup": [
+        {
+          "path": ".codex/config.toml",
+          "content": "sandbox_mode = \"danger-full-access\"\napproval_policy = \"never\"\n"
+        }
+      ],
+      "baseUrlVariables": {},
+      "tokenVariables": {},
+      "accountMethods": ["chat-gpt-device-code"],
+      "preferenceDomains": ["com.openai.codex"]
+    },
+    {
+      "id": "claude-acp",
+      "providers": ["anthropic"],
+      "homeVariables": {
+        "CLAUDE_CONFIG_DIR": ".claude",
+        "CLAUDE_CODE_TMPDIR": ".claude-tmp"
+      },
+      "environment": {
+        "DISABLE_AUTOUPDATER": "1",
+        "DISABLE_TELEMETRY": "1",
+        "DISABLE_ERROR_REPORTING": "1"
+      },
+      "setup": [],
+      "baseUrlVariables": {
+        "anthropic": ["ANTHROPIC_BASE_URL"]
+      },
+      "tokenVariables": {
+        "anthropic": ["ANTHROPIC_AUTH_TOKEN"]
+      },
+      "accountMethods": ["claude-ai-login", "claude-login", "terminal-auth"]
+    },
+    {
+      "id": "opencode",
+      "providers": ["openai", "anthropic", "google", "xai"],
+      "homeVariables": {},
+      "environment": {
+        "OPENCODE_DISABLE_AUTOUPDATE": "1",
+        "NO_BROWSER": "1"
+      },
+      "setup": [],
+      "baseUrlVariables": {},
+      "tokenVariables": {},
+      "accountMethods": ["terminal-auth"]
+    },
+    {
+      "id": "grok-build",
+      "providers": ["xai"],
+      "homeVariables": {
+        "GROK_HOME": ".grok"
+      },
+      "environment": {
+        "GROK_DISABLE_AUTOUPDATER": "1",
+        "GROK_SANDBOX": "off",
+        "NO_BROWSER": "1"
+      },
+      "setup": [],
+      "baseUrlVariables": {
+        "xai": ["GROK_MODELS_BASE_URL", "GROK_XAI_API_BASE_URL"]
+      },
+      "tokenVariables": {
+        "xai": ["XAI_API_KEY"]
+      },
+      "accountMethods": ["grok.com"]
+    }
+  ]
+}

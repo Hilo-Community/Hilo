@@ -9,6 +9,26 @@ fn emit(value: Value) {
 }
 fn main() {
     let mode = std::env::args().nth(1).unwrap_or_default();
+    if std::env::args().any(|arg| arg == "--fixture-login") {
+        use std::io::IsTerminal;
+        assert!(io::stdin().is_terminal());
+        assert!(io::stdout().is_terminal());
+        println!("Enter fixture code:");
+        let mut code = String::new();
+        io::stdin().read_line(&mut code).unwrap();
+        assert_eq!(code.trim(), "fixture-code");
+        let home = std::env::var_os("HOME").unwrap();
+        std::fs::write(
+            std::path::Path::new(&home).join("fixture-login"),
+            "authenticated",
+        )
+        .unwrap();
+        return;
+    }
+    if mode.starts_with("auth-") {
+        authentication_fixture(&mode);
+        return;
+    }
     let stdin = io::stdin();
     let mut lines = stdin.lock().lines();
     let mut cwd = String::new();
@@ -104,6 +124,13 @@ fn main() {
                 json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"fake","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":format!("direct-read={read}")}}}}),
             );
         }
+        "direct-secret" => {
+            let leaked = std::fs::read_to_string("src/SECRETS/key")
+                .is_ok_and(|text| text.contains("synthetic-secret"));
+            emit(
+                json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"fake","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":format!("direct-secret={leaked}")}}}}),
+            );
+        }
         "direct-write" => {
             let wrote = std::fs::write("src/file.rs", "bypass").is_ok();
             emit(
@@ -161,6 +188,107 @@ fn main() {
                 14 => request(15, "terminal/output", json!({"terminalId":terminal})),
                 _ => {}
             }
+        }
+    }
+}
+
+fn authentication_fixture(mode: &str) {
+    let stdin = io::stdin();
+    let mut lines = stdin.lock().lines();
+    let mut next = || -> Value { serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap() };
+    let initialize = next();
+    assert_eq!(initialize["method"], "initialize");
+    assert_eq!(
+        initialize["params"]["clientCapabilities"]["auth"]["_meta"]["gateway"],
+        true
+    );
+    assert!(initialize["params"]["clientCapabilities"]["elicitation"]["url"].is_object());
+    if mode == "auth-terminal" {
+        assert_eq!(
+            initialize["params"]["clientCapabilities"]["auth"]["terminal"],
+            true
+        );
+        emit(
+            json!({"jsonrpc":"2.0","id":initialize["id"],"result":{"protocolVersion":1,"authMethods":[{"id":"fixture-terminal","name":"Fixture account","type":"terminal","args":["--fixture-login"]}]}}),
+        );
+        let home = std::env::var_os("HOME").unwrap();
+        if !std::path::Path::new(&home).join("fixture-login").exists() {
+            // The original transport must be killed and replaced after terminal success.
+            let _ = next();
+            panic!("the first ACP connection was reused instead of reconnected");
+        }
+        let session = next();
+        assert_eq!(session["method"], "session/new");
+        emit(json!({"jsonrpc":"2.0","id":session["id"],"result":{"sessionId":"reconnected"}}));
+        for line in lines {
+            let request: Value = serde_json::from_str(&line.unwrap()).unwrap();
+            if request["method"] == "session/cancel" {
+                break;
+            }
+        }
+        return;
+    }
+    emit(
+        json!({"jsonrpc":"2.0","id":initialize["id"],"result":{"protocolVersion":1,"authMethods":[
+            {"id":"fixture-gateway","name":"Gateway","_meta":{"gateway":{"protocol":"fixture"}}},
+            {"id":"fixture-login","name":"Account"}
+        ]}}),
+    );
+    let authenticate = next();
+    assert_eq!(authenticate["method"], "authenticate");
+    if mode == "auth-gateway" {
+        assert_eq!(authenticate["params"]["methodId"], "fixture-gateway");
+        assert_eq!(
+            authenticate["params"]["_meta"]["gateway"]["headers"]["x-coloride-session"],
+            "session-token-only"
+        );
+        assert!(std::env::var_os("PROVIDER_REAL_KEY").is_none());
+    } else {
+        assert_eq!(authenticate["params"]["methodId"], "fixture-login");
+        emit(
+            json!({"jsonrpc":"2.0","method":"elicitation/complete","params":{"elicitationId":"unknown-completion"}}),
+        );
+        let request_id = if mode == "auth-wrong-scope" {
+            json!(999)
+        } else {
+            authenticate["id"].clone()
+        };
+        let url = if mode == "auth-unsafe-url" {
+            "https://evil.example.com/verify"
+        } else {
+            "https://auth.example.com/verify"
+        };
+        emit(
+            json!({"jsonrpc":"2.0","id":"url-request","method":"elicitation/create","params":{"requestId":request_id,"mode":"url","elicitationId":"login-1","url":url,"message":"Sign in and enter code 1234"}}),
+        );
+        let answer = next();
+        assert_eq!(answer["id"], "url-request");
+        if answer["result"]["action"] != "accept" {
+            emit(
+                json!({"jsonrpc":"2.0","id":authenticate["id"],"error":{"code":-32000,"message":"Login declined"}}),
+            );
+            // Stay alive until the Host consumes the final message and stops us.
+            let _ = next();
+            return;
+        }
+        emit(
+            json!({"jsonrpc":"2.0","method":"elicitation/complete","params":{"elicitationId":"login-1"}}),
+        );
+    }
+    emit(json!({"jsonrpc":"2.0","id":authenticate["id"],"result":{}}));
+    let session = next();
+    assert_eq!(session["method"], "session/new");
+    emit(json!({"jsonrpc":"2.0","id":session["id"],"result":{"sessionId":"authenticated"}}));
+    while let Some(Ok(line)) = lines.next() {
+        let request: Value = serde_json::from_str(&line).unwrap();
+        if request["method"] == "session/cancel" {
+            break;
+        }
+        if request["method"] == "session/prompt" {
+            emit(
+                json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"authenticated","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"authenticated fixture turn"}}}}),
+            );
+            emit(json!({"jsonrpc":"2.0","id":request["id"],"result":{"stopReason":"end_turn"}}));
         }
     }
 }

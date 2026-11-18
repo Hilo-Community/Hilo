@@ -6,6 +6,7 @@
 //! (process group and orphan watchdog) and `windows` (Job Object). No `unsafe` here.
 
 mod capture;
+pub(crate) mod terminal;
 mod timer;
 mod tmp;
 #[cfg(unix)]
@@ -21,6 +22,7 @@ use std::time::Duration;
 
 pub(crate) use capture::run_to_completion;
 pub use capture::{RunOutput, Termination};
+pub use terminal::SandboxedTerminal;
 pub(crate) use tmp::{new_run_id, TmpDir};
 
 use crate::engine::Launch;

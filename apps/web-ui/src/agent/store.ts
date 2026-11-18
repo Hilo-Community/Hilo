@@ -9,6 +9,12 @@ export interface ProposedEdit {
   newText: string;
 }
 export type AcpEvent =
+  | { type: "terminalAuth"; name: string; args: string[]; env: Record<string, string> }
+  | { type: "terminalAuthOutput"; data: number[] }
+  | { type: "terminalAuthComplete"; success: boolean }
+  | { type: "authMethods"; methods: unknown[] }
+  | { type: "elicitation"; id: string; url: string; message: string }
+  | { type: "elicitationComplete"; id: string }
   | { type: "ready"; sessionId: string }
   | { type: "update"; update: Record<string, unknown> }
   | { type: "proposedEdit"; edit: ProposedEdit }
@@ -24,10 +30,14 @@ export type AcpEvent =
   | { type: "message"; role: string; text: string }
   | { type: "stopped" | "error"; reason: string };
 export interface AgentHandle {
+  startLogin?(): Promise<void>;
+  writeLogin?(data: string): Promise<void>;
+  resizeLogin?(cols: number, rows: number): Promise<void>;
   prompt(text: string): Promise<void>;
   cancel(): Promise<void>;
   stop(): Promise<void>;
   answer(id: string, allow: boolean): Promise<void>;
+  elicit?(id: string, action: "accept" | "decline" | "cancel"): Promise<void>;
 }
 export interface AgentHost {
   start(
@@ -45,12 +55,14 @@ export interface ToolCard {
   edit?: ProposedEdit | undefined;
 }
 export interface AgentState {
+  terminalAuth: { name: string; args: string[]; env: Record<string, string> } | null;
   ready: boolean;
   busy: boolean;
   messages: { role: string; text: string; html: readonly string[] }[];
   plan: { content: string; status: string }[];
   tools: ToolCard[];
   permissions: { id: string; reason: string }[];
+  elicitations: { id: string; url: string; message: string; accepted: boolean }[];
   error: string;
 }
 function record(value: unknown): Record<string, unknown> {
@@ -87,6 +99,37 @@ function status(value: unknown): ToolCard["status"] {
   return "pending";
 }
 
+/**
+ * What an event adds to the retained state, in characters. Tool updates are reduced to their
+ * kind, title, status and locations, so their output (file contents, base64 images) is never
+ * kept and must not count: a single image read would otherwise exhaust the session's budget.
+ */
+function retainedSize(event: AcpEvent): number {
+  switch (event.type) {
+    case "message":
+      return event.text.length;
+    case "terminalAuthOutput":
+    case "authMethods":
+      return 0;
+    case "update": {
+      const u = event.update;
+      if (u.sessionUpdate === "agent_message_chunk") {
+        const content = record(u.content);
+        return typeof content.text === "string" ? content.text.length : 0;
+      }
+      if (u.sessionUpdate === "tool_call" || u.sessionUpdate === "tool_call_update") {
+        const title = typeof u.title === "string" ? u.title.length : 0;
+        const where = Array.isArray(u.locations) ? JSON.stringify(u.locations).length : 0;
+        return 64 + title + where;
+      }
+      if (u.sessionUpdate === "plan") return JSON.stringify(u.entries ?? []).length;
+      return 64;
+    }
+    default:
+      return JSON.stringify(event).length;
+  }
+}
+
 /** Own subscription domain: streaming never updates Zone 4 or the editor's mount container. */
 export class AgentStore extends AtomicStore<AgentState> {
   private queue: AcpEvent[] = [];
@@ -106,12 +149,14 @@ export class AgentStore extends AtomicStore<AgentState> {
       plan: [],
       tools: [],
       permissions: [],
+      elicitations: [],
+      terminalAuth: null,
       error: "",
     });
   }
   enqueue(event: AcpEvent): void {
     if (this.disposed) return;
-    const bytes = JSON.stringify(event).length;
+    const bytes = retainedSize(event);
     if (
       event.type !== "stopped" &&
       (this.queuedBytes + bytes > 512 * 1024 || this.retainedBytes + bytes > 2 * 1024 * 1024)
@@ -142,6 +187,7 @@ export class AgentStore extends AtomicStore<AgentState> {
         messages: [...previous.messages],
         tools: [...previous.tools],
         permissions: [...previous.permissions],
+        elicitations: [...previous.elicitations],
       };
       const tool = (id: string, patch: Partial<ToolCard>) => {
         const index = s.tools.findIndex((t) => t.id === id);
@@ -168,6 +214,24 @@ export class AgentStore extends AtomicStore<AgentState> {
       };
       for (const event of queue) {
         switch (event.type) {
+          case "terminalAuth":
+            s.terminalAuth = event;
+            break;
+          case "terminalAuthOutput":
+            // Routed directly to the login terminal; never retained in chat/model context.
+            break;
+          case "terminalAuthComplete":
+            s.terminalAuth = null;
+            break;
+          case "authMethods":
+            break;
+          case "elicitation":
+            if (!s.elicitations.some((item) => item.id === event.id) && s.elicitations.length < 32)
+              s.elicitations.push({ ...event, accepted: false });
+            break;
+          case "elicitationComplete":
+            s.elicitations = s.elicitations.filter((item) => item.id !== event.id);
+            break;
           case "ready":
             s.ready = true;
             s.error = "";
@@ -204,6 +268,8 @@ export class AgentStore extends AtomicStore<AgentState> {
             s.ready = false;
             s.busy = false;
             s.permissions = [];
+            s.elicitations = [];
+            s.terminalAuth = null;
             s.error = event.reason;
             s.tools = s.tools.map((t) =>
               t.status === "pending" || t.status === "running"
@@ -243,6 +309,15 @@ export class AgentStore extends AtomicStore<AgentState> {
   answered(id: string): void {
     this.setState((s) => ({ ...s, permissions: s.permissions.filter((p) => p.id !== id) }));
   }
+  answeredElicitation(id: string, action: "accept" | "decline" | "cancel"): void {
+    this.setState((s) => ({
+      ...s,
+      elicitations:
+        action === "accept"
+          ? s.elicitations.map((item) => (item.id === id ? { ...item, accepted: true } : item))
+          : s.elicitations.filter((item) => item.id !== id),
+    }));
+  }
   dispose(): void {
     this.disposed = true;
     this.queue = [];
@@ -258,6 +333,8 @@ export class AgentStore extends AtomicStore<AgentState> {
       tools: [],
       plan: [],
       permissions: [],
+      elicitations: [],
+      terminalAuth: null,
       error: "",
     }));
   }

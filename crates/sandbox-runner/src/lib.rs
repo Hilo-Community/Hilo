@@ -30,6 +30,7 @@ pub use path_guard::{PathGuard, PathGuardError};
 pub use runner::{native_sandbox, OsNativeSandbox, SandboxRunner};
 pub use seatbelt::SeatbeltEngine;
 pub use spec::{NetworkPolicy, ResourceLimits, SandboxSpec, ValidatedSpec, TMP_DIR_NAME};
+pub use supervisor::SandboxedTerminal;
 pub use supervisor::{ChildInput, ChildOutput, RunOutput, SandboxedChild, Termination};
 #[cfg(windows)]
 pub use windows::AppContainerEngine;

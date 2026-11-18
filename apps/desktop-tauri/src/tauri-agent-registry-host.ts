@@ -23,6 +23,13 @@ export function createTauriAgentRegistryHost(invoke: Invoke): AgentRegistryHost 
     };
   };
   return {
+    account: {
+      status: (agentId) => invoke("agent_account_status_command", { agentId }),
+      setKey: (provider, key) => invoke("agent_provider_key_command", { provider, key }),
+      save: (agentId, preferences) =>
+        invoke("agent_account_save_command", { agentId, preferences }),
+      signOut: (agentId) => invoke("agent_account_sign_out_command", { agentId }),
+    },
     list: (refresh) => invoke("agent_registry_list_command", { refresh }),
     install: (agentId, version) => invoke("agent_registry_install_command", { agentId, version }),
     uninstall: (installationId) => invoke("agent_registry_uninstall_command", { installationId }),

@@ -14,6 +14,7 @@
 //! Running an agent afterwards is not done here: it goes through `sandbox-runner` like any other
 //! process (see `judge-orchestrator::acp`).
 
+pub mod accounts;
 mod archive;
 mod catalog;
 mod error;
@@ -21,7 +22,10 @@ mod http;
 mod installer;
 mod model;
 mod node;
+pub mod private_home;
 mod process;
+pub mod profiles;
+mod runtime;
 mod store;
 
 use std::io::Read;
@@ -38,6 +42,7 @@ pub use error::RegistryError;
 pub use http::{Fetch, HttpFetch, Redirects};
 pub use model::{CatalogOrigin, Installation, InstalledAgent, Launch, LaunchCommand, Listing};
 pub use node::{NodeLocator, NodeStatus, NodeToolchain, SystemNode, MIN_NODE_MAJOR};
+pub use runtime::PreparedRuntime;
 
 use store::Store;
 
@@ -278,11 +283,114 @@ impl AgentRegistry {
                 }
             };
         Ok(LaunchCommand {
+            installation_id: installation.id,
             name: installation.name,
             version: installation.version,
             program,
             args,
             read_only_paths: vec![installation.location],
         })
+    }
+
+    pub fn account(&self, installation_id: &str) -> Result<accounts::AgentAccount, RegistryError> {
+        let _lock = self.busy.lock().expect("registry lock");
+        if !self
+            .store
+            .installations()?
+            .iter()
+            .any(|item| item.id == installation_id)
+        {
+            return Err(RegistryError::UnknownInstallation(installation_id.into()));
+        }
+        Ok(self
+            .store
+            .accounts()?
+            .remove(installation_id)
+            .unwrap_or_default())
+    }
+
+    pub fn save_account_preferences(
+        &self,
+        installation_id: &str,
+        preferences: accounts::AccountPreferences,
+    ) -> Result<(), RegistryError> {
+        let _lock = self.busy.lock().expect("registry lock");
+        let installation = self
+            .store
+            .installations()?
+            .into_iter()
+            .find(|item| item.id == installation_id)
+            .ok_or_else(|| RegistryError::UnknownInstallation(installation_id.into()))?;
+        let profile = profiles::agent_profile(&installation.agent_id);
+        if preferences
+            .provider
+            .as_ref()
+            .is_some_and(|id| !profile.providers.contains(id))
+            || preferences.extra_allowed_hosts.len() > 64
+            || preferences
+                .method_id
+                .as_ref()
+                .is_some_and(|id| id.is_empty() || id.len() > 256)
+        {
+            return Err(RegistryError::Install(
+                "Invalid agent account preferences".into(),
+            ));
+        }
+        // Host validates DNS host syntax and public addresses. This layer does not grant egress.
+        let mut accounts = self.store.accounts()?;
+        let account = accounts.entry(installation_id.into()).or_default();
+        account.preferences = preferences;
+        account.terminal_authenticated = false;
+        self.store.save_accounts(&accounts)
+    }
+
+    pub fn record_auth_methods(
+        &self,
+        installation_id: &str,
+        methods: Vec<Value>,
+    ) -> Result<(), RegistryError> {
+        let _lock = self.busy.lock().expect("registry lock");
+        if methods.len() > 32
+            || serde_json::to_vec(&methods).map_or(true, |bytes| bytes.len() > 64 * 1024)
+        {
+            return Err(RegistryError::Install(
+                "Agent authentication methods exceed the size limit".into(),
+            ));
+        }
+        if !self
+            .store
+            .installations()?
+            .iter()
+            .any(|item| item.id == installation_id)
+        {
+            return Err(RegistryError::UnknownInstallation(installation_id.into()));
+        }
+        let mut accounts = self.store.accounts()?;
+        accounts
+            .entry(installation_id.into())
+            .or_default()
+            .auth_methods = methods;
+        self.store.save_accounts(&accounts)
+    }
+    pub fn record_terminal_authentication(
+        &self,
+        installation_id: &str,
+        success: bool,
+    ) -> Result<(), RegistryError> {
+        let _lock = self.busy.lock().expect("registry lock");
+        if !self
+            .store
+            .installations()?
+            .iter()
+            .any(|item| item.id == installation_id)
+        {
+            return Err(RegistryError::UnknownInstallation(installation_id.into()));
+        }
+        let mut accounts = self.store.accounts()?;
+        accounts
+            .entry(installation_id.into())
+            .or_default()
+            .terminal_authenticated = success;
+        self.store.save_accounts(&accounts)
     }
 }

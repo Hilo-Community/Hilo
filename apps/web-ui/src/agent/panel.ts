@@ -1,11 +1,16 @@
+import { type PromptInput, createPromptInput } from "@coloride/editor-cm6";
 import { SPINNER_ICON, agentMark } from "../settings/agent-marks.js";
 import { UI_STRINGS, uiText } from "../ui/ui-strings.js";
+import { authenticationCards } from "./auth-panel.js";
 import { diffLines, formatDiff } from "./diff.js";
 import { type AgentHandle, type AgentHost, AgentStore } from "./store.js";
+import { TerminalLoginView } from "./terminal-login-view.js";
 
 const SVG =
   'xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
-const SEND_ICON = `<svg ${SVG}><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>`;
+// A heavier stroke than the other icons so the arrow reads at 16px inside the round button.
+// One path, not two: the disabled arrow is translucent and overlapping strokes would show lighter.
+const SEND_ICON = `<svg ${SVG.replace('stroke-width="2"', 'stroke-width="2.75"')}><path d="M12 19V5M5 12l7-7 7 7"/></svg>`;
 const STOP_ICON =
   '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>';
 const SANDBOX_ICON = `<svg ${SVG}><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>`;
@@ -20,7 +25,7 @@ export class AgentPanel {
   private generation = 0;
   private starting = false;
   private readonly unsubscribe: () => void;
-  private readonly prompt: HTMLTextAreaElement;
+  private readonly prompt: PromptInput;
   private readonly start: HTMLButtonElement;
   private readonly submit: HTMLButtonElement;
   private readonly cancel: HTMLButtonElement;
@@ -28,6 +33,7 @@ export class AgentPanel {
   private readonly error: HTMLElement;
   private readonly status: HTMLElement;
   private readonly busyMark: HTMLElement;
+  private readonly login: TerminalLoginView;
   constructor(
     doc: Document,
     private readonly host: AgentHost,
@@ -37,6 +43,11 @@ export class AgentPanel {
     store = new AgentStore(),
   ) {
     this.store = store;
+    this.login = new TerminalLoginView(
+      doc,
+      () => this.handle,
+      (action) => this.run(action),
+    );
     this.element = doc.createElement("section");
     this.element.className = "coloride-agent-panel";
     this.element.setAttribute("aria-label", identity.name);
@@ -51,24 +62,18 @@ export class AgentPanel {
     this.status.append(this.error, this.start);
     const form = doc.createElement("form");
     form.className = "coloride-agent-composer";
-    this.prompt = doc.createElement("textarea");
-    this.prompt.rows = 1;
-    // No red or blue squiggles under what is typed: prompts are code and paths, not prose.
-    this.prompt.spellcheck = false;
-    this.prompt.setAttribute("autocorrect", "off");
-    this.prompt.setAttribute("autocapitalize", "off");
-    this.prompt.autocomplete = "off";
-    this.prompt.setAttribute("aria-label", UI_STRINGS.agent.prompt);
-    this.prompt.placeholder = UI_STRINGS.agent.ask;
-    this.prompt.addEventListener("focus", () => this.activate());
-    this.prompt.addEventListener("input", () => this.fit());
+    // Drawn by CodeMirror, not a native textarea: a thin caret like the editor's.
     // Enter sends, Shift+Enter makes a new line; never while an input method is composing.
-    this.prompt.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
-      event.preventDefault();
-      form.requestSubmit();
+    this.prompt = createPromptInput(form, {
+      placeholder: UI_STRINGS.agent.ask,
+      ariaLabel: UI_STRINGS.agent.prompt,
+      maxLength: 24 * 1024,
+      maxHeight: MAX_COMPOSER_HEIGHT,
+      onSubmit: () => form.requestSubmit(),
+      onFocus: () => this.activate(),
+      // Several lines: the text takes the whole width and the agent and send button go under it.
+      onMultilineChange: (multiline) => form.classList.toggle("is-multiline", multiline),
     });
-    this.prompt.maxLength = 24 * 1024;
     // Icon-only round buttons; their names stay "Send prompt" and "Cancel" for assistive tech.
     this.submit = this.button("", () => undefined, "coloride-agent-send");
     this.submit.type = "submit";
@@ -83,14 +88,13 @@ export class AgentPanel {
     this.cancel.setAttribute("aria-label", UI_STRINGS.agent.cancel);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      const text = this.prompt.value.trim();
+      const text = this.prompt.getText().trim();
       if (!this.handle || !this.store.getState().ready || this.store.getState().busy || !text)
         return;
       this.store.setState((s) => ({ ...s, busy: true }));
       this.run(async () => {
         await this.handle?.prompt(text);
-        this.prompt.value = "";
-        this.fit();
+        this.prompt.setText("");
       });
     });
     // Who answers, and the send / stop button, on the line under the text.
@@ -100,7 +104,7 @@ export class AgentPanel {
     who.className = "coloride-agent-who";
     who.append(agentMark(doc, identity.agentId, identity.name), identity.name);
     bar.append(who, this.submit, this.cancel);
-    form.append(this.prompt, bar);
+    form.append(bar);
     // The sandbox the agent runs in, and a spinner while it connects or works.
     const meta = doc.createElement("div");
     meta.className = "coloride-agent-meta";
@@ -122,12 +126,6 @@ export class AgentPanel {
   /** Restored sessions stay dormant until an explicit user interaction. */
   activate(): void {
     if (!this.handle && !this.store.getState().error) void this.begin();
-  }
-  /** The text field grows with what is typed, up to a limit. */
-  private fit(): void {
-    if (this.prompt.scrollHeight <= 0) return;
-    this.prompt.style.height = "auto";
-    this.prompt.style.height = `${Math.min(this.prompt.scrollHeight, MAX_COMPOSER_HEIGHT)}px`;
   }
   private button(label: string, click: () => void, className = ""): HTMLButtonElement {
     const button = this.element.ownerDocument.createElement("button");
@@ -155,7 +153,10 @@ export class AgentPanel {
       this.handle = null;
       this.store.reset();
       const handle = await this.host.start({ installedAgentId: this.identity.agentId }, (event) => {
-        if (generation === this.generation) this.store.enqueue(event);
+        if (generation === this.generation) {
+          if (event.type === "terminalAuthOutput") this.login.write(event.data);
+          else this.store.enqueue(event);
+        }
       });
       if (generation !== this.generation) await handle.stop();
       else this.handle = handle;
@@ -188,9 +189,15 @@ export class AgentPanel {
     this.cancel.hidden = !s.busy;
     this.busyMark.hidden = !(s.busy || this.starting || (this.handle && !s.ready));
     // Nothing said yet: a roomy composer in the middle; afterwards a compact one at the bottom.
-    const started = s.messages.length + s.plan.length + s.tools.length + s.permissions.length > 0;
+    const started =
+      s.messages.length +
+        s.plan.length +
+        s.tools.length +
+        s.permissions.length +
+        s.elicitations.length >
+        0 || s.terminalAuth !== null;
     this.element.dataset.mode = started ? "chat" : "empty";
-    this.prompt.placeholder = started ? UI_STRINGS.agent.followUp : UI_STRINGS.agent.ask;
+    this.prompt.setPlaceholder(started ? UI_STRINGS.agent.followUp : UI_STRINGS.agent.ask);
     const content: HTMLElement[] = [];
     for (const message of s.messages) {
       const article = doc.createElement("article");
@@ -263,11 +270,19 @@ export class AgentPanel {
       );
       content.push(card);
     }
+    content.push(
+      ...authenticationCards(doc, this.store, this.handle, (action) => this.run(action)),
+    );
+    this.login.render(s.terminalAuth);
+    content.push(this.login.element);
     this.output.replaceChildren(...content);
+    this.login.fit();
   }
   destroy(): void {
+    this.login.dispose();
     this.generation += 1;
     this.unsubscribe();
+    this.prompt.destroy();
     this.store.dispose();
     void this.handle?.stop().catch(() => undefined);
     this.element.remove();

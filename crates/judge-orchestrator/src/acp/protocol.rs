@@ -81,6 +81,28 @@ pub struct ProposedEdit {
     rename_all_fields = "camelCase"
 )]
 pub enum AcpEvent {
+    TerminalAuth {
+        name: String,
+        args: Vec<String>,
+        env: std::collections::BTreeMap<String, String>,
+    },
+    TerminalAuthOutput {
+        data: Vec<u8>,
+    },
+    TerminalAuthComplete {
+        success: bool,
+    },
+    AuthMethods {
+        methods: Vec<super::auth::AuthMethod>,
+    },
+    Elicitation {
+        id: String,
+        url: String,
+        message: String,
+    },
+    ElicitationComplete {
+        id: String,
+    },
     Ready {
         session_id: String,
     },

@@ -141,6 +141,7 @@ fn readable_roots(spec: &ValidatedSpec) -> Vec<PathBuf> {
         .map(PathBuf::from)
         .chain(std::iter::once(spec.worktree_root.clone()))
         .chain(spec.read_only_paths.iter().cloned())
+        .chain(spec.writable_paths.iter().cloned())
         .collect()
 }
 
@@ -193,6 +194,7 @@ pub(crate) fn render_args(
     // the process could write beside the worktree. Without it the root, read-only, covers them.
     let shared_under_tmp = std::iter::once(&spec.worktree_root)
         .chain(&spec.read_only_paths)
+        .chain(&spec.writable_paths)
         .any(|path| path.starts_with("/tmp"));
     if !shared_under_tmp {
         args.with("--tmpfs", "/tmp");
@@ -200,6 +202,9 @@ pub(crate) fn render_args(
 
     for path in &spec.read_only_paths {
         args.bind("--ro-bind", path, path);
+    }
+    for path in &spec.writable_paths {
+        args.bind("--bind", path, path);
     }
     if spec.mediate_worktree_reads {
         args.with("--dir", &spec.worktree_root);
@@ -217,6 +222,14 @@ pub(crate) fn render_args(
             &spec.worktree_root,
         );
     }
+    for path in &spec.denied_read_paths {
+        if path.is_dir() {
+            args.with("--tmpfs", path);
+            args.with("--remount-ro", path);
+        } else if path.exists() {
+            args.bind("--ro-bind", "/dev/null", path);
+        }
+    }
     if spec.worktree_read_only {
         args.bind("--bind", &spec.tmp_dir, &spec.tmp_dir);
     }
@@ -224,6 +237,7 @@ pub(crate) fn render_args(
     // Last of the mounts, so that nothing shows through: a secret that sits inside a shared path.
     let shared: Vec<&PathBuf> = std::iter::once(&spec.worktree_root)
         .chain(&spec.read_only_paths)
+        .chain(&spec.writable_paths)
         .collect();
     let secrets = HOME_SECRETS
         .iter()
@@ -356,6 +370,7 @@ mod tests {
         fs::write(home.join(".netrc"), "secret").unwrap();
         fs::create_dir_all(&worktree).unwrap();
         let spec = ValidatedSpec {
+            terminal_device: None,
             mediate_worktree_reads: false,
             worktree_read_only: false,
             worktree_root: worktree.clone(),
@@ -364,6 +379,9 @@ mod tests {
             cwd: worktree.clone(),
             env: BTreeMap::new(),
             read_only_paths: vec![home.clone()],
+            writable_paths: Vec::new(),
+            denied_read_paths: Vec::new(),
+            preference_domains: Vec::new(),
             network: NetworkPolicy::Denied,
             limits: ResourceLimits::default(),
             tmp_dir: worktree.join(".coloride-tmp/x"),

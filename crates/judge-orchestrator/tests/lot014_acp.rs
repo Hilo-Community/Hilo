@@ -64,6 +64,7 @@ impl Fixture {
         let (tx, rx) = mpsc::channel();
         (
             AcpHost {
+                session_resources: vec![],
                 gate: self.gate.clone(),
                 worktree_root: self.root.path().canonicalize().unwrap(),
                 repository: self.repository.clone(),
@@ -82,7 +83,11 @@ impl Fixture {
     }
     fn launch(&self, mode: &str) -> AcpLaunch {
         AcpLaunch {
+            identity: "fixture".into(),
             read_only_paths: vec![],
+            writable_paths: vec![],
+            preference_domains: vec![],
+            environment: Default::default(),
             program: self.root.path().join("fake-agent"),
             args: vec![mode.into()],
             credentials: AgentCredentials::Unauthenticated,
@@ -99,7 +104,7 @@ impl Fixture {
             .expect("native sandbox is a blocking requirement");
         let (host, rx) = self.host(Arc::from(runner));
         let session = AcpSessionSupervisor::start(host, self.launch(mode)).unwrap();
-        match rx.recv_timeout(Duration::from_secs(12)).unwrap() {
+        match next(&rx) {
             AcpEvent::Ready { .. } => {}
             other => panic!("unexpected startup event: {other:?}"),
         }
@@ -111,8 +116,161 @@ impl Fixture {
     }
 }
 fn next(rx: &Receiver<AcpEvent>) -> AcpEvent {
-    rx.recv_timeout(Duration::from_secs(5))
-        .expect("ACP must not hang")
+    loop {
+        let event = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("ACP must not hang");
+        if !matches!(event, AcpEvent::AuthMethods { .. }) {
+            return event;
+        }
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn generic_gateway_authentication_precedes_session_creation_and_a_real_fixture_turn() {
+    let f = Fixture::new();
+    let runner = sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).unwrap();
+    let (host, rx) = f.host(Arc::from(runner));
+    let mut launch = f.launch("auth-gateway");
+    launch.credentials = AgentCredentials::Gateway {
+        protocol: "fixture".into(),
+        base_url: "http://127.0.0.1:123/provider".into(),
+        headers: std::collections::BTreeMap::from([(
+            "x-coloride-session".into(),
+            "session-token-only".into(),
+        )]),
+        provider_name: "Fixture".into(),
+        environment_fallback: false,
+    };
+    let mut session = AcpSessionSupervisor::start(host, launch).unwrap();
+    assert!(matches!(next(&rx), AcpEvent::Ready { .. }));
+    session.prompt("test authenticated turn".into()).unwrap();
+    loop {
+        if let AcpEvent::Update { update } = next(&rx) {
+            if update["sessionUpdate"] == "agent_message_chunk" {
+                assert_eq!(update["content"]["text"], "authenticated fixture turn");
+                break;
+            }
+        }
+    }
+    session.stop();
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn url_elicitation_binds_to_authentication_waits_for_user_and_handles_completion() {
+    let f = Fixture::new();
+    let runner = sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).unwrap();
+    let (host, rx) = f.host(Arc::from(runner));
+    let mut launch = f.launch("auth-url");
+    launch.credentials = AgentCredentials::Account {
+        use_stored_credentials: false,
+        method_id: Some("fixture-login".into()),
+        preferred_methods: vec![],
+        browser_hosts: vec!["auth.example.com".into()],
+    };
+    let mut session = AcpSessionSupervisor::start(host, launch).unwrap();
+    let AcpEvent::Elicitation { id, url, message } = next(&rx) else {
+        panic!("missing URL elicitation")
+    };
+    assert_eq!(url, "https://auth.example.com/verify");
+    assert!(message.contains("1234"));
+    assert_eq!(session.elicitation_url(&id).as_deref(), Some(url.as_str()));
+    assert!(
+        rx.recv_timeout(Duration::from_millis(100)).is_err(),
+        "the Host must wait for the user"
+    );
+    session
+        .answer_elicitation(id.clone(), "accept".into())
+        .unwrap();
+    assert!(
+        matches!(next(&rx), AcpEvent::ElicitationComplete { id: completed } if completed == id)
+    );
+    assert!(matches!(next(&rx), AcpEvent::Ready { .. }));
+    assert!(session.elicitation_url(&id).is_none());
+    session.stop();
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn terminal_login_uses_a_real_private_pty_and_reconnects_the_acp_transport() {
+    let f = Fixture::new();
+    let home = tempfile::tempdir().unwrap();
+    let runner = sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).unwrap();
+    let (host, rx) = f.host(Arc::from(runner));
+    let mut launch = f.launch("auth-terminal");
+    launch.credentials = AgentCredentials::Account {
+        use_stored_credentials: false,
+        method_id: Some("fixture-terminal".into()),
+        preferred_methods: vec![],
+        browser_hosts: vec![],
+    };
+    launch.environment.insert(
+        "HOME".into(),
+        home.path().canonicalize().unwrap().into_os_string(),
+    );
+    launch.writable_paths.push(home.path().to_path_buf());
+    let mut session = AcpSessionSupervisor::start(host, launch).unwrap();
+    assert!(matches!(next(&rx), AcpEvent::TerminalAuth { .. }));
+    assert!(!home.path().join("fixture-login").exists());
+    session.start_terminal_auth().unwrap();
+    let mut output = String::new();
+    loop {
+        match next(&rx) {
+            AcpEvent::TerminalAuthOutput { data } => {
+                output.push_str(&String::from_utf8_lossy(&data))
+            }
+            event => panic!("unexpected event before login input: {event:?}"),
+        }
+        if output.contains("Enter fixture code:") {
+            break;
+        }
+    }
+    session
+        .write_terminal_auth("fixture-code\r".into())
+        .unwrap();
+    let mut completed = false;
+    loop {
+        match next(&rx) {
+            AcpEvent::TerminalAuthComplete { success } => {
+                assert!(success);
+                completed = true;
+            }
+            AcpEvent::TerminalAuthOutput { .. } => {}
+            AcpEvent::Ready { session_id } => {
+                assert!(completed);
+                assert_eq!(session_id, "reconnected");
+                break;
+            }
+            event => panic!("unexpected event during reconnect: {event:?}"),
+        }
+    }
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("fixture-login")).unwrap(),
+        "authenticated"
+    );
+    session.stop();
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn unsafe_or_unbound_url_elicitation_never_reaches_the_host_ui() {
+    for mode in ["auth-unsafe-url", "auth-wrong-scope"] {
+        let f = Fixture::new();
+        let runner = sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).unwrap();
+        let (host, rx) = f.host(Arc::from(runner));
+        let mut launch = f.launch(mode);
+        launch.credentials = AgentCredentials::Account {
+            use_stored_credentials: false,
+            method_id: Some("fixture-login".into()),
+            preferred_methods: vec![],
+            browser_hosts: vec!["auth.example.com".into()],
+        };
+        let mut session = AcpSessionSupervisor::start(host, launch).unwrap();
+        assert!(matches!(next(&rx), AcpEvent::Stopped { .. }));
+        session.stop();
+    }
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -333,6 +491,8 @@ fn real_environment_is_empty_of_configured_secrets_and_direct_writes_are_blocked
                 if mode == "environment" {
                     assert!(!text.contains("COLORIDE_TEST_BYOK_SECRET"));
                     assert!(!text.contains("HOME"));
+                } else if mode == "direct-read" {
+                    assert_eq!(text, "direct-read=true");
                 } else {
                     assert_eq!(text, format!("{mode}=false"));
                 }
@@ -343,6 +503,22 @@ fn real_environment_is_empty_of_configured_secrets_and_direct_writes_are_blocked
         assert_eq!(f.disk(), "disk text");
     }
     std::env::remove_var("COLORIDE_TEST_BYOK_SECRET");
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn direct_snapshot_reads_still_enforce_signed_forbidden_paths_in_any_case() {
+    let f = Fixture::new();
+    std::fs::create_dir(f.root.path().join("src/SECRETS")).unwrap();
+    std::fs::write(f.root.path().join("src/SECRETS/key"), "synthetic-secret").unwrap();
+    let (mut session, rx) = f.start("direct-secret");
+    loop {
+        if let AcpEvent::Update { update } = next(&rx) {
+            assert_eq!(update["content"]["text"], "direct-secret=false");
+            break;
+        }
+    }
+    session.stop();
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]

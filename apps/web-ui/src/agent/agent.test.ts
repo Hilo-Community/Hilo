@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { ColorideEditorView, InMemoryBinaryHostBridge, promptInputOf } from "@coloride/editor-cm6";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CockpitDomController, createCockpitStoreBundle } from "../index.js";
 import type { AgentRegistryHost, InstalledAgent } from "../settings/agent-registry.js";
@@ -146,6 +146,31 @@ describe("LOT-014 agent panel", () => {
     store.enqueue(chunk("late"));
     expect(store.getUpdateCount()).toBe(1);
   });
+  it("does not count tool output it never keeps against the display budget", () => {
+    const frames: Array<() => void> = [];
+    const store = new AgentStore((cb) => frames.push(cb));
+    const image = "A".repeat(3 * 1024 * 1024);
+    for (const id of ["a", "b"]) {
+      store.enqueue({
+        type: "update",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: id,
+          title: "Read a.png",
+          kind: "read",
+          status: "completed",
+          content: [{ type: "content", content: { type: "image", data: image } }],
+          rawOutput: image,
+        },
+      });
+      for (const run of frames.splice(0)) run();
+    }
+    expect(store.getState().error).toBe("");
+    expect(store.getState().tools.map((tool) => tool.status)).toEqual(["done", "done"]);
+    // Retained text still has a bound.
+    store.enqueue({ type: "message", role: "assistant", text: "x".repeat(3 * 1024 * 1024) });
+    expect(store.getState().error).toContain("display limit");
+  });
   it("merges plans, tools and proposals, filters unsafe locations, clears permissions on stop", () => {
     const store = new AgentStore(() => undefined);
     store.enqueue({
@@ -201,9 +226,11 @@ describe("LOT-014 agent panel", () => {
     );
     fake.emit({ type: "ready", sessionId: "s" });
     store.flush();
-    const prompt = panel.element.querySelector("textarea") as HTMLTextAreaElement;
-    expect(prompt.spellcheck).toBe(false);
-    prompt.value = "Repair tests";
+    expect(panel.element.querySelector("textarea")).toBeNull();
+    expect(panel.element.querySelector(".cm-content")?.getAttribute("spellcheck")).toBe("false");
+    promptInputOf(panel.element.querySelector(".coloride-agent-composer .cm-editor"))?.setText(
+      "Repair tests",
+    );
     panel.element.querySelector("form")?.dispatchEvent(new Event("submit", { cancelable: true }));
     await settle();
     expect(fake.handle.prompt).toHaveBeenCalledWith("Repair tests");
@@ -220,7 +247,8 @@ describe("LOT-014 agent panel", () => {
     fake.emit({ type: "permission", id: "p", reason: "Review exact call", options: [] });
     store.flush();
     expect(panel.element.querySelector("pre")?.textContent).toContain("- old 🦀\n+ new 🦀");
-    expect(panel.element.querySelector("[contenteditable]")).toBeNull();
+    // The proposal is read-only; only the prompt (a CodeMirror field) is editable.
+    expect(panel.element.querySelector(".coloride-agent-output [contenteditable]")).toBeNull();
     button(panel.element, "src/file.ts:1").click();
     await settle();
     expect(open).toHaveBeenCalledWith("src/file.ts", 1);

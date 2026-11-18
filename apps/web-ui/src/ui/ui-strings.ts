@@ -205,7 +205,7 @@ export const UI_STRINGS = {
     agents: "Agents",
     registryTitle: "ACP Registry",
     registryIntro:
-      "Agents that speak the Agent Client Protocol. Installing downloads the agent and checks it; it runs later in the sandbox, offline, without your credentials.",
+      "Agents that speak the Agent Client Protocol. Installation verifies the download. Configure each installed agent's account and network access below.",
     search: "Search agents",
     searchPlaceholder: "Search agents…",
     filters: "Filter agents",

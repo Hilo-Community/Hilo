@@ -1,6 +1,7 @@
 //! What the registry keeps on disk, under one folder:
 //! `installations.json`, `registry-cache.json` and `packages/<agent>/<version>/`.
 
+use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -70,6 +71,41 @@ impl Store {
         self.root.join(PACKAGES)
     }
 
+    pub(crate) fn runtime_location(
+        &self,
+        id: &str,
+        version: &str,
+    ) -> Result<PathBuf, RegistryError> {
+        let mut location = fs::canonicalize(self.packages())
+            .map_err(RegistryError::io("Reading runtime cache root"))?;
+        for component in [id, version] {
+            if component.is_empty()
+                || !component
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+                || matches!(component, "." | "..")
+            {
+                return Err(RegistryError::Install("Unsafe runtime cache path".into()));
+            }
+            location.push(component);
+            match fs::symlink_metadata(&location) {
+                Ok(meta) if !meta.file_type().is_dir() => {
+                    return Err(RegistryError::Install(
+                        "Runtime cache contains a link or non-directory".into(),
+                    ))
+                }
+                Err(error) if error.kind() != io::ErrorKind::NotFound => {
+                    return Err(RegistryError::Io {
+                        context: "Reading runtime cache".into(),
+                        source: error,
+                    })
+                }
+                _ => {}
+            }
+        }
+        Ok(location)
+    }
+
     /// Writes `bytes` to `name` so that a crash leaves the old file or the new one, never half.
     fn write_atomically(&self, name: &str, bytes: &[u8]) -> Result<(), RegistryError> {
         let temporary = self.root.join(format!("{name}.tmp"));
@@ -117,6 +153,31 @@ impl Store {
         let bytes = serde_json::to_vec_pretty(list)
             .map_err(|error| RegistryError::Install(error.to_string()))?;
         self.write_atomically(INSTALLATIONS, &bytes)
+    }
+    pub(crate) fn accounts(
+        &self,
+    ) -> Result<BTreeMap<String, crate::accounts::AgentAccount>, RegistryError> {
+        let Some(bytes) = self.read("accounts.json")? else {
+            return Ok(BTreeMap::new());
+        };
+        if bytes.len() > 1024 * 1024 {
+            return Err(RegistryError::Install(
+                "Agent account settings exceed size limit".into(),
+            ));
+        }
+        serde_json::from_slice(&bytes).map_err(|_| {
+            RegistryError::Install(
+                "Agent account settings are invalid; refusing to reset network preferences".into(),
+            )
+        })
+    }
+    pub(crate) fn save_accounts(
+        &self,
+        accounts: &BTreeMap<String, crate::accounts::AgentAccount>,
+    ) -> Result<(), RegistryError> {
+        let bytes = serde_json::to_vec_pretty(accounts)
+            .map_err(|error| RegistryError::Install(error.to_string()))?;
+        self.write_atomically("accounts.json", &bytes)
     }
 
     pub(crate) fn cached_catalog(&self) -> Option<Value> {
