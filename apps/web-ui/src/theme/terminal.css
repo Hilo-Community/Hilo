@@ -79,6 +79,30 @@
     align-items: center;
     gap: 8px;
   }
+  /* Registry marks also fit the compact menu, tabs and session headings. */
+  :is(
+      .coloride-new-panel-label,
+      .coloride-header-tab-icon,
+      .coloride-chat-cell-title-icon,
+      .sidebar-row-icon
+    )
+    .coloride-registry-mark {
+    width: 14px;
+    height: 14px;
+    font-size: 10px;
+    color: inherit;
+  }
+  :is(
+      .coloride-new-panel-label,
+      .coloride-header-tab-icon,
+      .coloride-chat-cell-title-icon,
+      .sidebar-row-icon
+    )
+    .coloride-registry-mark
+    svg {
+    width: 14px;
+    height: 14px;
+  }
   .coloride-new-panel-icon {
     display: inline-flex;
     color: var(--color-text-secondary);

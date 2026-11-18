@@ -31,7 +31,7 @@ export interface AgentHandle {
 }
 export interface AgentHost {
   start(
-    config: { program: string; args: string[]; provider: string | null },
+    config: { installedAgentId: string },
     onEvent: (event: AcpEvent) => void,
   ): Promise<AgentHandle>;
 }

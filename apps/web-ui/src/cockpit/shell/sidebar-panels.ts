@@ -1,4 +1,5 @@
 import type { OnboardingModalController } from "../../onboarding/index.js";
+import type { AgentRegistryHost } from "../../settings/agent-registry.js";
 import { WorkspaceSidebar } from "../../sidebar/workspace-sidebar.js";
 import type {
   CockpitAstSymbolItem,
@@ -19,6 +20,8 @@ export interface SidebarPanelsOptions {
   readonly openFile: (path: string, onError: (message: string) => void) => void;
   /** What a new session opens from the sidebar: a terminal panel, or an agent session. */
   readonly newSessionKind?: "terminal" | "agent";
+  readonly agentRegistryHost?: AgentRegistryHost;
+  readonly openSettings?: () => void;
 }
 
 /**
@@ -119,6 +122,8 @@ export class SidebarPanels {
       ...(options.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
       ...(options.switchWorkspace ? { switchWorkspace: options.switchWorkspace } : {}),
       ...(options.newSessionKind ? { newSessionKind: options.newSessionKind } : {}),
+      ...(options.agentRegistryHost ? { agentRegistryHost: options.agentRegistryHost } : {}),
+      ...(options.openSettings ? { openSettings: options.openSettings } : {}),
     });
   }
 

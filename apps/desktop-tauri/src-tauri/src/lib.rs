@@ -24,12 +24,18 @@ pub fn run() {
         // Closing the window with unsaved changes: hold it back and ask the UI first.
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let held_back = window
-                    .try_state::<DesktopAppState>()
-                    .is_some_and(|state| state.close_needs_confirmation());
+                let held_back = window.label() == "main"
+                    && window
+                        .try_state::<DesktopAppState>()
+                        .is_some_and(|state| state.close_needs_confirmation());
                 if held_back {
                     api.prevent_close();
                     commands::window::request_close_confirmation(window.app_handle());
+                }
+            }
+            if matches!(event, tauri::WindowEvent::Destroyed) && window.label() == "main" {
+                if let Some(settings) = window.app_handle().get_webview_window("settings") {
+                    let _ = settings.close();
                 }
             }
         })
@@ -55,6 +61,7 @@ pub fn run() {
             commands::agent_registry::agent_registry_list_command,
             commands::agent_registry::agent_registry_install_command,
             commands::agent_registry::agent_registry_uninstall_command,
+            commands::agent_registry::agent_registry_open_command,
             commands::documents::open_document_binary_command,
             commands::documents::apply_binary_transaction_command,
             commands::documents::save_document_binary_command,
@@ -78,6 +85,7 @@ pub fn run() {
             commands::trust::workspace_trust_command,
             commands::trust::request_workspace_trust_command,
             commands::trust::revoke_workspace_trust_command,
+            commands::window::open_settings_window_command,
             commands::window::report_unsaved_buffers_command,
             commands::window::confirm_exit_command
         ])

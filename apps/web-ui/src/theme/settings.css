@@ -1,95 +1,274 @@
-/* Settings screen and the ACP registry */
+/* Settings screen: the ACP agent registry */
 @layer components {
-  .coloride-settings-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.5);
+  .coloride-standalone-settings {
+    position: relative;
+    width: 100%;
+    height: 100%;
   }
-  .coloride-settings-dialog {
+  .coloride-standalone-settings .coloride-settings-page {
+    inset: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .coloride-settings-page {
+    position: absolute;
+    inset: 0 0 0 48px;
+    z-index: 3;
     display: flex;
-    flex-direction: column;
-    width: min(920px, calc(100% - 48px));
-    height: min(680px, calc(100% - 64px));
-    border: 0.5px solid rgba(255, 255, 255, 0.14);
-    border-radius: 14px;
+    min-width: 0;
+    min-height: 0;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px 0 0 16px;
+    overflow: hidden;
     background: var(--color-main);
     color: var(--color-text-primary);
-    overflow: hidden;
+    container-type: inline-size;
   }
-  .coloride-settings-dialog > header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 12px 0 20px;
-    height: 48px;
-    flex: none;
-    border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
+  .coloride-settings-page[hidden] {
+    display: none !important;
   }
-  .coloride-settings-dialog h1 {
-    font-size: 14px;
-    font-weight: 600;
+  .coloride-cockpit-shell[data-settings-active="true"]
+    > :is(.coloride-zone-2-sidebar, .coloride-zone-3-multichat, .coloride-zone-4-inspector) {
+    visibility: hidden;
   }
-  .coloride-settings-close {
-    width: 28px;
-    height: 28px;
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--color-text-secondary);
-    font-size: 13px;
-    cursor: pointer;
+  .coloride-cockpit-shell[data-settings-active="true"] > [role="separator"] {
+    display: none;
   }
-  .coloride-settings-close:hover {
-    background: var(--color-selected);
-    color: var(--color-text-primary);
+  .coloride-macos-titlebar[data-settings-active="true"]
+    :is(.coloride-zone-4-header, .coloride-inspector-toggle, .coloride-sidebar-toggle) {
+    visibility: hidden;
   }
-  .coloride-settings-body {
-    display: grid;
-    grid-template-columns: 180px minmax(0, 1fr);
-    flex: 1;
-    min-height: 0;
-  }
-  .coloride-settings-body > nav {
+  .coloride-settings-navigation {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 12px 8px;
-    border-right: 0.5px solid rgba(255, 255, 255, 0.1);
+    width: 228px;
+    flex: 0 0 228px;
+    min-height: 0;
+    padding: 10px;
+    border-right: 0.5px solid rgba(255, 255, 255, 0.12);
     background: var(--color-sidebar);
+    /* Same row metrics as the chat sidebar (sidebar.css) */
+    --settings-row-height: 28px;
+    --settings-row-radius: 6px;
+    --settings-row-gap: 2px;
+    --settings-leading-inset: 5px;
+    --settings-icon-size: 20px;
+    --settings-icon-hover: #414141;
   }
-  .coloride-settings-body > nav button {
-    height: 30px;
-    padding: 0 10px;
+  .coloride-settings-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: var(--settings-row-height);
+    flex-shrink: 0;
+    padding: 0 8px;
+    margin: 0 0 8px;
+    border-radius: var(--settings-row-radius);
+    background: var(--color-selected);
+    color: var(--color-text-secondary);
+  }
+  .coloride-settings-search:hover,
+  .coloride-settings-search:focus-within {
+    color: var(--color-text-primary);
+  }
+  .coloride-settings-search svg {
+    flex-shrink: 0;
+  }
+  .coloride-settings-search input {
+    width: 100%;
+    min-width: 0;
     border: 0;
-    border-radius: 6px;
+    outline: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    font-size: 12px;
+  }
+  .coloride-settings-search input::placeholder {
+    color: var(--color-text-secondary);
+  }
+  /* Native scrollbars hidden: the app's thin overlay scrollbar is drawn on the viewport. */
+  .coloride-settings-viewport {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+  }
+  .coloride-settings-viewport--nav {
+    /* Reaches over the sidebar's right padding so the scrollbar sits on its edge. */
+    margin-right: -10px;
+  }
+  .coloride-settings-categories {
+    position: absolute;
+    inset: 0;
+    /* Gives back the 10px the viewport reaches over: rows end where the search field ends. */
+    padding-right: 10px;
+    overflow: auto;
+    scrollbar-width: none;
+  }
+  .coloride-settings-categories::-webkit-scrollbar,
+  .coloride-settings-main::-webkit-scrollbar {
+    display: none;
+  }
+  .coloride-settings-categories button {
+    border: 0;
     background: transparent;
     color: var(--color-text-secondary);
+    font: inherit;
     font-size: 13px;
     text-align: left;
     cursor: pointer;
   }
-  .coloride-settings-body > nav button[aria-current="page"] {
+  .coloride-settings-nav-row {
+    display: flex;
+    align-items: center;
+    height: var(--settings-row-height);
+    padding: 0 3px 0 var(--settings-leading-inset);
+    margin: 0 0 var(--settings-row-gap);
+    border-radius: var(--settings-row-radius);
+  }
+  .coloride-settings-nav-row:hover,
+  .coloride-settings-subnav button:hover,
+  .coloride-settings-nav-row[data-selected="true"],
+  .coloride-settings-subnav button[aria-current="page"] {
     background: var(--color-selected);
+  }
+  .coloride-settings-nav-label,
+  .coloride-settings-nav-row:hover .coloride-settings-nav-label,
+  .coloride-settings-subnav button:hover,
+  .coloride-settings-subnav button[aria-current="page"] {
     color: var(--color-text-primary);
   }
-  .coloride-settings-body > main {
+  .coloride-settings-nav-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--settings-icon-size);
+    height: var(--settings-icon-size);
+    flex: 0 0 var(--settings-icon-size);
+    padding: 2px;
+    border-radius: var(--settings-row-radius);
+  }
+  .coloride-settings-categories button.coloride-settings-nav-toggle:hover {
+    background: var(--settings-icon-hover);
+    color: var(--color-text-primary);
+  }
+  .coloride-settings-nav-toggle[aria-expanded="true"] svg {
+    transform: rotate(90deg);
+  }
+  .coloride-settings-nav-label {
+    flex: 1;
     min-width: 0;
-    overflow-y: auto;
-    padding: 20px 24px 28px;
+    height: 100%;
+    padding: 0 0 0 6px;
+  }
+  .coloride-settings-subnav {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--settings-row-gap);
+    margin: 0 0 var(--settings-row-gap);
+  }
+  /* One continuous guide line under the chevron, as in the chat sidebar (.sidebar-sessions) */
+  .coloride-settings-subnav::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--settings-leading-inset) + var(--settings-icon-size) / 2);
+    width: 1px;
+    background: rgba(255, 255, 255, 0.18);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .coloride-settings-subnav button {
+    position: relative;
+    width: 100%;
+    height: var(--settings-row-height);
+    padding: 0 3px 0 calc(var(--settings-leading-inset) + var(--settings-icon-size) + 6px);
+    border-radius: var(--settings-row-radius);
+  }
+  .coloride-settings-main {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+    scrollbar-width: none;
+    /* The title lines up with the sidebar's search field (10px padding, 28px tall). */
+    padding: 10px 32px 32px;
     user-select: text;
   }
-  .coloride-settings-dialog :focus-visible {
-    outline: 2px solid rgba(255, 255, 255, 0.55);
+  .coloride-settings-page :focus-visible {
+    outline: 1px solid #858585;
     outline-offset: 2px;
+  }
+  .coloride-settings-category {
+    max-width: 972px;
+    margin: 0 auto;
+  }
+  .coloride-settings-category.is-wide {
+    max-width: none;
+  }
+  .coloride-settings-group > .coloride-registry {
+    padding-top: 12px;
+  }
+  .coloride-settings-result-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+  }
+  .coloride-settings-empty {
+    max-width: 972px;
+    margin: auto;
+    padding: 50px 0;
+  }
+  .coloride-settings-empty h2 {
+    font-size: 16px;
+    font-weight: 500;
+  }
+  .coloride-settings-empty p {
+    margin-top: 9px;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+  }
+  .coloride-settings-empty button {
+    margin-top: 18px;
+    border: 0;
+    border-radius: 4px;
+    background: var(--color-selected);
+    color: var(--color-text-primary);
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .coloride-settings-search input:focus-visible {
+    outline: none;
+  }
+  @container (max-width: 760px) {
+    .coloride-settings-navigation {
+      width: 190px;
+      flex-basis: 190px;
+    }
+    .coloride-settings-main {
+      padding-inline: 24px;
+    }
+  }
+  @container (max-width: 470px) {
+    .coloride-settings-navigation {
+      width: 150px;
+      flex-basis: 150px;
+    }
+    .coloride-settings-main {
+      padding-inline: 16px;
+    }
+    .coloride-settings-categories button {
+      font-size: 12px;
+    }
   }
 
   .coloride-registry h2 {
+    margin: 0;
     font-size: 16px;
     font-weight: 600;
+    line-height: 28px;
   }
   .coloride-registry-intro {
     margin: 4px 0 14px;
@@ -101,23 +280,46 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
-  .coloride-registry-toolbar input {
+  .coloride-registry-search {
+    display: flex;
+    align-items: center;
     flex: 1 1 200px;
+    gap: 8px;
+    height: 28px;
     min-width: 0;
-    height: 30px;
-    padding: 0 10px;
-    border: 0.5px solid rgba(255, 255, 255, 0.14);
-    border-radius: 8px;
-    background: var(--color-card);
+    padding: 0 8px;
+    border-radius: 6px;
+    background: var(--color-selected);
+    color: var(--color-text-secondary);
+  }
+  .coloride-registry-search:hover,
+  .coloride-registry-search:focus-within {
     color: var(--color-text-primary);
-    font-size: 13px;
+  }
+  .coloride-registry-search svg {
+    flex: none;
+  }
+  .coloride-registry-search input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    font-size: 12px;
+  }
+  .coloride-registry-search input::placeholder {
+    color: var(--color-text-secondary);
+  }
+  .coloride-registry-search input:focus-visible {
+    outline: none;
   }
   .coloride-registry-filters {
     display: inline-flex;
-    padding: 2px;
-    border-radius: 8px;
+    padding: 1px;
+    border-radius: 6px;
     background: var(--color-card);
   }
   .coloride-registry-filters button {
@@ -140,10 +342,6 @@
     align-items: center;
     gap: 10px;
     margin-bottom: 10px;
-    padding: 8px 10px;
-    border: 0.5px solid rgba(239, 68, 68, 0.5);
-    border-radius: 8px;
-    background: rgba(239, 68, 68, 0.1);
     color: #fca5a5;
     font-size: 12px;
     line-height: 1.4;
@@ -163,33 +361,47 @@
     font-size: 12px;
     cursor: pointer;
   }
+  .coloride-registry-status:empty {
+    display: none;
+  }
+  /* Results are announced, not drawn: visually hidden, still read by screen readers. */
+  .coloride-registry-status[data-kind="notice"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
   .coloride-registry-status {
     min-height: 18px;
     margin-bottom: 6px;
     color: var(--color-text-secondary);
     font-size: 12px;
   }
+  /* One card per agent, full width: identity on top, the description under it, actions aside. */
   .coloride-registry-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 10px;
-  }
-  .coloride-registry-card {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 12px;
-    border: 0.5px solid rgba(255, 255, 255, 0.1);
+    gap: 8px;
+  }
+  .coloride-registry-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 16px;
+    row-gap: 4px;
+    padding: 12px 14px;
     border-radius: 10px;
     background: var(--color-card);
   }
-  .coloride-registry-card[data-installed="true"] {
-    border-color: rgba(34, 197, 94, 0.45);
-  }
   .coloride-registry-title {
+    grid-column: 1;
+    grid-row: 1;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     min-width: 0;
   }
   .coloride-registry-title h3 {
@@ -200,38 +412,67 @@
     font-size: 13px;
     font-weight: 600;
   }
+  /* Monochrome brand mark (or the agent's first letter in a small tile), as in the original. */
   .coloride-registry-mark {
     flex: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: hsl(var(--mark-hue) 45% 36%);
-    color: #fff;
-    font-size: 11px;
-    font-weight: 600;
+    width: 22px;
+    height: 22px;
+    color: var(--color-text-secondary);
   }
-  .coloride-registry-version,
+  .coloride-registry-mark svg {
+    width: 20px;
+    height: 20px;
+  }
+  .coloride-registry-mark--letter {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    background: var(--color-selected);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  /* Same size and weight as the name, so both read as one text; only the colour is quieter. */
+  .coloride-registry-version {
+    color: var(--color-text-secondary);
+    font: inherit;
+  }
+  /* A newer version is on offer: it shows in green and the button becomes Update. */
+  .coloride-registry-version--update {
+    color: #4ade80;
+  }
   .coloride-registry-license {
     flex: none;
-    color: var(--color-text-muted);
+    padding: 1px 7px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--color-text-secondary);
     font-size: 11px;
   }
-  .coloride-registry-license {
-    margin-left: auto;
+  /* Text lines up under the name, past the mark (22px + 10px gap). */
+  .coloride-registry-card > p {
+    grid-column: 1;
+    margin: 0 0 0 32px;
   }
   .coloride-registry-description {
-    flex: 1;
+    grid-row: 2;
+    min-width: 0;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
     color: var(--color-text-secondary);
     font-size: 12px;
-    line-height: 1.45;
-    overflow-wrap: anywhere;
+    line-height: 1.5;
   }
-  .coloride-registry-note {
-    color: #fde047;
-    font-size: 11px;
+  .coloride-registry-card > .coloride-registry-actions {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: end;
+    justify-content: flex-end;
+    margin: 0;
   }
   .coloride-registry-blocked {
     color: #fdba74;
@@ -246,29 +487,109 @@
     gap: 6px;
     margin-top: 2px;
   }
+  /* Install / Update: small, hairline outline, no fill, with the download glyph. Remove: quieter. */
   .coloride-registry-actions button {
-    height: 26px;
-    padding: 0 12px;
-    border: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 24px;
+    /* Install, Update and Remove share one small width; a running one shows only the spinner. */
+    min-width: 62px;
+    padding: 0 8px;
+    border: 0.5px solid rgba(255, 255, 255, 0.3);
     border-radius: 6px;
-    background: var(--color-selected);
+    background: transparent;
     color: var(--color-text-primary);
-    font-size: 12px;
+    font-size: 11px;
+    white-space: nowrap;
     cursor: pointer;
   }
+  .coloride-registry-actions button svg {
+    width: 13px;
+    height: 13px;
+  }
+  /* The border stays as it is on hover; a faint tint is the only feedback. */
   .coloride-registry-actions button:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.05);
   }
-  .coloride-registry-actions .coloride-registry-primary {
-    background: #e8e8e8;
-    color: #111;
+  /* Remove is a destructive action: red text and red outline. */
+  .coloride-registry-actions .coloride-registry-ghost {
+    border-color: rgba(248, 113, 113, 0.55);
+    color: #f87171;
   }
-  .coloride-registry-actions .coloride-registry-primary:hover:not(:disabled) {
-    background: #fff;
+  .coloride-registry-actions .coloride-registry-ghost:hover:not(:disabled) {
+    background: rgba(248, 113, 113, 0.08);
   }
   .coloride-registry-actions button:disabled {
     opacity: 0.5;
     cursor: default;
+  }
+  /* While it runs, the button stays fully visible with a turning ring. */
+  .coloride-registry-actions button[data-busy="true"]:disabled {
+    opacity: 1;
+    cursor: progress;
+  }
+  .coloride-registry-spinner {
+    animation: coloride-registry-spin 0.8s linear infinite;
+  }
+  @keyframes coloride-registry-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  /* Progress along the bottom of the card of the agent being installed or removed:
+     gray and sweeping while the Host waits for the user's confirmation, then green and filling
+     smoothly. It cannot know the real percentage, so it slows down as it nears the end. */
+  .coloride-registry-card {
+    position: relative;
+    overflow: hidden;
+  }
+  .coloride-registry-card[data-pending]::before,
+  .coloride-registry-card[data-pending]::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 3px;
+  }
+  .coloride-registry-card[data-pending]::before {
+    right: 0;
+    background: rgba(255, 255, 255, 0.07);
+  }
+  .coloride-registry-card[data-phase="waiting"]::after {
+    width: 40%;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.35);
+    animation: coloride-registry-sweep 1.3s ease-in-out infinite;
+  }
+  .coloride-registry-card[data-phase="running"]::before {
+    background: rgba(74, 222, 128, 0.15);
+  }
+  .coloride-registry-card[data-phase="running"]::after {
+    width: 0;
+    border-radius: 0 3px 3px 0;
+    background: #4ade80;
+    animation: coloride-registry-fill 24s cubic-bezier(0.1, 0.7, 0.2, 1) forwards;
+  }
+  @keyframes coloride-registry-sweep {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(250%);
+    }
+  }
+  @keyframes coloride-registry-fill {
+    to {
+      width: 92%;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .coloride-registry-spinner,
+    .coloride-registry-card[data-pending]::after {
+      animation-duration: 3s;
+    }
   }
   .coloride-registry-empty {
     grid-column: 1 / -1;

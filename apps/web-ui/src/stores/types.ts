@@ -110,6 +110,8 @@ interface SessionBase {
 }
 export interface CockpitAgentSession extends SessionBase {
   readonly kind: "agent";
+  readonly agentId?: string;
+  readonly agentName?: string;
   readonly modelName: string;
   readonly agentExecutionStatus?: "Idle" | "Running" | "QueuedSequential";
 }
@@ -157,8 +159,18 @@ interface CreatePanelOptions {
 
 export type CreateChatOptions = CreatePanelOptions &
   (
-    | { readonly kind?: "agent"; readonly modelName?: string }
-    | { readonly kind: "terminal"; readonly modelName?: never }
+    | {
+        readonly kind?: "agent";
+        readonly modelName?: string;
+        readonly agentId?: string;
+        readonly agentName?: string;
+      }
+    | {
+        readonly kind: "terminal";
+        readonly modelName?: never;
+        readonly agentId?: never;
+        readonly agentName?: never;
+      }
   );
 
 export interface CockpitStoreBundle extends WorkspaceNavigationActions {

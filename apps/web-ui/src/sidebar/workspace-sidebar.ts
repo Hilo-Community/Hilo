@@ -1,5 +1,6 @@
 import { NewPanelMenu } from "../cockpit/panels/new-panel-menu.js";
 import { sessionIcon } from "../cockpit/panels/session-presentation.js";
+import type { AgentRegistryHost } from "../settings/agent-registry.js";
 import { type WorkGroup, listProjects } from "../state/workspace-navigation.js";
 import type { CockpitChatTab, CockpitFileTreeNode, CockpitStoreBundle } from "../stores/index.js";
 import { attribute, button, reconcile, visibility } from "../ui/dom-utils.js";
@@ -49,6 +50,8 @@ export interface WorkspaceSidebarOptions {
   readonly switchWorkspace?: (path: string) => Promise<readonly CockpitFileTreeNode[] | null>;
   /** What the "+" of a group opens: a terminal panel, or an agent session (the default). */
   readonly newSessionKind?: "terminal" | "agent";
+  readonly agentRegistryHost?: AgentRegistryHost;
+  readonly openSettings?: () => void;
 }
 
 /** Owns sidebar navigation DOM and subscriptions, independent of the editor and streaming. */
@@ -71,7 +74,7 @@ export class WorkspaceSidebar {
     treeHost.className = "sidebar-navigation";
     treeHost.setAttribute("aria-label", UI_STRINGS.sidebar.navigation);
     this.menu = new SidebarMenu(treeHost);
-    this.newPanelMenu = new NewPanelMenu(treeHost.ownerDocument);
+    this.newPanelMenu = new NewPanelMenu(treeHost.ownerDocument, options.agentRegistryHost);
     this.openProjectButton = button(
       doc,
       "sidebar-row sidebar-open-project sidebar-open-project-label",
@@ -240,7 +243,18 @@ export class WorkspaceSidebar {
         if (this.options.newSessionKind === "terminal") {
           this.newPanelMenu.toggle(anchor, {
             openTerminal: () => this.addSession(projectPath, group.id, "terminal"),
-            openAgentInterface: () => this.addSession(projectPath, group.id),
+            openAgentInterface: (agent) =>
+              this.withProject(projectPath, () => {
+                stores.createChat({
+                  groupId: group.id,
+                  kind: "agent",
+                  agentId: agent.agentId,
+                  agentName: agent.name,
+                  title: agent.name,
+                  modelName: agent.name,
+                });
+              }),
+            installAgents: () => this.options.openSettings?.(),
           });
         } else this.addSession(projectPath, group.id);
       },
@@ -526,6 +540,7 @@ export class WorkspaceSidebar {
   destroy(): void {
     this.destroyed = true;
     this.menu.close(false);
+    this.newPanelMenu.destroy();
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.projects.clear();
   }
