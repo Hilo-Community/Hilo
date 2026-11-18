@@ -99,6 +99,37 @@ function status(value: unknown): ToolCard["status"] {
   return "pending";
 }
 
+/**
+ * What an event adds to the retained state, in characters. Tool updates are reduced to their
+ * kind, title, status and locations, so their output (file contents, base64 images) is never
+ * kept and must not count: a single image read would otherwise exhaust the session's budget.
+ */
+function retainedSize(event: AcpEvent): number {
+  switch (event.type) {
+    case "message":
+      return event.text.length;
+    case "terminalAuthOutput":
+    case "authMethods":
+      return 0;
+    case "update": {
+      const u = event.update;
+      if (u.sessionUpdate === "agent_message_chunk") {
+        const content = record(u.content);
+        return typeof content.text === "string" ? content.text.length : 0;
+      }
+      if (u.sessionUpdate === "tool_call" || u.sessionUpdate === "tool_call_update") {
+        const title = typeof u.title === "string" ? u.title.length : 0;
+        const where = Array.isArray(u.locations) ? JSON.stringify(u.locations).length : 0;
+        return 64 + title + where;
+      }
+      if (u.sessionUpdate === "plan") return JSON.stringify(u.entries ?? []).length;
+      return 64;
+    }
+    default:
+      return JSON.stringify(event).length;
+  }
+}
+
 /** Own subscription domain: streaming never updates Zone 4 or the editor's mount container. */
 export class AgentStore extends AtomicStore<AgentState> {
   private queue: AcpEvent[] = [];
@@ -125,7 +156,7 @@ export class AgentStore extends AtomicStore<AgentState> {
   }
   enqueue(event: AcpEvent): void {
     if (this.disposed) return;
-    const bytes = JSON.stringify(event).length;
+    const bytes = retainedSize(event);
     if (
       event.type !== "stopped" &&
       (this.queuedBytes + bytes > 512 * 1024 || this.retainedBytes + bytes > 2 * 1024 * 1024)

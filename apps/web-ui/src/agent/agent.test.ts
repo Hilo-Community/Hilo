@@ -146,6 +146,31 @@ describe("LOT-014 agent panel", () => {
     store.enqueue(chunk("late"));
     expect(store.getUpdateCount()).toBe(1);
   });
+  it("does not count tool output it never keeps against the display budget", () => {
+    const frames: Array<() => void> = [];
+    const store = new AgentStore((cb) => frames.push(cb));
+    const image = "A".repeat(3 * 1024 * 1024);
+    for (const id of ["a", "b"]) {
+      store.enqueue({
+        type: "update",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: id,
+          title: "Read a.png",
+          kind: "read",
+          status: "completed",
+          content: [{ type: "content", content: { type: "image", data: image } }],
+          rawOutput: image,
+        },
+      });
+      for (const run of frames.splice(0)) run();
+    }
+    expect(store.getState().error).toBe("");
+    expect(store.getState().tools.map((tool) => tool.status)).toEqual(["done", "done"]);
+    // Retained text still has a bound.
+    store.enqueue({ type: "message", role: "assistant", text: "x".repeat(3 * 1024 * 1024) });
+    expect(store.getState().error).toContain("display limit");
+  });
   it("merges plans, tools and proposals, filters unsafe locations, clears permissions on stop", () => {
     const store = new AgentStore(() => undefined);
     store.enqueue({
