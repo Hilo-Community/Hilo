@@ -2,90 +2,107 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   type AgentAccountHost,
-  AgentAccountPanel,
   type AgentAccountStatus,
+  AgentUnlinkPanel,
 } from "./agent-account-panel.js";
-import type { AgentRegistryHost } from "./agent-registry.js";
 
 const settle = async () => {
   for (let i = 0; i < 20; i++) await Promise.resolve();
 };
-const status = (): AgentAccountStatus => ({
+const status = (keySaved: boolean): AgentAccountStatus => ({
   preferences: { mode: "auto", provider: null, methodId: null, extraAllowedHosts: [] },
-  providers: [{ id: "provider", name: "Provider", keySaved: false }],
+  providers: [{ id: "openai", name: "OpenAI", keySaved }],
   authMethods: [],
   knownProfile: true,
 });
-const registry = { open: vi.fn(async () => {}) } as unknown as AgentRegistryHost;
 const installed = {
-  id: "agent@1",
-  agentId: "agent",
-  name: "Agent",
+  id: "codex-acp@1",
+  agentId: "codex-acp",
+  name: "Codex",
   version: "1",
-  distribution: "binary",
+  distribution: "npm",
 };
 function button(root: HTMLElement, label: string): HTMLButtonElement {
-  const button = [...root.querySelectorAll("button")].find((item) => item.textContent === label);
-  if (!button) throw new Error(`Missing ${label}`);
-  return button;
+  const found = [...root.querySelectorAll("button")].find((item) => item.textContent === label);
+  if (!found) throw new Error(`Missing ${label}`);
+  return found;
+}
+function fake(keySaved: boolean, overrides: Partial<AgentAccountHost> = {}) {
+  const order: string[] = [];
+  const host: AgentAccountHost = {
+    status: vi.fn(async () => status(keySaved)),
+    setKey: vi.fn(async (provider: string) => {
+      order.push(`key:${provider}`);
+    }),
+    save: vi.fn(async () => {}),
+    signOut: vi.fn(async () => {
+      order.push("signOut");
+    }),
+    ...overrides,
+  };
+  return { host, order };
 }
 
-describe("agent account boundary", () => {
-  it("clears the password input before the OS-store operation resolves and never displays the key", async () => {
-    let resolve = () => {};
-    const stored = new Promise<void>((done) => {
-      resolve = done;
-    });
-    const host: AgentAccountHost = {
-      status: vi.fn(async () => status()),
-      setKey: vi.fn(() => stored),
-      save: vi.fn(async () => {}),
-      signOut: vi.fn(async () => {}),
-    };
-    const panel = new AgentAccountPanel(document, host, registry, installed);
+describe("unlinking an agent", () => {
+  it("asks first and changes nothing until it is confirmed", async () => {
+    const { host } = fake(false);
+    const close = vi.fn();
+    const panel = new AgentUnlinkPanel(document, host, installed, close);
     await settle();
-    const input = panel.element.querySelector<HTMLInputElement>('input[type="password"]');
-    if (!input) throw new Error("Missing password field");
-    input.value = "synthetic-private-key";
-    button(panel.element, "Save API key").click();
-    expect(input.value).toBe("");
-    expect(host.setKey).toHaveBeenCalledWith("provider", "synthetic-private-key");
-    expect(panel.element.textContent).not.toContain("synthetic-private-key");
-    resolve();
-    await settle();
-    expect(host.save).toHaveBeenCalledWith(
-      "agent",
-      expect.objectContaining({ mode: "apiKey", provider: "provider" }),
-    );
+    expect(panel.element.textContent).toContain("Signs Codex out");
+    expect(panel.element.textContent).not.toContain("API key");
+    expect(host.signOut).not.toHaveBeenCalled();
+    button(panel.element, "Cancel").click();
+    expect(close).toHaveBeenCalledOnce();
+    expect(host.signOut).not.toHaveBeenCalled();
+    expect(host.setKey).not.toHaveBeenCalled();
     panel.dispose();
   });
 
-  it("uses advertised login metadata and keeps unknown-agent network denied by default", async () => {
-    const snapshot = status();
-    snapshot.knownProfile = false;
-    snapshot.providers = [];
-    snapshot.authMethods = [{ id: "arbitrary-login-id", name: "Provider account" }];
-    const host: AgentAccountHost = {
-      status: vi.fn(async () => snapshot),
-      setKey: vi.fn(async () => {}),
-      save: vi.fn(async () => {}),
-      signOut: vi.fn(async () => {}),
-    };
-    const panel = new AgentAccountPanel(document, host, registry, installed);
+  it("signs the agent out and removes the saved key, naming the sharing", async () => {
+    const { host, order } = fake(true);
+    const panel = new AgentUnlinkPanel(document, host, installed, () => {});
     await settle();
-    expect(panel.element.textContent).toContain("Network is denied");
-    expect(panel.element.querySelector("textarea")?.value).toBe("");
-    button(panel.element, "Sign in · Provider account").click();
+    expect(panel.element.textContent).toContain("saved OpenAI API key");
+    expect(panel.element.textContent).toContain("every agent that uses OpenAI");
+    button(panel.element, "Unlink").click();
     await settle();
-    expect(host.save).toHaveBeenCalledWith(
-      "agent",
-      expect.objectContaining({
-        mode: "account",
-        methodId: "arbitrary-login-id",
-        extraAllowedHosts: [],
-      }),
-    );
-    expect(registry.open).toHaveBeenCalledWith("agent");
+    expect(host.signOut).toHaveBeenCalledWith("codex-acp");
+    expect(host.setKey).toHaveBeenCalledWith("openai", null);
+    // The agent's sessions stop before the key goes.
+    expect(order).toEqual(["signOut", "key:openai"]);
+    expect(panel.element.textContent).toContain("Unlinked. Connect Codex again");
+    expect(panel.element.querySelector("button")).toBeNull();
+    panel.dispose();
+  });
+
+  it("leaves a key that was never saved alone", async () => {
+    const { host } = fake(false);
+    const panel = new AgentUnlinkPanel(document, host, installed, () => {});
+    await settle();
+    button(panel.element, "Unlink").click();
+    await settle();
+    expect(host.signOut).toHaveBeenCalledWith("codex-acp");
+    expect(host.setKey).not.toHaveBeenCalled();
+    panel.dispose();
+  });
+
+  it("reports a failure instead of claiming success, and lets the user try again", async () => {
+    const signOut = vi.fn().mockRejectedValueOnce(new Error("Could not stop the agent"));
+    const { host } = fake(true, { signOut });
+    const panel = new AgentUnlinkPanel(document, host, installed, () => {});
+    await settle();
+    button(panel.element, "Unlink").click();
+    await settle();
+    expect(panel.element.textContent).toContain("Could not stop the agent");
+    expect(panel.element.textContent).not.toContain("Unlinked.");
+    // The key stays when the sign-out did not happen.
+    expect(host.setKey).not.toHaveBeenCalled();
+    expect(button(panel.element, "Unlink").disabled).toBe(false);
+    button(panel.element, "Unlink").click();
+    await settle();
+    expect(panel.element.textContent).toContain("Unlinked.");
+    expect(host.setKey).toHaveBeenCalledWith("openai", null);
     panel.dispose();
   });
 });

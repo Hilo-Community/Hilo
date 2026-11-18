@@ -183,7 +183,9 @@ pub async fn agent_account_sign_out_command(
             .account(&launch.installation_id)
             .map_err(|e| e.to_string())?
             .preferences;
-        preferences.mode = AccountMode::Offline;
+        // Back to automatic: the next connection asks to sign in again, instead of staying offline.
+        preferences.mode = AccountMode::Auto;
+        preferences.method_id = None;
         registry
             .save_account_preferences(&launch.installation_id, preferences)
             .map_err(|e| e.to_string())?;
@@ -320,7 +322,7 @@ pub(super) fn runtime_with_key_reader(
             hosts.sort();
             hosts.dedup();
             if hosts.is_empty() {
-                return Err("Network is denied for this unknown agent. Allow specific account hosts in Settings before connecting".into());
+                return Err("Network is denied for this unknown agent: its sign-in hosts have not been reviewed".into());
             }
             let gateway = AgentGateway::start(GatewayMode::Account {
                 allowed_hosts: hosts.clone(),

@@ -1,5 +1,5 @@
 import { UI_STRINGS, uiText } from "../ui/ui-strings.js";
-import { AgentAccountPanel } from "./agent-account-panel.js";
+import { AgentUnlinkPanel } from "./agent-account-panel.js";
 import { SEARCH_ICON, SPINNER_ICON, agentMark } from "./agent-marks.js";
 import {
   type AgentRegistryHost,
@@ -28,7 +28,7 @@ export class AgentRegistryPanel {
   private readonly status: HTMLElement;
   private readonly alert: HTMLElement;
   private readonly list: HTMLElement;
-  private readonly accounts = new Map<string, AgentAccountPanel>();
+  private readonly accounts = new Map<string, AgentUnlinkPanel>();
 
   constructor(
     doc: Document,
@@ -244,16 +244,22 @@ export class AgentRegistryPanel {
     if (installed && this.host.account) {
       actions.append(
         this.button(
-          "Account",
-          `${installed.name} account`,
-          `${agent.id}:account`,
+          text.unlink,
+          uiText.unlinkAgent(installed.name),
+          `${agent.id}:unlink`,
           () => {
-            let account = this.accounts.get(installed.id);
-            if (account) account.element.hidden = !account.element.hidden;
-            else if (this.host.account) {
-              account = new AgentAccountPanel(doc, this.host.account, this.host, installed);
-              this.accounts.set(installed.id, account);
-              card.append(account.element);
+            const open = this.accounts.get(installed.id);
+            if (open) {
+              open.dispose();
+              this.accounts.delete(installed.id);
+            } else if (this.host.account) {
+              const close = () => {
+                panel.dispose();
+                this.accounts.delete(installed.id);
+              };
+              const panel = new AgentUnlinkPanel(doc, this.host.account, installed, close);
+              this.accounts.set(installed.id, panel);
+              card.append(panel.element);
             }
           },
           { disabled: busy },

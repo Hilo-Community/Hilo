@@ -346,6 +346,36 @@ describe("agent registry panel", () => {
     panel.destroy();
   });
 
+  it("offers only Unlink for the account, asking before it signs the agent out", async () => {
+    const fake = fakeHost(listing([agent("a")], [installed("a")]));
+    const account = {
+      status: vi.fn(async () => ({
+        preferences: { mode: "auto", provider: null, methodId: null, extraAllowedHosts: [] },
+        providers: [],
+        authMethods: [],
+        knownProfile: true,
+      })),
+      setKey: vi.fn(async () => {}),
+      save: vi.fn(async () => {}),
+      signOut: vi.fn(async () => {}),
+    } as unknown as NonNullable<AgentRegistryHost["account"]>;
+    const panel = new AgentRegistryPanel(document, { ...fake.host, account });
+    document.body.append(panel.element);
+    await settle();
+    expect(buttons(panel.element, "Account A")).toHaveLength(0);
+    expect(panel.element.textContent).not.toContain("API key");
+    click(panel.element, "Unlink A");
+    await settle();
+    expect(account.signOut).not.toHaveBeenCalled();
+    const confirm = [
+      ...panel.element.querySelectorAll<HTMLButtonElement>(".coloride-agent-account button"),
+    ].find((b) => b.textContent === "Unlink");
+    confirm?.click();
+    await settle();
+    expect(account.signOut).toHaveBeenCalledWith("a");
+    panel.destroy();
+  });
+
   it("says why an agent cannot be installed and disables its button", async () => {
     const { panel } = await mount(
       listing([agent("c", { blocked: "The registry publishes no SHA-256 for this download." })]),
