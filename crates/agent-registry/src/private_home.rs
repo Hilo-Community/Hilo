@@ -24,12 +24,15 @@ fn private_dir(path: &Path) -> io::Result<()> {
         }
         Ok(_) => {}
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            let mut builder = fs::DirBuilder::new();
             #[cfg(unix)]
-            {
+            let builder = {
                 use std::os::unix::fs::DirBuilderExt;
+                let mut builder = fs::DirBuilder::new();
                 builder.mode(0o700);
-            }
+                builder
+            };
+            #[cfg(not(unix))]
+            let builder = fs::DirBuilder::new();
             builder.create(path)?;
         }
         Err(error) => return Err(error),
