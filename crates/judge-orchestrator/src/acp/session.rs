@@ -681,10 +681,15 @@ impl Session {
                         if !elicitation.answered {
                             elicitation.answered = true;
                             let request = elicitation.request.clone();
-                            self.elicitation_urls
-                                .lock()
-                                .expect("elicitation lock")
-                                .remove(&id);
+                            // After an accept the agent is still waiting for the user to finish
+                            // in the browser: the page can be opened again until the agent says
+                            // it is complete (`elicitation/complete`) or the turn is cancelled.
+                            if action != "accept" {
+                                self.elicitation_urls
+                                    .lock()
+                                    .expect("elicitation lock")
+                                    .remove(&id);
+                            }
                             self.reply(&request, Ok(json!({"action":action})))?;
                         }
                     }

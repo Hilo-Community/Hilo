@@ -485,7 +485,8 @@ pub async fn agent_stop_command(app: tauri::AppHandle, id: u32) -> Result<(), St
 }
 
 /// Opens only a URL retained from this agent's pending, allowlisted elicitation. The request
-/// carries an opaque request ID, never a URL supplied by the webview.
+/// carries an opaque request ID, never a URL supplied by the webview. `accept` opens the page
+/// and answers the agent; `open` only opens it again while the agent still waits.
 #[tauri::command]
 pub async fn agent_elicitation_command(
     app: tauri::AppHandle,
@@ -496,13 +497,16 @@ pub async fn agent_elicitation_command(
     use tauri_plugin_opener::OpenerExt;
     let agent = agent(&app.state::<DesktopAppState>(), id)?;
     let agent = agent.lock().map_err(|_| "agent lock poisoned")?;
-    if action == "accept" {
+    if action == "accept" || action == "open" {
         let url = agent
             .elicitation_url(&request_id)
             .ok_or("Authentication request is no longer pending")?;
         app.opener()
             .open_url(url, None::<&str>)
             .map_err(|_| "Could not open the authentication URL")?;
+    }
+    if action == "open" {
+        return Ok(());
     }
     agent
         .answer_elicitation(request_id, action)
@@ -740,12 +744,23 @@ mod tests {
                 AcpEvent::AuthMethods { methods } => {
                     eprintln!("{agent_id}: {} advertised auth methods", methods.len())
                 }
-                AcpEvent::Elicitation { url, .. } if account_mode => {
+                AcpEvent::Elicitation { url, message, .. } if account_mode => {
                     let host = url
                         .strip_prefix("https://")
                         .and_then(|rest| rest.split(['/', '?', '#']).next())
                         .filter(|host| !host.is_empty());
                     eprintln!("{agent_id}: login verification requested on {host:?}");
+                    // The shape of the message, with the one-time code masked.
+                    let shape: String = match message.split_once("code:") {
+                        Some((head, code)) => format!(
+                            "{head}code:{}",
+                            code.chars()
+                                .map(|c| if c.is_ascii_alphanumeric() { 'X' } else { c })
+                                .collect::<String>()
+                        ),
+                        None => message.clone(),
+                    };
+                    eprintln!("{agent_id}: message shape: {shape:?}");
                     assert!(host.is_some());
                     break;
                 }

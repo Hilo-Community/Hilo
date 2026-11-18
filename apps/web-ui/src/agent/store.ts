@@ -37,7 +37,8 @@ export interface AgentHandle {
   cancel(): Promise<void>;
   stop(): Promise<void>;
   answer(id: string, allow: boolean): Promise<void>;
-  elicit?(id: string, action: "accept" | "decline" | "cancel"): Promise<void>;
+  /** `open` shows the sign-in page again without answering the agent. */
+  elicit?(id: string, action: "accept" | "decline" | "cancel" | "open"): Promise<void>;
 }
 export interface AgentHost {
   start(

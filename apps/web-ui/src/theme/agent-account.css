@@ -48,10 +48,54 @@
   color: inherit;
 }
 
-.coloride-agent-authentication-url {
-  overflow-wrap: anywhere;
-  font-family: monospace;
-  user-select: text;
+.coloride-agent-authentication {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.coloride-agent-authentication p {
+  margin: 0;
+}
+.coloride-agent-authentication-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.coloride-agent-authentication-host {
+  font-size: 12px;
+  color: var(--color-text-secondary, #878888);
+}
+.coloride-agent-authentication-codebox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+/* The code is what the user types in the browser: large, spaced, selectable. */
+.coloride-agent-authentication-code {
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  user-select: all;
+}
+.coloride-agent-authentication-status {
+  font-size: 12px;
+  color: var(--color-text-secondary, #878888);
+}
+.coloride-agent-authentication-status:empty {
+  display: none;
+}
+.coloride-agent-authentication-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .coloride-agent-login-screen {

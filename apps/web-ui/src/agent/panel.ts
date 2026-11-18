@@ -24,6 +24,8 @@ export class AgentPanel {
   private handle: AgentHandle | null = null;
   private generation = 0;
   private starting = false;
+  /** Sign-in requests already opened, so each page opens once per session. */
+  private readonly signInOpened = new Set<string>();
   private readonly unsubscribe: () => void;
   private readonly prompt: PromptInput;
   private readonly start: HTMLButtonElement;
@@ -145,6 +147,7 @@ export class AgentPanel {
   private async begin(): Promise<void> {
     if (this.starting) return;
     const generation = ++this.generation;
+    this.signInOpened.clear();
     this.starting = true;
     this.render();
     try {
@@ -277,6 +280,24 @@ export class AgentPanel {
     content.push(this.login.element);
     this.output.replaceChildren(...content);
     this.login.fit();
+    this.openSignInPages();
+  }
+  /**
+   * Opens the sign-in page of each new request by itself: the user chose to connect, and the Host
+   * opens only the address it kept for that request, on a host it approved. A failure leaves the
+   * card with its button.
+   */
+  private openSignInPages(): void {
+    const handle = this.handle;
+    if (!handle?.elicit) return;
+    for (const request of this.store.getState().elicitations) {
+      if (request.accepted || this.signInOpened.has(request.id)) continue;
+      this.signInOpened.add(request.id);
+      const elicit = handle.elicit(request.id, "accept");
+      void elicit
+        .then(() => this.store.answeredElicitation(request.id, "accept"))
+        .catch(() => undefined);
+    }
   }
   destroy(): void {
     this.login.dispose();
