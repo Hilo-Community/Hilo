@@ -66,6 +66,11 @@ export function createPromptInput(parent: HTMLElement, options: PromptInputOptio
         EditorView.updateListener.of((update) => {
           if (!update.docChanged && !update.geometryChanged) return;
           const doc = update.state.doc;
+          // Only text counts: an empty field shows the placeholder, which never wraps.
+          if (doc.length === 0) {
+            report(false);
+            return;
+          }
           if (doc.lines > 1) {
             if (!multiline) multilineFrom = doc.length;
             report(true);
@@ -123,7 +128,17 @@ export function createPromptInput(parent: HTMLElement, options: PromptInputOptio
           },
           ".cm-content": { padding: "0", caretColor: "transparent" },
           ".cm-line": { padding: "0" },
-          ".cm-placeholder": { color: "var(--color-text-secondary, #878888)" },
+          // One line, cut with an ellipsis in a narrow panel: a wrapped hint would make the
+          // empty field two lines tall.
+          ".cm-placeholder": {
+            color: "var(--color-text-secondary, #878888)",
+            display: "inline-block",
+            maxWidth: "100%",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            verticalAlign: "top",
+          },
           ".cm-cursor, .cm-dropCursor": {
             borderLeftColor: "#f0f4f8",
             borderLeftWidth: "1.5px",
