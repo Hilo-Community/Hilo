@@ -53,7 +53,9 @@
       "homeVariables": {
         "CODEX_HOME": ".codex"
       },
-      "environment": {},
+      "environment": {
+        "NO_BROWSER": "1"
+      },
       "setup": [
         {
           "path": ".codex/config.toml",
@@ -84,14 +86,15 @@
       "tokenVariables": {
         "anthropic": ["ANTHROPIC_AUTH_TOKEN"]
       },
-      "accountMethods": ["claude-login", "terminal-auth"]
+      "accountMethods": ["claude-ai-login", "claude-login", "terminal-auth"]
     },
     {
       "id": "opencode",
       "providers": ["openai", "anthropic", "google", "xai"],
       "homeVariables": {},
       "environment": {
-        "OPENCODE_DISABLE_AUTOUPDATE": "1"
+        "OPENCODE_DISABLE_AUTOUPDATE": "1",
+        "NO_BROWSER": "1"
       },
       "setup": [],
       "baseUrlVariables": {},
@@ -106,7 +109,8 @@
       },
       "environment": {
         "GROK_DISABLE_AUTOUPDATER": "1",
-        "GROK_SANDBOX": "off"
+        "GROK_SANDBOX": "off",
+        "NO_BROWSER": "1"
       },
       "setup": [],
       "baseUrlVariables": {

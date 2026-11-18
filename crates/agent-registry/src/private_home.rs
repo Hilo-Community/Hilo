@@ -175,7 +175,6 @@ impl PrivateAgentHome {
         for (key, value) in &profile.environment {
             environment.insert(key.into(), value.into());
         }
-        environment.insert("NO_BROWSER".into(), "1".into());
         Ok(Self { path, environment })
     }
     pub fn path(&self) -> &Path {
