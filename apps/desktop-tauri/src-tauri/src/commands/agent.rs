@@ -218,7 +218,7 @@ struct Provisioned {
 
 fn provision(state: &DesktopAppState, root: &Path, id: u32) -> Result<Provisioned, String> {
     let task_id = format!("acp-{}-{id}", now());
-    let manager = CheckpointManager::open(root)
+    let manager = CheckpointManager::open_or_shadow(root, &state.app_data_dir.join("shadow-repos"))
         .map_err(|e| e.to_string())?
         .with_worktrees_dir(&state.app_data_dir.join("agent-worktrees"))
         .map_err(|e| e.to_string())?;

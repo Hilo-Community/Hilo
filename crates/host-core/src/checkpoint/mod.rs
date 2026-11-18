@@ -21,6 +21,7 @@
 mod packages;
 mod paths;
 mod rollback;
+mod shadow;
 mod snapshot;
 mod worktree;
 
@@ -148,6 +149,8 @@ pub enum CheckpointError {
     WorktreesDirNotConfigured,
     #[error("invalid worktrees directory {path:?}: {reason}")]
     InvalidWorktreesDir { path: PathBuf, reason: String },
+    #[error("cannot keep a shadow repository for {path:?}: {reason}")]
+    InvalidShadowRepository { path: PathBuf, reason: String },
     #[error("task {task_id} already has a worktree; release it first")]
     WorktreeExists { task_id: String },
     #[error(
@@ -209,6 +212,35 @@ impl CheckpointManager {
         let not_a_repo = || CheckpointError::NotARepository(workspace_root.to_path_buf());
         let root = workspace_root.canonicalize().map_err(|_| not_a_repo())?;
         let repo = Repository::discover(&root).map_err(|_| not_a_repo())?;
+        Self::with_repository(repo, &root, workspace_root)
+    }
+
+    /// Like [`CheckpointManager::open`], but a workspace that is in no Git repository gets a
+    /// **shadow repository** in `shadow_repos_dir` (an application data directory, created on
+    /// first use): see `shadow.rs`. The workspace itself is never modified; no `.git` is
+    /// created in it.
+    pub fn open_or_shadow(
+        workspace_root: &Path,
+        shadow_repos_dir: &Path,
+    ) -> Result<Self, CheckpointError> {
+        let not_a_repo = || CheckpointError::NotARepository(workspace_root.to_path_buf());
+        let root = workspace_root.canonicalize().map_err(|_| not_a_repo())?;
+        match Repository::discover(&root) {
+            Ok(repo) => Self::with_repository(repo, &root, workspace_root),
+            Err(error) if error.code() == git2::ErrorCode::NotFound => {
+                let repo = shadow::open_shadow_repository(&root, shadow_repos_dir)?;
+                Self::with_repository(repo, &root, workspace_root)
+            }
+            Err(_) => Err(not_a_repo()),
+        }
+    }
+
+    fn with_repository(
+        repo: Repository,
+        root: &Path,
+        workspace_root: &Path,
+    ) -> Result<Self, CheckpointError> {
+        let not_a_repo = || CheckpointError::NotARepository(workspace_root.to_path_buf());
         let workdir = repo
             .workdir()
             .ok_or_else(not_a_repo)?
