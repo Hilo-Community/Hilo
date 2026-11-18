@@ -32,7 +32,6 @@ import { PanelDrag } from "./panel-drag.js";
 import {
   CLOSE_PANEL_ICON,
   MAXIMIZE_ICON,
-  RESTORE_ICON,
   SPLIT_DOWN_ICON,
   SPLIT_RIGHT_ICON,
 } from "./panel-icons.js";
@@ -259,7 +258,7 @@ export class ChatGrid {
       // Showing one panel alone only makes sense when there are others.
       const alone = this.maximizedId === chatId;
       cell.maximize.hidden = panelCount <= 1;
-      cell.maximize.innerHTML = alone ? RESTORE_ICON : MAXIMIZE_ICON;
+      cell.maximize.innerHTML = MAXIMIZE_ICON;
       const label = alone ? UI_STRINGS.chat.restorePanels : UI_STRINGS.chat.maximizePanel;
       cell.maximize.setAttribute("aria-label", label);
       cell.maximize.title = label;
