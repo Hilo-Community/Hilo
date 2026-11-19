@@ -113,101 +113,14 @@ impl Session {
         if let Some(previous) = self.executor.agent.lock().expect("agent lock").take() {
             previous.lock().expect("child lock").kill();
         }
-        let launch = Arc::new(LaunchExecutor {
-            spec: self.base_spec.clone(),
-            runner: self.host.runner.clone(),
-            child: Mutex::new(None),
-            interactive: false,
-            terminal: Mutex::new(None),
-        });
-        let broker = ToolBroker::new(
-            self.host.repository.clone(),
-            PolicyEngine::new(self.host.authority.clone()),
-            launch.clone(),
-            self.host.clock.clone(),
-        );
-        let call = tool_call(
-            &self.host,
-            "launch-after-login",
-            "run_sandbox_command",
-            ToolCapability::RunSandboxCommand,
-            BTreeMap::from([
-                (
-                    "program".into(),
-                    ToolArgValue::Text(self.base_spec.program.to_string_lossy().into_owned()),
-                ),
-                ("cwd".into(), ToolArgValue::Text(".".into())),
-                (
-                    "args".into(),
-                    ToolArgValue::StringList(
-                        self.base_spec
-                            .args
-                            .iter()
-                            .map(|arg| arg.to_string_lossy().into_owned())
-                            .collect(),
-                    ),
-                ),
-            ]),
-            false,
-        );
-        broker
-            .execute(
-                &self.host.lease,
-                &self.host.signed,
-                &call,
-                &[],
-                (self.host.clock)(),
-            )
-            .map_err(|e| AcpError::Launch(e.to_string()))?;
-        let mut child = launch
-            .child
-            .lock()
-            .expect("launch lock")
-            .take()
-            .ok_or_else(|| bad("reconnect launch replay refused"))?;
-        self.input = child.take_stdin().ok_or_else(|| bad("stdin unavailable"))?;
-        let output = child
-            .take_stdout()
-            .ok_or_else(|| bad("stdout unavailable"))?;
-        let mut errors = child
-            .take_stderr()
-            .ok_or_else(|| bad("stderr unavailable"))?;
-        let child = Arc::new(Mutex::new(child));
-        *self.executor.agent.lock().expect("agent lock") = Some(child.clone());
-        let (tx, rx) = mpsc::sync_channel(MAX_PENDING_REQUESTS);
-        let limit = self.base_spec.limits.max_output_bytes;
-        let output_child = child.clone();
-        self.restart_readers.push(thread::spawn(move || {
-            let mut input = BufReader::new(OutputBudget::new(output, limit));
-            loop {
-                let item = read_message(&mut input);
-                let ended = !matches!(&item, Ok(Some(_)));
-                if ended {
-                    output_child.lock().expect("child lock").kill();
-                }
-                if tx.send(item).is_err() || ended {
-                    break;
-                }
-            }
-        }));
-        self.restart_readers.push(thread::spawn(move || {
-            let mut bytes = 0u64;
-            let mut buffer = [0u8; 4096];
-            while let Ok(count) = errors.read(&mut buffer) {
-                if count == 0 {
-                    break;
-                }
-                bytes = bytes.saturating_add(count as u64);
-                if bytes > limit {
-                    child.lock().expect("child lock").kill();
-                    break;
-                }
-            }
-        }));
+        let spawned = spawn_agent(&self.host, &self.base_spec, "launch-after-login")?;
+        self.input = spawned.input;
+        *self.executor.agent.lock().expect("agent lock") = Some(spawned.child);
+        self.restart_readers.extend(spawned.readers);
         self.outgoing.clear();
         self.next_id = 0;
         self.seen.clear();
-        Ok(rx)
+        Ok(spawned.messages)
     }
 
     /// The user picked a sign-in method: it must be one the agent advertised, and not a Host

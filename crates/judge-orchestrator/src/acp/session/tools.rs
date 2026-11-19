@@ -259,4 +259,72 @@ impl Session {
             self.reply(&item.request, Ok(json!({"outcome":outcome})))
         }
     }
+
+    /// The agent asks the user's permission: the panel shows it, the answer comes back through
+    /// `permission`.
+    pub(super) fn permission_request(
+        &mut self,
+        key: String,
+        message: Value,
+    ) -> Result<(), AcpError> {
+        let options = message["params"]["options"].clone();
+        if !options.is_array() || options.as_array().is_some_and(|v| v.len() > 16) {
+            return Err(bad("invalid permission options"));
+        }
+        self.permissions
+            .lock()
+            .expect("permissions lock")
+            .insert(key.clone(), message["params"].to_string());
+        (self.host.events)(AcpEvent::Permission {
+            id: key.clone(),
+            reason: format!(
+                "Agent requests permission: {}",
+                message["params"]["toolCall"]
+            ),
+            options: options.clone(),
+        });
+        self.pending.insert(
+            key,
+            Pending {
+                request: message,
+                call: None,
+                options,
+            },
+        );
+        Ok(())
+    }
+
+    /// The agent asks about a terminal it created: each answer goes through the broker again.
+    pub(super) fn terminal_request(
+        &mut self,
+        method: &str,
+        message: Value,
+    ) -> Result<(), AcpError> {
+        let id = message["params"]["terminalId"].as_str().unwrap_or("");
+        let result = match self.terminals.get(id).cloned() {
+            Some((output, call, approvals)) => {
+                if let Err(error) = self.broker.execute(
+                    &self.host.lease,
+                    &self.host.signed,
+                    &call,
+                    &approvals,
+                    (self.host.clock)(),
+                ) {
+                    return self.reply(&message, Err(error.to_string()));
+                }
+                match method {
+                    "terminal/output" => Ok(output),
+                    "terminal/wait_for_exit" => Ok(output["exitStatus"].clone()),
+                    "terminal/kill" => Ok(json!({})), // run-to-completion: already exited
+                    "terminal/release" => {
+                        self.terminals.remove(id);
+                        Ok(json!({}))
+                    }
+                    _ => Err("Unknown ACP method".into()),
+                }
+            }
+            None => Err("Unknown terminal".into()),
+        };
+        self.reply(&message, result)
+    }
 }
