@@ -1,7 +1,10 @@
 //! One ACP agent session: the supervisor the Host drives, and the worker loop that speaks the
 //! protocol. Signing in lives in `sign_in`, tool calls and permissions in `tools`.
+mod launch;
 mod sign_in;
 mod tools;
+
+use launch::{sandbox_spec, spawn_agent, LaunchExecutor};
 
 use super::{
     auth::{self, AgentCredentials, AuthMethod, AuthenticationPlan},
@@ -126,118 +129,9 @@ impl AcpSessionSupervisor {
             .program
             .canonicalize()
             .map_err(|e| AcpError::Launch(e.to_string()))?;
-        let mut spec = SandboxSpec::new(root, &program);
-        spec.worktree_read_only = true;
-        // Installed agents execute their own read tools against the disposable task snapshot.
-        // Kernel-enforced read-only access keeps every direct write a refused operation.
-        spec.mediate_worktree_reads = false;
-        if !host
-            .signed
-            .spec
-            .policy
-            .allowed_paths
-            .iter()
-            .any(|path| crate::policy::paths::normalize(path).as_deref() == Some(""))
-        {
-            return Err(AcpError::Launch(
-                "Direct agent reads require an explicitly authorized whole-worktree scope".into(),
-            ));
-        }
-        spec.denied_read_paths = forbidden_read_paths(
-            &spec.worktree_root,
-            &host.signed.spec.policy.forbidden_paths,
-        )?;
-        spec.args = launch.args.iter().map(Into::into).collect();
-        spec.read_only_paths = launch.read_only_paths;
-        spec.writable_paths = launch.writable_paths;
-        spec.preference_domains = launch.preference_domains;
-        spec.loopback_listen_ports = launch.loopback_listen_ports;
-        spec.env = launch.environment;
-        if let AgentNetwork::Proxy { address } = launch.network {
-            spec.network = sandbox_runner::NetworkPolicy::LocalProxyOnly(address);
-        }
-        spec.limits = launch.limits;
-        let base_spec = spec.clone();
-        let launch_executor = Arc::new(LaunchExecutor {
-            interactive: false,
-            terminal: Mutex::new(None),
-            spec,
-            runner: host.runner.clone(),
-            child: Mutex::new(None),
-        });
-        let launch_broker = ToolBroker::new(
-            host.repository.clone(),
-            PolicyEngine::new(host.authority.clone()),
-            launch_executor.clone(),
-            host.clock.clone(),
-        );
-        let call = tool_call(
-            &host,
-            "launch",
-            "run_sandbox_command",
-            ToolCapability::RunSandboxCommand,
-            BTreeMap::from([
-                (
-                    "program".into(),
-                    ToolArgValue::Text(program.to_string_lossy().into_owned()),
-                ),
-                ("cwd".into(), ToolArgValue::Text(".".into())),
-                ("args".into(), ToolArgValue::StringList(launch.args)),
-            ]),
-            false,
-        );
-        launch_broker
-            .execute(&host.lease, &host.signed, &call, &[], (host.clock)())
-            .map_err(|e| AcpError::Launch(e.to_string()))?;
-        let mut child = launch_executor
-            .child
-            .lock()
-            .expect("launch lock")
-            .take()
-            .ok_or_else(|| AcpError::Launch("launch replay refused: no new process".into()))?;
-        let input = child.take_stdin().ok_or_else(|| bad("stdin unavailable"))?;
-        let output = child
-            .take_stdout()
-            .ok_or_else(|| bad("stdout unavailable"))?;
-        let errors = child
-            .take_stderr()
-            .ok_or_else(|| bad("stderr unavailable"))?;
-        let child = Arc::new(Mutex::new(child));
-        *executor.agent.lock().expect("agent lock") = Some(child.clone());
-        let (messages_tx, messages_rx) = mpsc::sync_channel(MAX_PENDING_REQUESTS);
-        let output_limit = launch.limits.max_output_bytes;
-        let output_child = child.clone();
-        let reader = thread::spawn(move || {
-            let mut input = BufReader::new(OutputBudget::new(output, output_limit));
-            loop {
-                let item = read_message(&mut input);
-                let ended = !matches!(&item, Ok(Some(_)));
-                // Break a concurrent blocked stdin write as soon as stdout is invalid/closed.
-                if ended {
-                    output_child.lock().expect("child lock").kill();
-                }
-                if messages_tx.send(item).is_err() || ended {
-                    break;
-                }
-            }
-        });
-        let error_child = child.clone();
-        let error_limit = launch.limits.max_output_bytes;
-        let error_reader = thread::spawn(move || {
-            let mut bytes = 0u64;
-            let mut errors = errors;
-            let mut buffer = [0u8; 4096];
-            while let Ok(count) = errors.read(&mut buffer) {
-                if count == 0 {
-                    break;
-                }
-                bytes = bytes.saturating_add(count as u64);
-                if bytes > error_limit {
-                    error_child.lock().expect("child lock").kill();
-                    break;
-                }
-            }
-        });
+        let base_spec = sandbox_spec(&host, &launch, root, &program)?;
+        let spawned = spawn_agent(&host, &base_spec, "launch")?;
+        *executor.agent.lock().expect("agent lock") = Some(spawned.child.clone());
         let (controls, control_rx) = mpsc::sync_channel(MAX_PENDING_REQUESTS);
         let permissions = Arc::new(Mutex::new(BTreeMap::new()));
         let worker_permissions = permissions.clone();
@@ -250,8 +144,8 @@ impl AcpSessionSupervisor {
         let thread = thread::spawn(move || {
             let mut session = Session::new(
                 host,
-                worker_executor.clone(),
-                input,
+                worker_executor,
+                spawned.input,
                 SessionUi {
                     permissions: worker_permissions,
                     elicitation_urls: worker_urls,
@@ -260,56 +154,11 @@ impl AcpSessionSupervisor {
                 launch.credentials,
                 base_spec,
             );
-            let result = session.run(messages_rx, control_rx);
-            session.cancel_pending();
-            let cancelled = worker_executor.cancelled.load(Ordering::SeqCst);
-            worker_executor.stop();
-            session.stop_terminal();
-            for reader in session.restart_readers.drain(..) {
+            let result = session.run(spawned.messages, control_rx);
+            session.finish(result);
+            for reader in spawned.readers {
                 let _ = reader.join();
             }
-            // Every intent was recorded by the broker. Unknown outcomes stay recorded for
-            // reconciliation; we never invent a success when cancellation interrupts a tool.
-            let snapshot = session
-                .host
-                .repository
-                .snapshot(session.host.lease.task_id());
-            let target = if snapshot
-                .as_ref()
-                .is_some_and(|s| !s.pending_intents.is_empty())
-            {
-                TaskState::NeedsReconciliation
-            } else if cancelled {
-                TaskState::Cancelled
-            } else if result.is_err() {
-                TaskState::Failed
-            } else {
-                TaskState::Cancelled
-            };
-            let reason = result.err().map_or_else(
-                || {
-                    if cancelled {
-                        "Session stopped".into()
-                    } else {
-                        "Agent exited".into()
-                    }
-                },
-                |e| e.to_string(),
-            );
-            if let Err(error) = session.host.repository.transition(
-                &session.host.lease,
-                target,
-                &reason,
-                (session.host.clock)(),
-            ) {
-                (session.host.events)(AcpEvent::Error {
-                    reason: format!("Lifecycle requires recovery: {error}"),
-                });
-            }
-            (session.host.events)(AcpEvent::Stopped { reason });
-            drop(session);
-            let _ = reader.join();
-            let _ = error_reader.join();
         });
         Ok(Self {
             login_terminal,
@@ -424,99 +273,6 @@ impl Drop for AcpSessionSupervisor {
     }
 }
 
-fn forbidden_read_paths(root: &Path, forbidden: &[String]) -> Result<Vec<PathBuf>, AcpError> {
-    let mut denied = Vec::new();
-    for relative in forbidden {
-        let normalized = crate::policy::paths::normalize(relative)
-            .ok_or_else(|| bad("invalid forbidden read scope"))?;
-        if normalized.is_empty() {
-            return Err(bad("the entire worktree is forbidden"));
-        }
-        // This runner-owned directory did not exist in the snapshot. It holds only this
-        // run's private scratch, which is an explicit runtime write allowance.
-        if normalized == sandbox_runner::TMP_DIR_NAME {
-            continue;
-        }
-        let mut candidates = vec![root.to_path_buf()];
-        for component in normalized.split('/') {
-            let mut next = Vec::new();
-            for parent in candidates {
-                if !parent.is_dir() {
-                    continue;
-                }
-                for entry in std::fs::read_dir(parent)? {
-                    let entry = entry?;
-                    if entry.file_name().to_string_lossy().to_lowercase()
-                        == component.to_lowercase()
-                    {
-                        next.push(
-                            sandbox_runner::PathGuard::verify_within_worktree(root, &entry.path())
-                                .map_err(|e| AcpError::Launch(e.to_string()))?,
-                        );
-                    }
-                }
-            }
-            candidates = next;
-        }
-        denied.extend(candidates);
-    }
-    denied.sort();
-    denied.dedup();
-    Ok(denied)
-}
-
-struct LaunchExecutor {
-    interactive: bool,
-    terminal: Mutex<Option<Box<dyn sandbox_runner::SandboxedTerminal>>>,
-    spec: SandboxSpec,
-    runner: Arc<dyn SandboxRunner>,
-    child: Mutex<Option<SandboxedChild>>,
-}
-impl ToolExecutor for LaunchExecutor {
-    fn estimate(&self, _spec: &TaskSpec, _call: &ToolCall) -> Result<BudgetUsage, ExecutionError> {
-        Ok(BudgetUsage {
-            tool_calls: 1,
-            cpu_ms: self
-                .spec
-                .limits
-                .max_cpu_time
-                .ok_or_else(|| ExecutionError::NotStarted("Host must supply a CPU ceiling".into()))?
-                .as_secs()
-                .saturating_add(1)
-                .saturating_mul(1000),
-            ..BudgetUsage::default()
-        })
-    }
-    fn execute(
-        &self,
-        spec: &TaskSpec,
-        call: &ToolCall,
-        _reserved: BudgetUsage,
-    ) -> Result<ExecutionReport, ExecutionError> {
-        if self.interactive {
-            let terminal = self
-                .runner
-                .spawn_terminal(&self.spec)
-                .map_err(super::executor::spawn_error)?;
-            *self.terminal.lock().expect("terminal launch lock") = Some(terminal);
-        } else {
-            let child = self
-                .runner
-                .spawn(&self.spec)
-                .map_err(super::executor::spawn_error)?;
-            *self.child.lock().expect("launch lock") = Some(child);
-        }
-        Ok(ExecutionReport {
-            outcome: IntentOutcome {
-                succeeded: true,
-                summary: "Sandboxed ACP process started".into(),
-            },
-            actual: self.estimate(spec, call)?,
-            failure_signature: None,
-        })
-    }
-}
-
 struct Pending {
     request: Value,
     call: Option<ToolCall>,
@@ -606,6 +362,52 @@ impl Session {
             elicitations: BTreeMap::new(),
             credentials,
         }
+    }
+    /// Ends the session after its loop returned: stops what is still running, then records how
+    /// the task ended and tells the panel.
+    fn finish(mut self, result: Result<(), AcpError>) {
+        self.cancel_pending();
+        let cancelled = self.executor.cancelled.load(Ordering::SeqCst);
+        self.executor.stop();
+        self.stop_terminal();
+        for reader in self.restart_readers.drain(..) {
+            let _ = reader.join();
+        }
+        // Every intent was recorded by the broker. Unknown outcomes stay recorded for
+        // reconciliation; we never invent a success when cancellation interrupts a tool.
+        let snapshot = self.host.repository.snapshot(self.host.lease.task_id());
+        let target = if snapshot
+            .as_ref()
+            .is_some_and(|s| !s.pending_intents.is_empty())
+        {
+            TaskState::NeedsReconciliation
+        } else if cancelled {
+            TaskState::Cancelled
+        } else if result.is_err() {
+            TaskState::Failed
+        } else {
+            TaskState::Cancelled
+        };
+        let reason = result.err().map_or_else(
+            || {
+                if cancelled {
+                    "Session stopped".into()
+                } else {
+                    "Agent exited".into()
+                }
+            },
+            |e| e.to_string(),
+        );
+        if let Err(error) =
+            self.host
+                .repository
+                .transition(&self.host.lease, target, &reason, (self.host.clock)())
+        {
+            (self.host.events)(AcpEvent::Error {
+                reason: format!("Lifecycle requires recovery: {error}"),
+            });
+        }
+        (self.host.events)(AcpEvent::Stopped { reason });
     }
     fn request(&mut self, method: &str, params: Value) -> Result<(), AcpError> {
         if self.outgoing.len() >= MAX_PENDING_REQUESTS {
@@ -792,81 +594,94 @@ impl Session {
             &json!({"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":self.session_id}}),
         );
     }
+    /// One message from the agent: a response to a request of ours, a notification, or a
+    /// request the Host must answer.
     fn message(&mut self, message: Value) -> Result<(), AcpError> {
-        let Some(method) = message["method"].as_str() else {
-            let id = message["id"]
-                .as_u64()
-                .ok_or_else(|| bad("unknown response id"))?;
-            let method = self
-                .outgoing
-                .remove(&id)
-                .ok_or_else(|| bad("unsolicited response"))?;
-            if let Some(error) = message.get("error") {
-                // A saved successful terminal login is only a hint. An expired/revoked login
-                // must go through the agent's advertised flow again, once, without a fallback.
-                if method == "session/new"
-                    && self.terminal_authenticated
-                    && !self.login_attempted
-                    && error["code"] == -32000
-                {
-                    self.terminal_authenticated = false;
-                    return self.choose_authentication();
-                }
-                return Err(AcpError::Protocol(format!("{method}: {error}")));
-            }
-            match method.as_str() {
-                "initialize" => {
-                    if message["result"]["protocolVersion"] != 1 {
-                        return Err(bad("unsupported protocol version"));
-                    }
-                    let methods = auth::methods(&message["result"]["authMethods"])?;
-                    (self.host.events)(AcpEvent::AuthMethods {
-                        methods: methods.clone(),
-                    });
-                    self.auth_methods = methods;
-                    if self.terminal_authenticated {
-                        self.new_session()?;
-                    } else {
-                        self.choose_authentication()?;
-                    }
-                }
-                "authenticate" => {
-                    self.signed_in = matches!(self.credentials, AgentCredentials::Account { .. });
-                    self.new_session()?
-                }
-                "session/new" => {
-                    let id = message["result"]["sessionId"]
-                        .as_str()
-                        .filter(|s| !s.is_empty() && s.len() < 256)
-                        .ok_or_else(|| bad("invalid session id"))?
-                        .to_string();
-                    self.session_id = Some(id.clone());
-                    (self.host.events)(AcpEvent::Ready { session_id: id });
-                    if std::mem::take(&mut self.signed_in) {
-                        (self.host.events)(AcpEvent::Authenticated);
-                    }
-                }
-                "session/prompt" => {
-                    self.prompt_active = false;
-                    (self.host.events)(AcpEvent::Update {
-                        update: json!({"sessionUpdate":"turn_complete","stopReason":message["result"]["stopReason"]}),
-                    });
-                }
-                _ => return Err(bad("unexpected response")),
-            }
-            return Ok(());
+        let Some(method) = message["method"].as_str().map(str::to_owned) else {
+            return self.response(message);
         };
-        // ACP extension notifications are optional. They may describe connection-level
-        // state before session/new; ignoring an unknown one never grants a capability.
-        if (method.starts_with('_') || method == "auth/status_update")
-            && message.get("id").is_none()
-        {
-            return Ok(());
-        }
         if method == "elicitation/create" {
             return self.elicit(message);
         }
-        if method == "elicitation/complete" && message.get("id").is_none() {
+        if message.get("id").is_none() {
+            return self.notification(&method, message);
+        }
+        self.agent_request(&method, message)
+    }
+
+    /// The agent answered `initialize`, `authenticate`, `session/new` or `session/prompt`.
+    fn response(&mut self, message: Value) -> Result<(), AcpError> {
+        let id = message["id"]
+            .as_u64()
+            .ok_or_else(|| bad("unknown response id"))?;
+        let method = self
+            .outgoing
+            .remove(&id)
+            .ok_or_else(|| bad("unsolicited response"))?;
+        if let Some(error) = message.get("error") {
+            // A saved successful terminal login is only a hint. An expired/revoked login
+            // must go through the agent's advertised flow again, once, without a fallback.
+            if method == "session/new"
+                && self.terminal_authenticated
+                && !self.login_attempted
+                && error["code"] == -32000
+            {
+                self.terminal_authenticated = false;
+                return self.choose_authentication();
+            }
+            return Err(AcpError::Protocol(format!("{method}: {error}")));
+        }
+        match method.as_str() {
+            "initialize" => {
+                if message["result"]["protocolVersion"] != 1 {
+                    return Err(bad("unsupported protocol version"));
+                }
+                let methods = auth::methods(&message["result"]["authMethods"])?;
+                (self.host.events)(AcpEvent::AuthMethods {
+                    methods: methods.clone(),
+                });
+                self.auth_methods = methods;
+                if self.terminal_authenticated {
+                    self.new_session()?;
+                } else {
+                    self.choose_authentication()?;
+                }
+            }
+            "authenticate" => {
+                self.signed_in = matches!(self.credentials, AgentCredentials::Account { .. });
+                self.new_session()?
+            }
+            "session/new" => {
+                let id = message["result"]["sessionId"]
+                    .as_str()
+                    .filter(|s| !s.is_empty() && s.len() < 256)
+                    .ok_or_else(|| bad("invalid session id"))?
+                    .to_string();
+                self.session_id = Some(id.clone());
+                (self.host.events)(AcpEvent::Ready { session_id: id });
+                if std::mem::take(&mut self.signed_in) {
+                    (self.host.events)(AcpEvent::Authenticated);
+                }
+            }
+            "session/prompt" => {
+                self.prompt_active = false;
+                (self.host.events)(AcpEvent::Update {
+                    update: json!({"sessionUpdate":"turn_complete","stopReason":message["result"]["stopReason"]}),
+                });
+            }
+            _ => return Err(bad("unexpected response")),
+        }
+        Ok(())
+    }
+
+    /// A notification from the agent (no answer expected).
+    fn notification(&mut self, method: &str, message: Value) -> Result<(), AcpError> {
+        // ACP extension notifications are optional. They may describe connection-level
+        // state before session/new; ignoring an unknown one never grants a capability.
+        if method.starts_with('_') || method == "auth/status_update" {
+            return Ok(());
+        }
+        if method == "elicitation/complete" {
             let elicitation_id = message["params"]["elicitationId"]
                 .as_str()
                 .unwrap_or_default();
@@ -885,28 +700,30 @@ impl Session {
             }
             return Ok(());
         }
-        if self.session_id.is_none() || message["params"]["sessionId"] != json!(self.session_id) {
-            return Err(bad(&format!("wrong session for {method}")));
-        }
-        if method == "session/update" && message.get("id").is_none() {
-            let mut update = message["params"]["update"].clone();
-            if !update.is_object() {
-                return Err(bad("invalid session update"));
-            }
-            // Agents report the absolute paths ACP uses; the Host UI opens worktree-relative ones.
-            if let Some(locations) = update.get_mut("locations").and_then(Value::as_array_mut) {
-                for location in locations {
-                    if let Some(path) = location["path"].as_str() {
-                        location["path"] = json!(self.relative(path));
-                    }
-                }
-            }
-            (self.host.events)(AcpEvent::Update { update });
-            return Ok(());
-        }
-        if message.get("id").is_none() {
+        self.check_session(method, &message)?;
+        if method != "session/update" {
             return Err(bad("unknown notification"));
         }
+        let mut update = message["params"]["update"].clone();
+        if !update.is_object() {
+            return Err(bad("invalid session update"));
+        }
+        // Agents report the absolute paths ACP uses; the Host UI opens worktree-relative ones.
+        if let Some(locations) = update.get_mut("locations").and_then(Value::as_array_mut) {
+            for location in locations {
+                if let Some(path) = location["path"].as_str() {
+                    location["path"] = json!(self.relative(path));
+                }
+            }
+        }
+        (self.host.events)(AcpEvent::Update { update });
+        Ok(())
+    }
+
+    /// A request from the agent in this session: a permission, one of its terminals, or a tool
+    /// call the broker must authorize.
+    fn agent_request(&mut self, method: &str, message: Value) -> Result<(), AcpError> {
+        self.check_session(method, &message)?;
         let key = message["id"].to_string();
         if self.seen.len() >= MAX_SESSION_ITEMS || !self.seen.insert(key.clone()) {
             return Err(bad("request count limit or duplicate id"));
@@ -915,64 +732,23 @@ impl Session {
             return Err(bad("pending request limit"));
         }
         if method == "session/request_permission" {
-            let options = message["params"]["options"].clone();
-            if !options.is_array() || options.as_array().is_some_and(|v| v.len() > 16) {
-                return Err(bad("invalid permission options"));
-            }
-            self.permissions
-                .lock()
-                .expect("permissions lock")
-                .insert(key.clone(), message["params"].to_string());
-            (self.host.events)(AcpEvent::Permission {
-                id: key.clone(),
-                reason: format!(
-                    "Agent requests permission: {}",
-                    message["params"]["toolCall"]
-                ),
-                options: options.clone(),
-            });
-            self.pending.insert(
-                key,
-                Pending {
-                    request: message,
-                    call: None,
-                    options,
-                },
-            );
-            return Ok(());
+            return self.permission_request(key, message);
         }
         if method.starts_with("terminal/") && method != "terminal/create" {
-            let id = message["params"]["terminalId"].as_str().unwrap_or("");
-            let result = match self.terminals.get(id).cloned() {
-                Some((output, call, approvals)) => {
-                    if let Err(error) = self.broker.execute(
-                        &self.host.lease,
-                        &self.host.signed,
-                        &call,
-                        &approvals,
-                        (self.host.clock)(),
-                    ) {
-                        return self.reply(&message, Err(error.to_string()));
-                    }
-                    match method {
-                        "terminal/output" => Ok(output),
-                        "terminal/wait_for_exit" => Ok(output["exitStatus"].clone()),
-                        "terminal/kill" => Ok(json!({})), // run-to-completion: already exited
-                        "terminal/release" => {
-                            self.terminals.remove(id);
-                            Ok(json!({}))
-                        }
-                        _ => Err("Unknown ACP method".into()),
-                    }
-                }
-                None => Err("Unknown terminal".into()),
-            };
-            return self.reply(&message, result);
+            return self.terminal_request(method, message);
         }
         match self.translate(&message, &key) {
             Ok(call) => self.execute(message, call, &[]),
             Err(reason) => self.reply(&message, Err(reason)),
         }
+    }
+
+    /// Everything but the handshake and sign-in belongs to the session the Host opened.
+    fn check_session(&self, method: &str, message: &Value) -> Result<(), AcpError> {
+        if self.session_id.is_none() || message["params"]["sessionId"] != json!(self.session_id) {
+            return Err(bad(&format!("wrong session for {method}")));
+        }
+        Ok(())
     }
 }
 
