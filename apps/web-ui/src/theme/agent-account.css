@@ -140,14 +140,49 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
+.coloride-agent-terminal-login {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.coloride-agent-terminal-login[hidden],
+.coloride-agent-terminal-login [hidden] {
+  display: none;
+}
+.coloride-agent-terminal-login strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.coloride-agent-terminal-login p {
+  margin: 0;
+  color: var(--color-text-secondary, #878888);
+  font-size: 13px;
+}
 .coloride-agent-login-screen {
   min-width: 0;
-  height: 360px;
-  margin-top: 12px;
   width: 100%;
+  height: 200px;
+  margin-top: 4px;
 }
-
 .coloride-agent-terminal-login pre {
+  margin: 0;
+  font-size: 11px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+.coloride-agent-terminal-login-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.coloride-agent-panel .coloride-agent-terminal-login-actions button {
+  height: 24px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0.5px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  background: transparent;
+  font-size: 11px;
+  white-space: nowrap;
 }

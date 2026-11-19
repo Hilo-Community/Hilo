@@ -1,7 +1,7 @@
 import { type PromptInput, createPromptInput } from "@coloride/editor-cm6";
 import { SPINNER_ICON, agentMark } from "../settings/agent-marks.js";
 import { UI_STRINGS, uiText } from "../ui/ui-strings.js";
-import { authenticationCards } from "./auth-panel.js";
+import { authChoiceCard, authenticationCards } from "./auth-panel.js";
 import { diffLines, formatDiff } from "./diff.js";
 import { type AgentHandle, type AgentHost, AgentStore } from "./store.js";
 import { TerminalLoginView } from "./terminal-login-view.js";
@@ -36,6 +36,8 @@ export class AgentPanel {
   private readonly status: HTMLElement;
   private readonly busyMark: HTMLElement;
   private readonly login: TerminalLoginView;
+  private readonly form: HTMLFormElement;
+  private readonly choiceHost: HTMLElement;
   constructor(
     doc: Document,
     private readonly host: AgentHost,
@@ -63,6 +65,7 @@ export class AgentPanel {
     this.status.className = "coloride-agent-status";
     this.status.append(this.error, this.start);
     const form = doc.createElement("form");
+    this.form = form;
     form.className = "coloride-agent-composer";
     // Drawn by CodeMirror, not a native textarea: a thin caret like the editor's.
     // Enter sends, Shift+Enter makes a new line; never while an input method is composing.
@@ -120,7 +123,10 @@ export class AgentPanel {
     this.busyMark.setAttribute("aria-hidden", "true");
     this.busyMark.innerHTML = SPINNER_ICON;
     meta.append(sandbox, this.busyMark);
-    this.element.append(this.output, this.status, form, meta);
+    this.choiceHost = doc.createElement("div");
+    this.choiceHost.className = "coloride-agent-auth-bar";
+    this.choiceHost.hidden = true;
+    this.element.append(this.output, this.choiceHost, this.status, form, meta);
     this.unsubscribe = store.subscribe(() => this.render());
     this.render();
     if (autoStart) void this.begin();
@@ -185,6 +191,8 @@ export class AgentPanel {
     this.start.disabled = this.starting;
     this.start.hidden = this.starting || (s.ready && !s.error);
     this.status.hidden = !this.error.textContent;
+    // No input until there is a session to type to: signing in comes first.
+    this.form.hidden = !s.ready;
     this.submit.disabled = !s.ready || s.busy;
     this.cancel.disabled = !s.ready;
     // Send turns into Stop while the agent works.
@@ -273,11 +281,30 @@ export class AgentPanel {
       );
       content.push(card);
     }
-    content.push(
-      ...authenticationCards(doc, this.store, this.handle, (action) => this.run(action)),
-    );
+    // Sign-in prompts (the code to type, the wait) sit at the bottom with the choice of method.
+    const prompts = authenticationCards(doc, this.store, this.handle, (action) => this.run(action));
+    // The choice of sign-in sits at the bottom, above the composer, not in the conversation.
+    const choice =
+      s.authChoice && !s.ready
+        ? authChoiceCard(doc, this.identity.name, s.authChoice, (methodId) => {
+            this.store.chose();
+            this.run(async () => {
+              await this.handle?.chooseAuth?.(methodId);
+            });
+          })
+        : null;
     this.login.render(s.terminalAuth);
-    content.push(this.login.element);
+    const bar = [
+      ...(choice ? [choice] : []),
+      ...prompts,
+      ...(s.terminalAuth ? [this.login.element] : []),
+    ];
+    this.choiceHost.replaceChildren(...bar);
+    this.choiceHost.hidden = bar.length === 0;
+    if (bar.length > 0) {
+      this.status.hidden = true;
+      this.busyMark.hidden = true;
+    }
     this.output.replaceChildren(...content);
     this.login.fit();
     this.openSignInPages();

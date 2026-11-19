@@ -18,6 +18,7 @@
       "keyPrefix": "",
       "accountHosts": [
         "claude.ai",
+        "claude.com",
         "console.anthropic.com",
         "platform.claude.com",
         "api.anthropic.com"
@@ -53,9 +54,8 @@
       "homeVariables": {
         "CODEX_HOME": ".codex"
       },
-      "environment": {
-        "NO_BROWSER": "1"
-      },
+      "environment": {},
+      "loginCallbackPorts": [1455],
       "setup": [
         {
           "path": ".codex/config.toml",

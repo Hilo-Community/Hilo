@@ -81,6 +81,9 @@
    text sits centred on the left, the agent and the send button on the right. Once the text needs
    several lines (`is-multiline`, set by the prompt input) it takes the whole width on top and
    the agent and send button move to a row under it. */
+.coloride-agent-composer[hidden] {
+  display: none;
+}
 .coloride-agent-composer {
   display: flex;
   flex-direction: row;
@@ -277,4 +280,80 @@
     font-size: 0;
     gap: 0;
   }
+}
+
+/* How to sign in: at the bottom, above the composer, flat, as wide as the composer. */
+.coloride-agent-auth-bar {
+  box-sizing: border-box;
+  flex: none;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 8px 10px;
+}
+.coloride-agent-auth-bar[hidden] {
+  display: none;
+}
+.coloride-agent-auth-choice strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+}
+.coloride-agent-auth-choice p {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary, #878888);
+  font-size: 13px;
+}
+.coloride-agent-auth-choice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.coloride-agent-panel .coloride-agent-auth-choice-actions button {
+  height: 24px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0.5px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  background: transparent;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.coloride-agent-panel .coloride-agent-auth-choice-actions button:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Sign-in prompts at the bottom: the same content as the centered card, flat and left-aligned. */
+.coloride-agent-auth-bar .coloride-agent-authentication {
+  align-items: flex-start;
+  gap: 6px;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+}
+.coloride-agent-auth-bar .coloride-agent-authentication-head {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+}
+.coloride-agent-auth-bar .coloride-agent-authentication-head strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.coloride-agent-auth-bar .coloride-agent-authentication p {
+  color: var(--color-text-secondary, #878888);
+  font-size: 13px;
+}
+.coloride-agent-auth-bar .coloride-agent-authentication-code {
+  padding: 0;
+  font-size: 18px;
+  letter-spacing: 0.1em;
+}
+.coloride-agent-auth-bar .coloride-agent-authentication-actions {
+  align-self: flex-end;
+  justify-content: flex-end;
 }

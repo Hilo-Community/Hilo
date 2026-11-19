@@ -47,6 +47,8 @@ pub struct AcpLaunch {
     pub writable_paths: Vec<PathBuf>,
     /// macOS preference domains the agent may read (from its reviewed profile).
     pub preference_domains: Vec<String>,
+    /// macOS only, see `SandboxSpec::loopback_listen_ports`.
+    pub loopback_listen_ports: Vec<u16>,
     pub credentials: AgentCredentials,
     pub network: AgentNetwork,
     pub limits: ResourceLimits,
@@ -71,6 +73,7 @@ pub struct AcpHost {
 enum Control {
     TerminalResize(u16, u16),
     StartTerminalAuth,
+    ChooseAuth(String),
     TerminalInput(String),
     Prompt(String),
     Permission(String, bool),
@@ -143,6 +146,7 @@ impl AcpSessionSupervisor {
         spec.read_only_paths = launch.read_only_paths;
         spec.writable_paths = launch.writable_paths;
         spec.preference_domains = launch.preference_domains;
+        spec.loopback_listen_ports = launch.loopback_listen_ports;
         spec.env = launch.environment;
         if let AgentNetwork::Proxy { address } = launch.network {
             spec.network = sandbox_runner::NetworkPolicy::LocalProxyOnly(address);
@@ -327,6 +331,12 @@ impl AcpSessionSupervisor {
     pub fn start_terminal_auth(&self) -> Result<(), AcpError> {
         self.controls
             .try_send(Control::StartTerminalAuth)
+            .map_err(|_| bad("session closed or pending request limit"))
+    }
+    /// Trusted Host UI entry point: the user's pick among the methods offered by `AuthChoice`.
+    pub fn choose_authentication(&self, method_id: String) -> Result<(), AcpError> {
+        self.controls
+            .try_send(Control::ChooseAuth(method_id))
             .map_err(|_| bad("session closed or pending request limit"))
     }
     pub fn resize_terminal_auth(&self, cols: u16, rows: u16) -> Result<(), AcpError> {
@@ -520,6 +530,8 @@ struct SessionUi {
 struct Session {
     auth_methods: Vec<AuthMethod>,
     login_attempted: bool,
+    /// An account `authenticate` just succeeded: reported once the session is ready.
+    signed_in: bool,
     base_spec: SandboxSpec,
     login_method: Option<AuthMethod>,
     login_terminal: Arc<Mutex<Option<Box<dyn sandbox_runner::SandboxedTerminal>>>>,
@@ -560,6 +572,7 @@ impl Session {
         Self {
             auth_methods: vec![],
             login_attempted: false,
+            signed_in: false,
             base_spec,
             login_method: None,
             login_terminal: ui.login_terminal,
@@ -652,6 +665,7 @@ impl Session {
                     }
                 }
                 Ok(Control::StartTerminalAuth) => self.start_terminal()?,
+                Ok(Control::ChooseAuth(id)) => self.choose_method(&id)?,
                 Ok(Control::TerminalInput(text)) => {
                     use std::io::Write;
                     let input = self
@@ -936,7 +950,52 @@ impl Session {
         self.seen.clear();
         Ok(rx)
     }
+    /// The user picked a sign-in method: it must be one the agent advertised, and not a Host
+    /// gateway method, which only the Host's own key setup may use.
+    fn choose_method(&mut self, id: &str) -> Result<(), AcpError> {
+        let offered = self
+            .auth_methods
+            .iter()
+            .any(|m| m.id == id && m.meta["gateway"].is_null() && self.login_method.is_none());
+        let waiting = matches!(
+            &self.credentials,
+            AgentCredentials::Account {
+                method_id: None,
+                ..
+            }
+        ) && self.session_id.is_none();
+        if !offered || !waiting {
+            (self.host.events)(AcpEvent::Error {
+                reason: "That sign-in method is not available".into(),
+            });
+            return Ok(());
+        }
+        if let AgentCredentials::Account { method_id, .. } = &mut self.credentials {
+            *method_id = Some(id.into());
+        }
+        self.choose_authentication()
+    }
     fn choose_authentication(&mut self) -> Result<(), AcpError> {
+        // An account sign-in with no method fixed in Settings is the user's to choose.
+        if matches!(
+            &self.credentials,
+            AgentCredentials::Account {
+                method_id: None,
+                ..
+            }
+        ) {
+            let methods: Vec<AuthMethod> = self
+                .auth_methods
+                .iter()
+                .filter(|m| m.meta["gateway"].is_null())
+                .cloned()
+                .collect();
+            if methods.is_empty() {
+                return Err(bad("agent does not advertise an account login"));
+            }
+            (self.host.events)(AcpEvent::AuthChoice { methods });
+            return Ok(());
+        }
         match auth::authentication(&self.credentials, &self.auth_methods)? {
             AuthenticationPlan::Skip => self.new_session(),
             AuthenticationPlan::Request(params) => self.request("authenticate", params),
@@ -1098,7 +1157,10 @@ impl Session {
                         self.choose_authentication()?;
                     }
                 }
-                "authenticate" => self.new_session()?,
+                "authenticate" => {
+                    self.signed_in = matches!(self.credentials, AgentCredentials::Account { .. });
+                    self.new_session()?
+                }
                 "session/new" => {
                     let id = message["result"]["sessionId"]
                         .as_str()
@@ -1107,6 +1169,9 @@ impl Session {
                         .to_string();
                     self.session_id = Some(id.clone());
                     (self.host.events)(AcpEvent::Ready { session_id: id });
+                    if std::mem::take(&mut self.signed_in) {
+                        (self.host.events)(AcpEvent::Authenticated);
+                    }
                 }
                 "session/prompt" => {
                     self.prompt_active = false;

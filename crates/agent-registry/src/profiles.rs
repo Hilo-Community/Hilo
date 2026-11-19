@@ -56,6 +56,10 @@ pub struct AgentProfile {
     /// exact names); see `SandboxSpec::preference_domains`.
     #[serde(default)]
     pub preference_domains: Vec<String>,
+    /// Loopback ports the agent's browser sign-in listens on (macOS). Without a Host that can
+    /// open the page and allow the port, the agent is told not to use a browser at all.
+    #[serde(default)]
+    pub login_callback_ports: Vec<u16>,
     #[serde(default)]
     pub runtimes: Vec<RuntimeArtifact>,
 }
@@ -146,6 +150,8 @@ mod tests {
             for provider in &agent.providers {
                 assert!(provider_profile(provider).is_some());
             }
+            assert!(agent.login_callback_ports.len() <= 4);
+            assert!(agent.login_callback_ports.iter().all(|port| *port >= 1024));
             for domain in &agent.preference_domains {
                 assert!(domain.contains('.'));
                 assert!(domain.split('.').all(|label| !label.is_empty()

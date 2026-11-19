@@ -95,6 +95,12 @@ pub enum AcpEvent {
     AuthMethods {
         methods: Vec<super::auth::AuthMethod>,
     },
+    /// The agent needs the user to sign in and the Host waits for a choice among these methods.
+    AuthChoice {
+        methods: Vec<super::auth::AuthMethod>,
+    },
+    /// An account sign-in succeeded; the next session may start without asking again.
+    Authenticated,
     Elicitation {
         id: String,
         url: String,

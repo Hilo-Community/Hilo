@@ -61,6 +61,8 @@ pub fn run() {
             commands::agent::agent_permission_command,
             commands::agent::agent_elicitation_command,
             commands::agent::agent_terminal_auth_start_command,
+            commands::agent::agent_auth_choose_command,
+            commands::agent::agent_terminal_auth_open_command,
             commands::agent::agent_terminal_auth_input_command,
             commands::agent::agent_terminal_auth_resize_command,
             commands::agent_account::agent_account_status_command,

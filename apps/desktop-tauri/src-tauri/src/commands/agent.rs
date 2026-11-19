@@ -25,6 +25,111 @@ const MAX_LAUNCH_BYTES: usize = 24 * 1024;
 /// Never readable by the agent, whatever the task.
 const FORBIDDEN_PATHS: [&str; 5] = [".git", ".env", ".ssh", ".aws", ".coloride-tmp"];
 
+/// `text` without terminal escape sequences (colors, cursor moves, hyperlinks).
+fn strip_terminal_escapes(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c != '\u{1b}' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            // CSI: parameters, then one final byte.
+            Some('[') => {
+                for next in chars.by_ref() {
+                    if ('\u{40}'..='\u{7e}').contains(&next) {
+                        break;
+                    }
+                }
+            }
+            // OSC: up to BEL or ESC \.
+            Some(']') => {
+                while let Some(next) = chars.next() {
+                    if next == '\u{7}' {
+                        break;
+                    }
+                    if next == '\u{1b}' {
+                        chars.next();
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// The first complete `https://` address in `text` whose host is exactly one of `hosts`, with no
+/// credentials and no port. The agent reports it; the Host only opens what passes this.
+fn login_url(text: &str, hosts: &[String]) -> Option<String> {
+    let clean = strip_terminal_escapes(text);
+    let mut rest = clean.as_str();
+    while let Some(start) = rest.find("https://") {
+        let tail = &rest[start..];
+        // An address still being written has no terminator yet; wait for the rest.
+        let end = tail.find(|c: char| c.is_whitespace() || c.is_control())?;
+        let candidate = tail[..end].trim_end_matches(['.', ',', ')', '>', '"', '\'']);
+        if let Ok(url) = tauri::Url::parse(candidate) {
+            if url.scheme() == "https"
+                && url.username().is_empty()
+                && url.password().is_none()
+                && url.port().is_none()
+                && url
+                    .host_str()
+                    .is_some_and(|host| hosts.iter().any(|allowed| allowed == host))
+            {
+                return Some(url.into());
+            }
+        }
+        rest = &tail[end..];
+    }
+    None
+}
+
+/// Opens, once, each page the agent's `open` shim reports in `file`, when it is on one of the
+/// agent's reviewed sign-in hosts. Ends when the agent is gone or its lifetime is over.
+fn watch_open_requests(app: tauri::AppHandle, id: u32, file: PathBuf, hosts: Vec<String>) {
+    use tauri_plugin_opener::OpenerExt;
+    std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + SESSION_LIFETIME;
+        while std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(250));
+            let alive = app
+                .state::<DesktopAppState>()
+                .agents
+                .lock()
+                .map(|agents| agents.contains_key(&id))
+                .unwrap_or(false);
+            if !alive {
+                return;
+            }
+            // A page the agent reports is bounded text; never read more than a few KiB.
+            let Ok(mut opened) = std::fs::File::open(&file) else {
+                continue;
+            };
+            let mut text = String::new();
+            let _ = (&mut opened).take(8192).read_to_string(&mut text);
+            drop(opened);
+            let _ = std::fs::remove_file(&file);
+            if let Some(url) = login_url(&text, &hosts) {
+                if app.opener().open_url(url, None::<&str>).is_err() {
+                    tracing::warn!("could not open the agent sign-in page");
+                }
+            }
+        }
+    });
+}
+
+/// Text printed by an agent's login terminal, kept only until its sign-in page is found.
+#[derive(Default)]
+struct LoginWatch {
+    text: String,
+    opened: bool,
+}
+const LOGIN_WATCH_LIMIT: usize = 64 * 1024;
+
 /// The workspace text the agent reads: the live Rope of an open document (unsaved edits
 /// included), otherwise the file on disk. Reading never opens a document in the editor.
 struct HostText {
@@ -329,6 +434,17 @@ fn start_session(
         launch.read_only_paths.push(prepared.read_only_path);
     }
     let installation_id = launch.installation_id.clone();
+    // Only the reviewed account hosts of this agent's providers may be opened for its sign-in.
+    let login_hosts: Vec<String> = ::agent_registry::profiles::agent_profile(&installed_agent_id)
+        .providers
+        .iter()
+        .filter_map(|provider| ::agent_registry::profiles::provider_profile(provider))
+        .flat_map(|provider| provider.account_hosts.clone())
+        .collect();
+    let open_url_file = runtime.open_url_file.clone();
+    let login_watch = Mutex::new(LoginWatch::default());
+    let login_app = app.clone();
+    let output_hosts = login_hosts.clone();
     gate.authorize(GatedCapability::WorkspaceLocalBinary)
         .map_err(|e| e.to_string())?;
     let id = state.next_agent_id.fetch_add(1, Ordering::SeqCst);
@@ -376,6 +492,41 @@ fn start_session(
         text: Arc::new(text),
         clock: Arc::new(now),
         events: Arc::new(move |event| {
+            if let AcpEvent::TerminalAuthOutput { data } = &event {
+                // A sandboxed login cannot open a browser: the page it prints is opened here,
+                // once, only when it is on a reviewed sign-in host of this agent.
+                if let Ok(mut watch) = login_watch.lock() {
+                    if !watch.opened {
+                        watch.text.push_str(&String::from_utf8_lossy(data));
+                        if watch.text.len() > LOGIN_WATCH_LIMIT {
+                            let mut cut = watch.text.len() - LOGIN_WATCH_LIMIT;
+                            while !watch.text.is_char_boundary(cut) {
+                                cut += 1;
+                            }
+                            watch.text.drain(..cut);
+                        }
+                        if let Some(url) = login_url(&watch.text, &output_hosts) {
+                            use tauri_plugin_opener::OpenerExt;
+                            watch.opened = true;
+                            watch.text.clear();
+                            if let Ok(mut urls) =
+                                login_app.state::<DesktopAppState>().login_urls.lock()
+                            {
+                                urls.insert(id, url.clone());
+                            }
+                            if login_app.opener().open_url(url, None::<&str>).is_err() {
+                                tracing::warn!("could not open the agent sign-in page");
+                            }
+                        }
+                    }
+                }
+            }
+            if matches!(event, AcpEvent::Authenticated) {
+                if let Err(error) = registry.record_terminal_authentication(&installation_id, true)
+                {
+                    tracing::warn!(%error, "could not save account authentication state");
+                }
+            }
             if let AcpEvent::TerminalAuthComplete { success } = &event {
                 if let Err(error) =
                     registry.record_terminal_authentication(&installation_id, *success)
@@ -410,6 +561,7 @@ fn start_session(
         read_only_paths: launch.read_only_paths,
         writable_paths: vec![runtime.home],
         preference_domains: runtime.preference_domains,
+        loopback_listen_ports: runtime.loopback_listen_ports,
         environment: runtime.environment,
         credentials: runtime.credentials,
         network: runtime.network,
@@ -426,6 +578,12 @@ fn start_session(
     gate.authorize(GatedCapability::WorkspaceLocalBinary)
         .map_err(|e| e.to_string())?;
     agents.insert(id, Arc::new(Mutex::new(supervisor)));
+    drop(agents);
+    if let Some(file) = open_url_file {
+        // A page left over from an earlier session is never opened.
+        let _ = std::fs::remove_file(&file);
+        watch_open_requests(app.clone(), id, file, login_hosts);
+    }
     Ok(id)
 }
 
@@ -469,8 +627,11 @@ pub fn agent_cancel_command(
 #[tauri::command]
 pub async fn agent_stop_command(app: tauri::AppHandle, id: u32) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let agent = app
-            .state::<DesktopAppState>()
+        let state = app.state::<DesktopAppState>();
+        if let Ok(mut urls) = state.login_urls.lock() {
+            urls.remove(&id);
+        }
+        let agent = state
             .agents
             .lock()
             .map_err(|_| "agents lock poisoned")?
@@ -523,6 +684,36 @@ pub fn agent_terminal_auth_start_command(
         .map_err(|_| "agent lock poisoned")?
         .start_terminal_auth()
         .map_err(|e| e.to_string())
+}
+/// The user's pick among the sign-in methods the agent offered.
+#[tauri::command]
+pub fn agent_auth_choose_command(
+    state: tauri::State<'_, DesktopAppState>,
+    id: u32,
+    method_id: String,
+) -> Result<(), String> {
+    agent(&state, id)?
+        .lock()
+        .map_err(|_| "agent lock poisoned")?
+        .choose_authentication(method_id)
+        .map_err(|e| e.to_string())
+}
+/// Opens again the sign-in page the login printed, when the browser did not open or was
+/// closed. Only the address the Host kept is opened, never one the webview supplies.
+#[tauri::command]
+pub fn agent_terminal_auth_open_command(app: tauri::AppHandle, id: u32) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let url = app
+        .state::<DesktopAppState>()
+        .login_urls
+        .lock()
+        .map_err(|_| "login lock poisoned")?
+        .get(&id)
+        .cloned()
+        .ok_or("The sign-in page is not ready yet")?;
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|_| "Could not open the sign-in page".into())
 }
 #[tauri::command]
 pub fn agent_terminal_auth_input_command(
@@ -625,6 +816,9 @@ mod tests {
                 } else {
                     agent_registry::accounts::AccountMode::ApiKey
                 },
+                // `COLORIDE_SMOKE_METHOD=chat-gpt`: the browser sign-in, which reports its page
+                // through the agent's `open` shim instead of an elicitation.
+                method_id: std::env::var("COLORIDE_SMOKE_METHOD").ok(),
                 ..Default::default()
             },
             false,
@@ -690,6 +884,7 @@ mod tests {
                 environment: runtime.environment,
                 writable_paths: vec![runtime.home],
                 preference_domains: runtime.preference_domains,
+                loopback_listen_ports: runtime.loopback_listen_ports,
                 credentials: runtime.credentials,
                 network: runtime.network,
                 limits: ResourceLimits {
@@ -701,11 +896,27 @@ mod tests {
         )
         .unwrap();
         let mut ready = false;
+        let open_file = runtime.open_url_file.clone();
+        let mut idle = 0;
         loop {
-            match rx
-                .recv_timeout(Duration::from_secs(45))
-                .expect("installed agent stalled")
-            {
+            let event = match rx.recv_timeout(Duration::from_secs(1)) {
+                Ok(event) => event,
+                Err(_) => {
+                    idle += 1;
+                    assert!(idle < 45, "installed agent stalled");
+                    if let Some(file) = open_file.as_ref().filter(|file| file.exists()) {
+                        let text = std::fs::read_to_string(file).unwrap_or_default();
+                        let host = login_url(&text, &["auth.openai.com".to_string()])
+                            .and_then(|url| tauri::Url::parse(&url).ok())
+                            .and_then(|url| url.host_str().map(str::to_string));
+                        eprintln!("{agent_id}: the open shim reported a page on {host:?}");
+                        assert!(host.is_some());
+                        break;
+                    }
+                    continue;
+                }
+            };
+            match event {
                 AcpEvent::Ready { .. } => {
                     ready = true;
                     eprintln!("{agent_id}: gateway-authenticated session ready");
@@ -895,5 +1106,36 @@ mod tests {
         assert!(check_launch("agent", &[]).is_err());
         assert!(check_launch(program, &vec![String::new(); MAX_LAUNCH_ARGS + 1]).is_err());
         assert!(check_launch(program, &["x".repeat(MAX_LAUNCH_BYTES)]).is_err());
+    }
+
+    #[test]
+    fn reported_login_pages_open_only_on_reviewed_hosts() {
+        let hosts = vec!["auth.openai.com".to_string()];
+        assert_eq!(
+            login_url("https://auth.openai.com/oauth/authorize?x=1&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback\n", &hosts)
+                .as_deref(),
+            Some("https://auth.openai.com/oauth/authorize?x=1&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback")
+        );
+        for bad in [
+            "https://evil.example/x\n",
+            "https://auth.openai.com.evil.example/x\n",
+            "https://auth.openai.com@evil.example/x\n",
+            "https://auth.openai.com:8443/x\n",
+            "http://auth.openai.com/x\n",
+            "file:///etc/passwd\n",
+            "https://auth.openai.com/x",
+        ] {
+            assert!(login_url(bad, &hosts).is_none(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn the_real_claude_login_output_yields_its_sign_in_page() {
+        let hosts = vec!["claude.com".to_string()];
+        let real = "Opening browser to sign in\r\nIf the browser didn't open, visit: \u{1b}]8;;https://claude.com/cai/oauth/authorize?code=true&state=s\u{7}https://claude.com/cai/oauth/authorize?code=true&state=s\u{1b}]8;;\u{7}\r\nPaste code here if prompted >";
+        assert_eq!(
+            login_url(real, &hosts).as_deref(),
+            Some("https://claude.com/cai/oauth/authorize?code=true&state=s")
+        );
     }
 }

@@ -13,6 +13,8 @@ export type AcpEvent =
   | { type: "terminalAuthOutput"; data: number[] }
   | { type: "terminalAuthComplete"; success: boolean }
   | { type: "authMethods"; methods: unknown[] }
+  | { type: "authChoice"; methods: unknown[] }
+  | { type: "authenticated" }
   | { type: "elicitation"; id: string; url: string; message: string }
   | { type: "elicitationComplete"; id: string }
   | { type: "ready"; sessionId: string }
@@ -31,6 +33,10 @@ export type AcpEvent =
   | { type: "stopped" | "error"; reason: string };
 export interface AgentHandle {
   startLogin?(): Promise<void>;
+  /** Opens the sign-in page again, when the browser did not open or was closed. */
+  openLogin?(): Promise<void>;
+  /** The user's pick among the sign-in methods the agent offered. */
+  chooseAuth?(methodId: string): Promise<void>;
   writeLogin?(data: string): Promise<void>;
   resizeLogin?(cols: number, rows: number): Promise<void>;
   prompt(text: string): Promise<void>;
@@ -57,6 +63,8 @@ export interface ToolCard {
 }
 export interface AgentState {
   terminalAuth: { name: string; args: string[]; env: Record<string, string> } | null;
+  /** The sign-in methods to choose from, while the Host waits for the user's pick. */
+  authChoice: { id: string; name: string }[] | null;
   ready: boolean;
   busy: boolean;
   messages: { role: string; text: string; html: readonly string[] }[];
@@ -111,6 +119,8 @@ function retainedSize(event: AcpEvent): number {
       return event.text.length;
     case "terminalAuthOutput":
     case "authMethods":
+    case "authChoice":
+    case "authenticated":
       return 0;
     case "update": {
       const u = event.update;
@@ -152,6 +162,7 @@ export class AgentStore extends AtomicStore<AgentState> {
       permissions: [],
       elicitations: [],
       terminalAuth: null,
+      authChoice: null,
       error: "",
     });
   }
@@ -225,6 +236,15 @@ export class AgentStore extends AtomicStore<AgentState> {
             s.terminalAuth = null;
             break;
           case "authMethods":
+          case "authenticated":
+            break;
+          case "authChoice":
+            s.authChoice = event.methods.flatMap((item) => {
+              const method = record(item);
+              return typeof method.id === "string" && typeof method.name === "string"
+                ? [{ id: method.id, name: method.name }]
+                : [];
+            });
             break;
           case "elicitation":
             if (!s.elicitations.some((item) => item.id === event.id) && s.elicitations.length < 32)
@@ -235,6 +255,7 @@ export class AgentStore extends AtomicStore<AgentState> {
             break;
           case "ready":
             s.ready = true;
+            s.authChoice = null;
             s.error = "";
             break;
           case "message":
@@ -271,6 +292,7 @@ export class AgentStore extends AtomicStore<AgentState> {
             s.permissions = [];
             s.elicitations = [];
             s.terminalAuth = null;
+            s.authChoice = null;
             s.error = event.reason;
             s.tools = s.tools.map((t) =>
               t.status === "pending" || t.status === "running"
@@ -310,6 +332,10 @@ export class AgentStore extends AtomicStore<AgentState> {
   answered(id: string): void {
     this.setState((s) => ({ ...s, permissions: s.permissions.filter((p) => p.id !== id) }));
   }
+  /** The user picked a method: the card goes away while the agent signs in. */
+  chose(): void {
+    this.setState((s) => ({ ...s, authChoice: null }));
+  }
   answeredElicitation(id: string, action: "accept" | "decline" | "cancel"): void {
     this.setState((s) => ({
       ...s,
@@ -336,6 +362,7 @@ export class AgentStore extends AtomicStore<AgentState> {
       permissions: [],
       elicitations: [],
       terminalAuth: null,
+      authChoice: null,
       error: "",
     }));
   }

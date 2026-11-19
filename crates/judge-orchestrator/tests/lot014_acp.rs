@@ -87,6 +87,7 @@ impl Fixture {
             read_only_paths: vec![],
             writable_paths: vec![],
             preference_domains: vec![],
+            loopback_listen_ports: vec![],
             environment: Default::default(),
             program: self.root.path().join("fake-agent"),
             args: vec![mode.into()],
@@ -189,6 +190,40 @@ fn url_elicitation_binds_to_authentication_waits_for_user_and_handles_completion
     );
     assert!(matches!(next(&rx), AcpEvent::Ready { .. }));
     assert!(session.elicitation_url(&id).is_none());
+    session.stop();
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn an_account_sign_in_waits_for_the_users_choice_of_method() {
+    let f = Fixture::new();
+    let runner = sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).unwrap();
+    let (host, rx) = f.host(Arc::from(runner));
+    let mut launch = f.launch("auth-url");
+    launch.credentials = AgentCredentials::Account {
+        use_stored_credentials: false,
+        method_id: None,
+        preferred_methods: vec!["fixture-login".into()],
+        browser_hosts: vec!["auth.example.com".into()],
+    };
+    let mut session = AcpSessionSupervisor::start(host, launch).unwrap();
+    let methods = loop {
+        if let AcpEvent::AuthChoice { methods } = next(&rx) {
+            break methods;
+        }
+    };
+    assert!(methods.iter().any(|m| m.id == "fixture-login"));
+    assert!(
+        rx.recv_timeout(Duration::from_millis(200)).is_err(),
+        "nothing starts until the user chooses"
+    );
+    // A method the agent never offered is refused and changes nothing.
+    session.choose_authentication("unknown".into()).unwrap();
+    assert!(matches!(next(&rx), AcpEvent::Error { .. }));
+    session
+        .choose_authentication("fixture-login".into())
+        .unwrap();
+    assert!(matches!(next(&rx), AcpEvent::Elicitation { .. }));
     session.stop();
 }
 
