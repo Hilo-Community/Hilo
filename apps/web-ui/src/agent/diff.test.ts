@@ -33,7 +33,8 @@ describe("proposal diff", () => {
   it("shows insertions, deletions and a new file", () => {
     expect(formatDiff(diffLines("a\nc", "a\nb\nc"))).toBe("  a\n+ b\n  c");
     expect(formatDiff(diffLines("a\nb\nc", "a\nc"))).toBe("  a\n- b\n  c");
-    expect(formatDiff(diffLines("", "new 🦀"))).toBe("- \n+ new 🦀");
+    expect(formatDiff(diffLines("", "new 🦀"))).toBe("+ new 🦀");
+    expect(formatDiff(diffLines("gone", ""))).toBe("- gone");
     expect(formatDiff(diffLines("same", "same"))).toBe("(no change)");
   });
 });

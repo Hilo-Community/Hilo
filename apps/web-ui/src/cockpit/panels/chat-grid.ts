@@ -308,6 +308,8 @@ export class ChatGrid {
     const chatsById = new Map(z3.chats.map((chat) => [chat.chatId, chat]));
     for (const [id, pane] of this.agentPanes) {
       if (!chatsById.has(id)) {
+        // The session was closed: its saved conversation goes with it.
+        pane.discard();
         pane.destroy();
         this.agentPanes.delete(id);
       }
@@ -527,6 +529,8 @@ export class ChatGrid {
           this.agents.openLocation,
           { agentId: chat.agentId, name: chat.agentName ?? chat.title },
           !this.restoredChats.has(chat.chatId),
+          undefined,
+          { chatId: chat.chatId, restore: this.restoredChats.has(chat.chatId) },
         );
         this.agentPanes.set(chat.chatId, pane);
       }

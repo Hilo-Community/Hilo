@@ -1,36 +1,8 @@
 import type { CockpitChatMessage, Zone3MultiChatState } from "../stores/index.js";
 import type { AtomicStore } from "../stores/index.js";
+import { renderMarkdownBlock } from "./markdown.js";
 
-function escapeHtml(raw: string): string {
-  return raw
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function renderMarkdownBlockToHtml(block: string): string {
-  const trimmed = block.trim();
-  if (trimmed.startsWith("```")) {
-    const firstNewline = trimmed.indexOf("\n");
-    const lang = firstNewline > 3 ? trimmed.slice(3, firstNewline).trim() : "";
-    const body =
-      firstNewline >= 0
-        ? trimmed.slice(firstNewline + 1).replace(/```$/, "")
-        : trimmed.slice(3).replace(/```$/, "");
-    return `<pre data-lang="${escapeHtml(lang)}"><code>${escapeHtml(body)}</code></pre>`;
-  }
-  if (trimmed.startsWith("# ")) {
-    return `<h1>${escapeHtml(trimmed.slice(2))}</h1>`;
-  }
-  if (trimmed.startsWith("## ")) {
-    return `<h2>${escapeHtml(trimmed.slice(3))}</h2>`;
-  }
-  if (trimmed.startsWith("### ")) {
-    return `<h3>${escapeHtml(trimmed.slice(4))}</h3>`;
-  }
-  return `<p>${escapeHtml(trimmed)}</p>`;
-}
+const renderMarkdownBlockToHtml = renderMarkdownBlock;
 
 /**
  * Incremental block-level Markdown parser caching finalized paragraphs and closed code fences

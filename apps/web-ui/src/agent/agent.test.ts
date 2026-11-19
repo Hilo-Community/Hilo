@@ -184,7 +184,7 @@ describe("LOT-014 agent panel", () => {
     store.enqueue(chunk("late"));
     expect(store.getUpdateCount()).toBe(1);
   });
-  it("does not count tool output it never keeps against the display budget", () => {
+  it("bounds tool previews without charging discarded output against the display budget", () => {
     const frames: Array<() => void> = [];
     const store = new AgentStore((cb) => frames.push(cb));
     const image = "A".repeat(3 * 1024 * 1024);
@@ -284,10 +284,20 @@ describe("LOT-014 agent panel", () => {
     });
     fake.emit({ type: "permission", id: "p", reason: "Review exact call", options: [] });
     store.flush();
-    expect(panel.element.querySelector("pre")?.textContent).toContain("- old 🦀\n+ new 🦀");
+    expect(
+      [...panel.element.querySelectorAll(".coloride-agent-diff-text")].map(
+        (line) => line.textContent,
+      ),
+    ).toEqual(["old 🦀", "new 🦀"]);
+    expect(
+      [...panel.element.querySelectorAll(".coloride-agent-diff-prefix")].map(
+        (mark) => mark.textContent,
+      ),
+    ).toEqual(["-", "+"]);
     // The proposal is read-only; only the prompt (a CodeMirror field) is editable.
     expect(panel.element.querySelector(".coloride-agent-output [contenteditable]")).toBeNull();
-    button(panel.element, "src/file.ts:1").click();
+    // The link shows the file's name; its full place is the tooltip.
+    panel.element.querySelector<HTMLButtonElement>('button[title="src/file.ts:1"]')?.click();
     await settle();
     expect(open).toHaveBeenCalledWith("src/file.ts", 1);
     button(panel.element, "Allow once").click();
