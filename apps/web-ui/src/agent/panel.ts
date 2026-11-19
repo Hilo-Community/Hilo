@@ -1,9 +1,9 @@
 import { type PromptInput, createPromptInput } from "@coloride/editor-cm6";
 import { SPINNER_ICON, agentMark } from "../settings/agent-marks.js";
-import { UI_STRINGS, uiText } from "../ui/ui-strings.js";
+import { UI_STRINGS } from "../ui/ui-strings.js";
 import { authChoiceCard, authenticationCards } from "./auth-panel.js";
-import { diffLines, formatDiff } from "./diff.js";
-import { type AgentHandle, type AgentHost, AgentStore } from "./store.js";
+import { conversationElements } from "./conversation-view.js";
+import { type AgentHandle, type AgentHost, type AgentState, AgentStore } from "./store.js";
 import { TerminalLoginView } from "./terminal-login-view.js";
 
 const SVG =
@@ -37,7 +37,7 @@ export class AgentPanel {
   private readonly busyMark: HTMLElement;
   private readonly login: TerminalLoginView;
   private readonly form: HTMLFormElement;
-  private readonly choiceHost: HTMLElement;
+  private readonly signInBar: HTMLElement;
   constructor(
     doc: Document,
     private readonly host: AgentHost,
@@ -123,10 +123,10 @@ export class AgentPanel {
     this.busyMark.setAttribute("aria-hidden", "true");
     this.busyMark.innerHTML = SPINNER_ICON;
     meta.append(sandbox, this.busyMark);
-    this.choiceHost = doc.createElement("div");
-    this.choiceHost.className = "coloride-agent-auth-bar";
-    this.choiceHost.hidden = true;
-    this.element.append(this.output, this.choiceHost, this.status, form, meta);
+    this.signInBar = doc.createElement("div");
+    this.signInBar.className = "coloride-agent-auth-bar";
+    this.signInBar.hidden = true;
+    this.element.append(this.output, this.signInBar, this.status, form, meta);
     this.unsubscribe = store.subscribe(() => this.render());
     this.render();
     if (autoStart) void this.begin();
@@ -179,7 +179,28 @@ export class AgentPanel {
   }
   private render(): void {
     const s = this.store.getState();
-    const doc = this.element.ownerDocument;
+    this.renderControls(s);
+    this.output.replaceChildren(
+      ...conversationElements(
+        this.element.ownerDocument,
+        s,
+        (label, click) => this.button(label, click),
+        {
+          openLocation: (path, line) => this.run(() => this.openLocation(path, line)),
+          answer: (id, allow) =>
+            this.run(async () => {
+              await this.handle?.answer(id, allow);
+              this.store.answered(id);
+            }),
+        },
+      ),
+    );
+    this.renderSignIn(s);
+    this.login.fit();
+    this.openSignInPages();
+  }
+  /** The status line, the connect button, the composer and the busy mark. */
+  private renderControls(s: AgentState): void {
     this.error.textContent =
       s.error ||
       (this.starting || (this.handle && !s.ready)
@@ -209,81 +230,15 @@ export class AgentPanel {
         0 || s.terminalAuth !== null;
     this.element.dataset.mode = started ? "chat" : "empty";
     this.prompt.setPlaceholder(started ? UI_STRINGS.agent.followUp : UI_STRINGS.agent.ask);
-    const content: HTMLElement[] = [];
-    for (const message of s.messages) {
-      const article = doc.createElement("article");
-      article.setAttribute("aria-label", message.role);
-      article.innerHTML = message.html.join("");
-      content.push(article);
-    }
-    if (s.plan.length) {
-      const plan = doc.createElement("ul");
-      plan.setAttribute("aria-label", UI_STRINGS.agent.plan);
-      for (const entry of s.plan) {
-        const item = doc.createElement("li");
-        const check = doc.createElement("input");
-        check.type = "checkbox";
-        check.checked = entry.status === "completed";
-        check.disabled = true;
-        check.setAttribute("aria-label", entry.content);
-        item.append(check, doc.createTextNode(`${entry.content} (${entry.status})`));
-        plan.append(item);
-      }
-      content.push(plan);
-    }
-    for (const tool of s.tools) {
-      const card = doc.createElement("article");
-      card.className = "coloride-agent-tool";
-      card.dataset.status = tool.status;
-      const title = doc.createElement("h3");
-      const glyph = { pending: "!", running: "⟳", done: "•", denied: "✕", failed: "✕" }[
-        tool.status
-      ];
-      title.textContent = `${glyph} ${tool.title} · ${tool.kind} · ${tool.status}`;
-      card.append(title);
-      if (tool.reason) {
-        const reason = doc.createElement("p");
-        reason.textContent = tool.reason;
-        card.append(reason);
-      }
-      for (const location of tool.locations)
-        card.append(
-          this.button(`${location.path}:${location.line}`, () =>
-            this.run(() => this.openLocation(location.path, location.line)),
-          ),
-        );
-      if (tool.edit) {
-        const diff = doc.createElement("pre");
-        diff.setAttribute("aria-label", uiText.proposedDiff(tool.edit.path));
-        diff.tabIndex = 0;
-        const { path, baseContentHash, oldText, newText } = tool.edit;
-        diff.textContent = `Base BLAKE3: ${baseContentHash}\n--- ${path}\n+++ proposed/${path}\n${formatDiff(diffLines(oldText, newText))}`;
-        const label = doc.createElement("p");
-        label.textContent = UI_STRINGS.agent.proposal;
-        card.append(label, diff);
-      }
-      content.push(card);
-    }
-    for (const permission of s.permissions) {
-      const card = doc.createElement("article");
-      card.className = "coloride-agent-permission";
-      const text = doc.createElement("p");
-      text.textContent = permission.reason;
-      const answer = (allow: boolean) =>
-        this.run(async () => {
-          await this.handle?.answer(permission.id, allow);
-          this.store.answered(permission.id);
-        });
-      card.append(
-        text,
-        this.button(UI_STRINGS.agent.allow, () => answer(true)),
-        this.button(UI_STRINGS.agent.reject, () => answer(false)),
-      );
-      content.push(card);
-    }
-    // Sign-in prompts (the code to type, the wait) sit at the bottom with the choice of method.
+  }
+  /**
+   * Signing in, at the bottom above the composer, not in the conversation: the choice of method,
+   * the agent's prompts (a code to type, the wait) and the terminal login. While it shows, the
+   * status line and the busy mark make way.
+   */
+  private renderSignIn(s: AgentState): void {
+    const doc = this.element.ownerDocument;
     const prompts = authenticationCards(doc, this.store, this.handle, (action) => this.run(action));
-    // The choice of sign-in sits at the bottom, above the composer, not in the conversation.
     const choice =
       s.authChoice && !s.ready
         ? authChoiceCard(doc, this.identity.name, s.authChoice, (methodId) => {
@@ -299,15 +254,12 @@ export class AgentPanel {
       ...prompts,
       ...(s.terminalAuth ? [this.login.element] : []),
     ];
-    this.choiceHost.replaceChildren(...bar);
-    this.choiceHost.hidden = bar.length === 0;
+    this.signInBar.replaceChildren(...bar);
+    this.signInBar.hidden = bar.length === 0;
     if (bar.length > 0) {
       this.status.hidden = true;
       this.busyMark.hidden = true;
     }
-    this.output.replaceChildren(...content);
-    this.login.fit();
-    this.openSignInPages();
   }
   /**
    * Opens the sign-in page of each new request by itself: the user chose to connect, and the Host
