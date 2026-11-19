@@ -8,6 +8,7 @@ import {
   resolveGroupLayout,
 } from "../../index.js";
 import { type LayoutNode, panelIds } from "../../layout/layout-tree.js";
+import { isMacPlatform } from "./panel-shortcuts.js";
 
 /** The header + offers each locally installed agent. */
 async function addSessionFromMenu(root: HTMLElement): Promise<void> {
@@ -17,7 +18,6 @@ async function addSessionFromMenu(root: HTMLElement): Promise<void> {
     Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"))
       .find((item) => item.textContent?.trim().startsWith(label))
       ?.click();
-  pick("Agent");
   pick("Codex");
 }
 
@@ -338,17 +338,47 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     cleanup();
   });
 
-  it("closes a session from its panel, but never the last one", () => {
+  it("closes a session from its panel menu, the last one too", () => {
     const { stores, cells, cleanup } = mount();
-    const close = (id: string) =>
-      cells()
-        .find((c) => c.dataset.chatId === id)
-        ?.querySelector<HTMLButtonElement>(".coloride-close-panel");
+    // The three dots open the panel's menu; "Close session" is its last entry.
+    const close = (id: string) => {
+      const cell = cells().find((c) => c.dataset.chatId === id);
+      cell?.querySelector<HTMLButtonElement>(".coloride-panel-menu")?.click();
+      return [...(cell?.querySelectorAll<HTMLButtonElement>(".sidebar-menu-item") ?? [])].find(
+        (item) => item.querySelector(".sidebar-menu-label")?.textContent === "Close session",
+      );
+    };
+    expect(cells()[0]?.querySelector(".coloride-close-panel")).toBeNull();
     close("b")?.click();
     expect(cells().map((c) => c.dataset.chatId)).toEqual(["a"]);
-    expect(close("a")?.disabled).toBe(true);
-    close("a")?.click();
-    expect(stores.zone3.getState().chats).toHaveLength(1);
+    const last = close("a");
+    expect(last?.disabled).toBe(false);
+    last?.click();
+    expect(stores.zone3.getState().chats).toHaveLength(0);
+    expect(cells()).toHaveLength(0);
+    expect(document.querySelector(".coloride-group-empty")).not.toBeNull();
+    cleanup();
+  });
+
+  it("shows the shortcuts in the panel menu, and the close shortcut closes the active panel", () => {
+    const { stores, cells, cleanup } = mount();
+    const cell = cells().find((c) => c.dataset.chatId === "b");
+    cell?.querySelector<HTMLButtonElement>(".coloride-panel-menu")?.click();
+    const hints = [...(cell?.querySelectorAll(".sidebar-menu-hint") ?? [])].map(
+      (hint) => hint.textContent,
+    );
+    expect(hints.some((hint) => hint?.endsWith("W"))).toBe(true);
+    stores.selectChat("b");
+    // Option changes the typed character on macOS: the shortcut is read from the key's code.
+    const press = (code: string, mods: KeyboardEventInit) =>
+      document.dispatchEvent(new KeyboardEvent("keydown", { code, key: "∑", ...mods }));
+    const primary = isMacPlatform(document) ? { metaKey: true } : { ctrlKey: true };
+    // Without Option/Alt, or with Shift, it is not the shortcut.
+    press("KeyW", primary);
+    press("KeyW", { ...primary, altKey: true, shiftKey: true });
+    expect(cells().map((c) => c.dataset.chatId)).toEqual(["a", "b"]);
+    press("KeyW", { ...primary, altKey: true });
+    expect(cells().map((c) => c.dataset.chatId)).toEqual(["a"]);
     cleanup();
   });
 

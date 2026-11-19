@@ -116,6 +116,44 @@ describe("LOT-014 agent panel", () => {
       panel.destroy();
     },
   );
+  it("logs out through the Host, and reauthenticates by connecting again after it", async () => {
+    const fake = host();
+    const order: string[] = [];
+    fake.host.signOut = vi.fn(async (id: string) => {
+      order.push(`signOut:${id}`);
+    });
+    vi.mocked(fake.host.start).mockImplementation(async () => {
+      order.push("start");
+      return fake.handle;
+    });
+    const panel = new AgentPanel(document, fake.host, async () => {}, {
+      agentId: "codex",
+      name: "Codex",
+    });
+    await settle();
+    expect(panel.canSignOut()).toBe(true);
+    order.length = 0;
+    panel.logOut();
+    await settle();
+    expect(order).toEqual(["signOut:codex"]);
+    order.length = 0;
+    panel.reauthenticate();
+    await settle();
+    expect(order).toEqual(["signOut:codex", "start"]);
+    order.length = 0;
+    panel.reload();
+    await settle();
+    expect(order).toEqual(["start"]);
+    expect(
+      new AgentPanel(
+        document,
+        host().host,
+        async () => {},
+        { agentId: "x", name: "X" },
+        false,
+      ).canSignOut(),
+    ).toBe(false);
+  });
   it("restores a panel dormant until the user uses it", async () => {
     const fake = host();
     const panel = new AgentPanel(

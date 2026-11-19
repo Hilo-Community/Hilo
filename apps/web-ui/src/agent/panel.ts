@@ -135,6 +135,27 @@ export class AgentPanel {
   activate(): void {
     if (!this.handle && !this.store.getState().error) void this.begin();
   }
+  /** Whether the Host can sign this agent out (the panel's menu offers it only then). */
+  canSignOut(): boolean {
+    return this.host.signOut !== undefined;
+  }
+  /** Stops the session and starts the agent again. */
+  reload(): void {
+    void this.begin();
+  }
+  /** Signs the agent out; the panel then waits for Connect, which asks how to sign in. */
+  logOut(): void {
+    this.run(async () => {
+      await this.host.signOut?.(this.identity.agentId);
+    });
+  }
+  /** Signs the agent out and connects again, which asks how to sign in. */
+  reauthenticate(): void {
+    this.run(async () => {
+      await this.host.signOut?.(this.identity.agentId);
+      await this.begin();
+    });
+  }
   private button(label: string, click: () => void, className = ""): HTMLButtonElement {
     const button = this.element.ownerDocument.createElement("button");
     button.type = "button";

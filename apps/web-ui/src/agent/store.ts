@@ -51,6 +51,11 @@ export interface AgentHost {
     config: { installedAgentId: string },
     onEvent: (event: AcpEvent) => void,
   ): Promise<AgentHandle>;
+  /**
+   * Signs the agent out: the Host stops its sessions first, then removes its saved sign-in, so
+   * the next connection asks how to sign in again.
+   */
+  signOut?(installedAgentId: string): Promise<void>;
 }
 export interface ToolCard {
   id: string;

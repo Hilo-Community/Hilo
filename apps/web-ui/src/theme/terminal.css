@@ -38,13 +38,13 @@
   .coloride-terminal-status:empty {
     display: none;
   }
-  /* Menu of the + button of Zone 3 (and its second level for agents) */
+  /* Menu of the + button of Zone 3: same look as a panel's ⋯ menu (no border, thin rows) */
   .coloride-new-panel-menu {
     position: fixed;
     z-index: 100;
-    min-width: 150px;
-    padding: 3px;
-    border: 0.5px solid rgba(255, 255, 255, 0.14);
+    min-width: 190px;
+    padding: 4px;
+    border: 0;
     border-radius: 8px;
     background: #262626;
   }
@@ -54,20 +54,21 @@
     justify-content: space-between;
     gap: 12px;
     width: 100%;
-    padding: 5px 8px;
+    padding: 3px 8px;
     border: 0;
     border-radius: 5px;
     background: transparent;
-    color: var(--color-text-primary);
+    color: var(--color-text-secondary);
     font: inherit;
     font-size: 12px;
+    line-height: 1.35;
     text-align: left;
     cursor: pointer;
   }
   .coloride-new-panel-item:hover:not(:disabled),
-  .coloride-new-panel-item:focus-visible,
-  .coloride-new-panel-item[aria-expanded="true"] {
+  .coloride-new-panel-item:focus-visible {
     background: rgba(255, 255, 255, 0.08);
+    color: var(--color-text-primary);
     outline: none;
   }
   .coloride-new-panel-item:disabled {
@@ -105,11 +106,14 @@
   }
   .coloride-new-panel-icon {
     display: inline-flex;
-    color: var(--color-text-secondary);
+    color: inherit;
   }
   .coloride-new-panel-icon svg {
     width: 12px;
     height: 12px;
+  }
+  .coloride-new-panel-install .coloride-new-panel-icon svg {
+    transform: scale(1.2);
   }
   /* The Codex mark is denser than the terminal glyph: a little larger to read */
   .coloride-new-panel-icon svg.coloride-codex-icon {
@@ -117,11 +121,22 @@
     height: 14px;
   }
   .coloride-new-panel-hint {
-    font-size: 10.5px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
     color: var(--color-text-muted);
   }
-  .coloride-new-panel-chevron {
-    display: inline-flex;
-    color: var(--color-text-secondary);
+  /* "External Agents": a section title, not an entry */
+  .coloride-new-panel-heading {
+    padding: 4px 8px 2px;
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+  .coloride-new-panel-heading[hidden] {
+    display: none;
+  }
+  .coloride-new-panel-separator {
+    height: 1px;
+    margin: 3px 6px;
+    background: rgba(255, 255, 255, 0.1);
   }
 }

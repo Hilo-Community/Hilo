@@ -255,9 +255,7 @@ export function createChatActions(ctx: StoreContext): ChatActions {
 
     closeChat(chatId: string): void {
       const z3 = zone3.getState();
-      if (z3.chats.length <= 1) {
-        return;
-      }
+      if (!z3.chats.some((c) => c.chatId === chatId)) return;
       const nextChats = z3.chats.filter((c) => c.chatId !== chatId);
       const group = navigation.getState().groups.find((group) => group.chatIds.includes(chatId));
       const nextActiveChat =
