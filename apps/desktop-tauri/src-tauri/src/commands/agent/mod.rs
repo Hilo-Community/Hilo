@@ -1,4 +1,6 @@
 //! ACP Host entry points. Native dialogs provide the human decision; signing stays in Rust.
+mod login_pages;
+
 use crate::{bridge::DesktopBinaryEditorBridge, state::DesktopAppState};
 use host_core::*;
 use judge_orchestrator::{
@@ -329,6 +331,12 @@ fn start_session(
         launch.read_only_paths.push(prepared.read_only_path);
     }
     let installation_id = launch.installation_id.clone();
+    // Only the reviewed account hosts of this agent's providers may be opened for its sign-in.
+    let login_hosts = login_pages::hosts(&installed_agent_id);
+    let open_url_file = runtime.open_url_file.clone();
+    let login_watch = Mutex::new(login_pages::TerminalWatch::default());
+    let login_app = app.clone();
+    let output_hosts = login_hosts.clone();
     gate.authorize(GatedCapability::WorkspaceLocalBinary)
         .map_err(|e| e.to_string())?;
     let id = state.next_agent_id.fetch_add(1, Ordering::SeqCst);
@@ -376,6 +384,22 @@ fn start_session(
         text: Arc::new(text),
         clock: Arc::new(now),
         events: Arc::new(move |event| {
+            if let AcpEvent::TerminalAuthOutput { data } = &event {
+                // A sandboxed login cannot open a browser: the Host opens the page it prints.
+                let found = login_watch
+                    .lock()
+                    .ok()
+                    .and_then(|mut watch| watch.feed(data, &output_hosts));
+                if let Some(url) = found {
+                    login_pages::open(&login_app, id, url);
+                }
+            }
+            if matches!(event, AcpEvent::Authenticated) {
+                if let Err(error) = registry.record_terminal_authentication(&installation_id, true)
+                {
+                    tracing::warn!(%error, "could not save account authentication state");
+                }
+            }
             if let AcpEvent::TerminalAuthComplete { success } = &event {
                 if let Err(error) =
                     registry.record_terminal_authentication(&installation_id, *success)
@@ -410,6 +434,7 @@ fn start_session(
         read_only_paths: launch.read_only_paths,
         writable_paths: vec![runtime.home],
         preference_domains: runtime.preference_domains,
+        loopback_listen_ports: runtime.loopback_listen_ports,
         environment: runtime.environment,
         credentials: runtime.credentials,
         network: runtime.network,
@@ -426,6 +451,10 @@ fn start_session(
     gate.authorize(GatedCapability::WorkspaceLocalBinary)
         .map_err(|e| e.to_string())?;
     agents.insert(id, Arc::new(Mutex::new(supervisor)));
+    drop(agents);
+    if let Some(file) = open_url_file {
+        login_pages::watch_shim_reports(app.clone(), id, file, login_hosts, SESSION_LIFETIME);
+    }
     Ok(id)
 }
 
@@ -469,8 +498,11 @@ pub fn agent_cancel_command(
 #[tauri::command]
 pub async fn agent_stop_command(app: tauri::AppHandle, id: u32) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let agent = app
-            .state::<DesktopAppState>()
+        let state = app.state::<DesktopAppState>();
+        if let Ok(mut urls) = state.login_urls.lock() {
+            urls.remove(&id);
+        }
+        let agent = state
             .agents
             .lock()
             .map_err(|_| "agents lock poisoned")?
@@ -523,6 +555,25 @@ pub fn agent_terminal_auth_start_command(
         .map_err(|_| "agent lock poisoned")?
         .start_terminal_auth()
         .map_err(|e| e.to_string())
+}
+/// The user's pick among the sign-in methods the agent offered.
+#[tauri::command]
+pub fn agent_auth_choose_command(
+    state: tauri::State<'_, DesktopAppState>,
+    id: u32,
+    method_id: String,
+) -> Result<(), String> {
+    agent(&state, id)?
+        .lock()
+        .map_err(|_| "agent lock poisoned")?
+        .choose_authentication(method_id)
+        .map_err(|e| e.to_string())
+}
+/// Opens again the sign-in page the login printed, when the browser did not open or was
+/// closed. Only the address the Host kept is opened, never one the webview supplies.
+#[tauri::command]
+pub fn agent_terminal_auth_open_command(app: tauri::AppHandle, id: u32) -> Result<(), String> {
+    login_pages::open_again(&app, id)
 }
 #[tauri::command]
 pub fn agent_terminal_auth_input_command(
@@ -625,6 +676,9 @@ mod tests {
                 } else {
                     agent_registry::accounts::AccountMode::ApiKey
                 },
+                // `COLORIDE_SMOKE_METHOD=chat-gpt`: the browser sign-in, which reports its page
+                // through the agent's `open` shim instead of an elicitation.
+                method_id: std::env::var("COLORIDE_SMOKE_METHOD").ok(),
                 ..Default::default()
             },
             false,
@@ -690,6 +744,7 @@ mod tests {
                 environment: runtime.environment,
                 writable_paths: vec![runtime.home],
                 preference_domains: runtime.preference_domains,
+                loopback_listen_ports: runtime.loopback_listen_ports,
                 credentials: runtime.credentials,
                 network: runtime.network,
                 limits: ResourceLimits {
@@ -701,11 +756,27 @@ mod tests {
         )
         .unwrap();
         let mut ready = false;
+        let open_file = runtime.open_url_file.clone();
+        let mut idle = 0;
         loop {
-            match rx
-                .recv_timeout(Duration::from_secs(45))
-                .expect("installed agent stalled")
-            {
+            let event = match rx.recv_timeout(Duration::from_secs(1)) {
+                Ok(event) => event,
+                Err(_) => {
+                    idle += 1;
+                    assert!(idle < 45, "installed agent stalled");
+                    if let Some(file) = open_file.as_ref().filter(|file| file.exists()) {
+                        let text = std::fs::read_to_string(file).unwrap_or_default();
+                        let host = login_pages::login_url(&text, &["auth.openai.com".to_string()])
+                            .and_then(|url| tauri::Url::parse(&url).ok())
+                            .and_then(|url| url.host_str().map(str::to_string));
+                        eprintln!("{agent_id}: the open shim reported a page on {host:?}");
+                        assert!(host.is_some());
+                        break;
+                    }
+                    continue;
+                }
+            };
+            match event {
                 AcpEvent::Ready { .. } => {
                     ready = true;
                     eprintln!("{agent_id}: gateway-authenticated session ready");

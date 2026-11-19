@@ -1,15 +1,30 @@
 import type { TerminalView } from "../cockpit/terminal/terminal-pane.js";
 import { createXtermView } from "../cockpit/terminal/xterm-view.js";
+import { UI_STRINGS } from "../ui/ui-strings.js";
 import type { AgentHandle, AgentState } from "./store.js";
 
-/** Stable, transient terminal boundary. Its output never enters the conversation store. */
+/**
+ * Columns of the login's own terminal. Wide, so the agent never breaks the sign-in address over
+ * several lines (the visible terminal wraps it softly instead, as one line).
+ */
+const LOGIN_COLUMNS = 500;
+
+/**
+ * Sign-in for an agent that only offers a terminal login, at the bottom of the panel: a small
+ * terminal, and the Host opens the sign-in page it prints. It starts as soon as the user chose
+ * the method. An agent that asks for extra arguments or environment shows them and keeps an
+ * explicit start button. The terminal's output never enters the conversation store.
+ */
 export class TerminalLoginView {
   readonly element: HTMLElement;
-  private readonly heading: HTMLElement;
   private readonly details: HTMLElement;
   private readonly screen: HTMLElement;
   private readonly start: HTMLButtonElement;
+  private readonly again: HTMLButtonElement;
   private view: TerminalView | null = null;
+  private started = false;
+  private failed = false;
+  private request: AgentState["terminalAuth"] = null;
   private readonly observer: ResizeObserver | null;
 
   constructor(
@@ -17,24 +32,58 @@ export class TerminalLoginView {
     private readonly handle: () => AgentHandle | null,
     private readonly run: (action: () => Promise<void>) => void,
   ) {
+    const text = UI_STRINGS.agent;
     this.element = doc.createElement("section");
-    this.element.className = "coloride-agent-permission coloride-agent-terminal-login";
+    this.element.className = "coloride-agent-terminal-login";
     this.element.setAttribute("aria-label", "Isolated account sign-in terminal");
-    this.heading = doc.createElement("strong");
+    const title = doc.createElement("strong");
+    title.textContent = text.signInTitle;
+    const intro = doc.createElement("p");
+    intro.textContent = text.signInTerminal;
     this.details = doc.createElement("pre");
-    const explanation = doc.createElement("p");
-    explanation.textContent =
-      "Complete the agent's sign-in, then exit this terminal successfully. Coloride will reconnect the agent. Account tokens remain accessible to the agent in its private home.";
+    this.details.hidden = true;
     this.screen = doc.createElement("div");
     this.screen.className = "coloride-agent-login-screen";
     this.start = doc.createElement("button");
     this.start.type = "button";
-    this.start.textContent = "Start isolated sign-in";
-    this.start.addEventListener("click", () =>
+    this.start.textContent = text.signInStart;
+    this.start.addEventListener("click", () => this.begin());
+    const cancel = doc.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = text.cancel;
+    cancel.addEventListener("click", () =>
       run(async () => {
+        await this.handle()?.stop();
+      }),
+    );
+    const actions = doc.createElement("div");
+    actions.className = "coloride-agent-terminal-login-actions";
+    this.again = doc.createElement("button");
+    this.again.type = "button";
+    this.again.textContent = text.signInOpenAgainShort;
+    this.again.addEventListener("click", () =>
+      run(async () => {
+        await this.handle()?.openLogin?.();
+      }),
+    );
+    actions.append(this.start, this.again, cancel);
+    this.element.append(title, intro, this.details, this.screen, actions);
+    this.observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => this.fit());
+    this.observer?.observe(this.screen);
+    this.element.hidden = true;
+  }
+
+  private begin(): void {
+    if (this.started) return;
+    this.started = true;
+    this.failed = false;
+    this.run(async () => {
+      try {
         const handle = this.handle();
         if (!handle?.startLogin) throw new Error("Interactive sign-in is unavailable.");
-        this.start.disabled = true;
+        this.start.hidden = true;
+        this.screen.hidden = false;
         this.view = createXtermView();
         this.view.open(this.screen);
         this.view.onData((data) =>
@@ -47,33 +96,40 @@ export class TerminalLoginView {
         await handle.startLogin();
         this.fit();
         this.view.focus();
-      }),
-    );
-    const cancel = doc.createElement("button");
-    cancel.type = "button";
-    cancel.textContent = "Cancel sign-in";
-    cancel.addEventListener("click", () =>
-      run(async () => {
-        await this.handle()?.stop();
-      }),
-    );
-    this.element.append(this.heading, explanation, this.details, this.start, cancel, this.screen);
-    this.observer =
-      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => this.fit());
-    this.observer?.observe(this.screen);
-    this.element.hidden = true;
+      } catch (error) {
+        // A failed start is not retried by itself: the button is the way to try again.
+        this.started = false;
+        this.failed = true;
+        this.view?.dispose();
+        this.view = null;
+        this.screen.replaceChildren();
+        this.render(this.request);
+        throw error;
+      }
+    });
   }
+
   render(request: AgentState["terminalAuth"]): void {
+    this.request = request;
     this.element.hidden = !request;
     if (!request) {
       this.view?.dispose();
       this.view = null;
       this.screen.replaceChildren();
-      this.start.disabled = false;
+      this.started = false;
+      this.failed = false;
       return;
     }
-    this.heading.textContent = request.name;
-    this.details.textContent = `Additional arguments: ${JSON.stringify(request.args)}\nEnvironment overrides: ${JSON.stringify(request.env)}`;
+    const extra = Object.keys(request.env).length > 0;
+    this.details.hidden = !extra;
+    this.details.textContent = extra
+      ? `${request.name}\nAdditional arguments: ${JSON.stringify(request.args)}\nEnvironment overrides: ${JSON.stringify(request.env)}`
+      : "";
+    // Arguments or environment the agent asked for need the user's click.
+    if (!extra && !this.failed) this.begin();
+    this.start.hidden = this.started;
+    this.again.hidden = !this.started;
+    this.screen.hidden = !this.started;
   }
   write(data: number[]): void {
     this.view?.write(Uint8Array.from(data));
@@ -82,7 +138,7 @@ export class TerminalLoginView {
     if (this.element.isConnected && this.view && this.view.fit()) {
       const { cols, rows } = this.view;
       this.run(async () => {
-        await this.handle()?.resizeLogin?.(cols, rows);
+        await this.handle()?.resizeLogin?.(Math.max(cols, LOGIN_COLUMNS), rows);
       });
     }
   }

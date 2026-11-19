@@ -1,5 +1,5 @@
 import { SPINNER_ICON } from "../settings/agent-marks.js";
-import { UI_STRINGS } from "../ui/ui-strings.js";
+import { UI_STRINGS, uiText } from "../ui/ui-strings.js";
 import type { AgentHandle, AgentStore } from "./store.js";
 
 /**
@@ -126,4 +126,39 @@ export function authenticationCards(
     card.append(actions);
     return card;
   });
+}
+
+/** A method that wants an API key: the key lives in Settings, never in an agent's sign-in. */
+const API_KEY_METHOD = /api[\s_-]?key/i;
+
+/**
+ * The agent needs the user to sign in and offers several ways. Each is a button; nothing starts
+ * until one is pressed. The agent's own text is only ever shown as text.
+ */
+export function authChoiceCard(
+  doc: Document,
+  agentName: string,
+  methods: readonly { id: string; name: string }[],
+  choose: (methodId: string) => void,
+): HTMLElement | null {
+  const offered = methods.filter((m) => !API_KEY_METHOD.test(m.id) && !API_KEY_METHOD.test(m.name));
+  if (offered.length === 0) return null;
+  const card = doc.createElement("section");
+  card.className = "coloride-agent-auth-choice";
+  card.setAttribute("aria-label", "Agent account sign-in");
+  const title = doc.createElement("strong");
+  title.textContent = uiText.authenticateTo(agentName);
+  const intro = doc.createElement("p");
+  intro.textContent = UI_STRINGS.agent.chooseAuth;
+  const actions = doc.createElement("div");
+  actions.className = "coloride-agent-auth-choice-actions";
+  for (const method of offered) {
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.textContent = method.name;
+    button.addEventListener("click", () => choose(method.id));
+    actions.append(button);
+  }
+  card.append(title, intro, actions);
+  return card;
 }

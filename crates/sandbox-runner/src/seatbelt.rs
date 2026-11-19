@@ -281,6 +281,13 @@ pub(crate) fn render_profile(spec: &ValidatedSpec, home: &Path) -> Result<Profil
             addr.port()
         ));
     }
+    // A sign-in that comes back to the user's browser on `localhost:<port>`: listening on that
+    // port, on loopback, and nothing else. Outbound stays limited to the proxy above.
+    for port in &spec.loopback_listen_ports {
+        profile.text.push_str(&format!(
+            "(allow network-bind (local ip \"localhost:{port}\"))\n(allow network-inbound (local ip \"localhost:{port}\"))\n"
+        ));
+    }
     // Last, so that they win over everything above.
     // Tagged like the default rule: the log query filters on the tag.
     profile.text.push_str(&format!(
@@ -443,6 +450,7 @@ mod tests {
             writable_paths: Vec::new(),
             denied_read_paths: Vec::new(),
             preference_domains: Vec::new(),
+            loopback_listen_ports: Vec::new(),
             network: NetworkPolicy::Denied,
             limits: ResourceLimits::default(),
             tmp_dir: "/Users/u/Library/Caches/Coloride/wt/.coloride-tmp/x".into(),
@@ -479,6 +487,23 @@ mod tests {
         assert!(profile.text.contains("com.apple.cfprefsd.daemon"));
         assert!(!profile.text.contains("user-preference-write"));
         assert!(!profile.text.contains("preference-domain-regex"));
+    }
+
+    #[test]
+    fn listening_is_allowed_only_on_the_listed_loopback_ports() {
+        let profile = render_profile(&spec(), Path::new("/Users/u")).unwrap();
+        assert!(!profile.text.contains("network"));
+        let mut listening = spec();
+        listening.loopback_listen_ports = vec![1455];
+        let profile = render_profile(&listening, Path::new("/Users/u")).unwrap();
+        assert!(profile
+            .text
+            .contains("(allow network-bind (local ip \"localhost:1455\"))"));
+        assert!(profile
+            .text
+            .contains("(allow network-inbound (local ip \"localhost:1455\"))"));
+        // No outbound rule comes with it.
+        assert!(!profile.text.contains("network-outbound"));
     }
 
     #[test]

@@ -4,7 +4,7 @@ use agent_gateway::{AgentGateway, GatewayMode};
 use agent_registry::{
     accounts::{AccountMode, AccountPreferences},
     private_home::PrivateAgentHome,
-    profiles::{agent_profile, provider_profile},
+    profiles::{agent_profile, provider_profile, AgentProfile},
     LaunchCommand,
 };
 use judge_orchestrator::acp::{AgentCredentials, AgentNetwork};
@@ -200,9 +200,63 @@ pub async fn agent_account_sign_out_command(
 #[cfg(target_os = "macos")]
 const MACOS_CA_BUNDLE: &str = "/private/etc/ssl/cert.pem";
 
+/// What the Host sets up so an agent can sign in through the user's browser from the sandbox.
+struct BrowserLogin {
+    ports: Vec<u16>,
+    shim_dir: PathBuf,
+    url_file: PathBuf,
+}
+
+/// Name of the page file in the agent's private home.
+const OPEN_URL_FILE: &str = ".coloride-open-url";
+
+/// macOS only: an `open` command first on the agent's `PATH` that writes the page the agent
+/// wants shown to a file in its private home, which the Host opens (after checking its host).
+/// The sandbox allows the agent to listen on its sign-in port, on loopback only. Elsewhere, or
+/// for an agent without a sign-in port, `None`: the agent is told not to use a browser.
+fn browser_login_support(
+    home: &Path,
+    profile: &AgentProfile,
+) -> Result<Option<BrowserLogin>, String> {
+    if profile.login_callback_ports.is_empty() || !cfg!(target_os = "macos") {
+        return Ok(None);
+    }
+    let quoted = home.join(OPEN_URL_FILE);
+    let text = quoted.to_string_lossy();
+    if text.contains(['\'', '\n', '\0']) {
+        return Ok(None);
+    }
+    let shim_dir = home.join(".coloride-bin");
+    std::fs::create_dir_all(&shim_dir).map_err(|e| e.to_string())?;
+    let script = format!(
+        "#!/bin/sh\n# The sandbox cannot open a browser: the Host opens the page reported here.\nfor url do :; done\nprintf '%s\\n' \"$url\" > '{text}'\n"
+    );
+    let shim = shim_dir.join("open");
+    std::fs::write(&shim, script).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&shim_dir, std::fs::Permissions::from_mode(0o700))
+            .map_err(|e| e.to_string())?;
+        std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o700))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(Some(BrowserLogin {
+        ports: profile.login_callback_ports.clone(),
+        shim_dir,
+        url_file: quoted,
+    }))
+}
+
 pub(super) struct AgentRuntime {
     pub home: PathBuf,
     pub preference_domains: Vec<String>,
+    /// Loopback ports the agent's browser sign-in may listen on (macOS, when the Host can open
+    /// the page for it).
+    pub loopback_listen_ports: Vec<u16>,
+    /// Where the agent's `open` shim reports the page it wants shown. The Host opens it, after
+    /// checking the host, because a sandboxed agent cannot open a browser itself.
+    pub open_url_file: Option<PathBuf>,
     pub environment: BTreeMap<OsString, OsString>,
     pub credentials: AgentCredentials,
     pub network: AgentNetwork,
@@ -238,12 +292,17 @@ pub(super) fn runtime_with_key_reader(
     let home = PrivateAgentHome::open(app_data, &launch.installation_id, &profile)
         .map_err(|e| e.to_string())?;
     let mut environment = home.environment().clone();
-    let mut paths: Vec<PathBuf> = launch
-        .program
-        .parent()
-        .map(Path::to_path_buf)
+    // Without the browser setup below, the agent must not offer a browser sign-in it cannot do.
+    if !profile.login_callback_ports.is_empty() && !cfg!(target_os = "macos") {
+        environment.insert("NO_BROWSER".into(), "1".into());
+    }
+    let browser_login = browser_login_support(home.path(), &profile)?;
+    let mut paths: Vec<PathBuf> = browser_login
+        .as_ref()
+        .map(|login| login.shim_dir.clone())
         .into_iter()
         .collect();
+    paths.extend(launch.program.parent().map(Path::to_path_buf));
     #[cfg(unix)]
     paths.extend(
         [
@@ -367,6 +426,11 @@ pub(super) fn runtime_with_key_reader(
     Ok(AgentRuntime {
         home: home.path().into(),
         preference_domains: profile.preference_domains,
+        loopback_listen_ports: browser_login
+            .as_ref()
+            .map(|login| login.ports.clone())
+            .unwrap_or_default(),
+        open_url_file: browser_login.map(|login| login.url_file),
         environment,
         credentials,
         network,

@@ -14,6 +14,8 @@ export function createTauriAgentHost(invoke: Invoke, channel: () => AgentChannel
       });
       return {
         startLogin: () => invoke("agent_terminal_auth_start_command", { id }),
+        chooseAuth: (methodId) => invoke("agent_auth_choose_command", { id, methodId }),
+        openLogin: () => invoke("agent_terminal_auth_open_command", { id }),
         writeLogin: (data) => invoke("agent_terminal_auth_input_command", { id, data }),
         resizeLogin: (cols, rows) =>
           invoke("agent_terminal_auth_resize_command", { id, cols, rows }),

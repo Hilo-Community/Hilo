@@ -176,3 +176,26 @@ describe("agent sign-in", () => {
     expect(f.store.getState().elicitations).toEqual([]);
   });
 });
+
+describe("choosing how to sign in", () => {
+  it("offers a button per method, hides API-key methods, and reports the pick", async () => {
+    const { authChoiceCard } = await import("./auth-panel.js");
+    const chosen: string[] = [];
+    const card = authChoiceCard(
+      document,
+      "Codex",
+      [
+        { id: "chatgpt-device", name: "ChatGPT (device code)" },
+        { id: "chatgpt", name: "ChatGPT" },
+        { id: "api-key", name: "API Key" },
+      ],
+      (id) => chosen.push(id),
+    );
+    expect(card?.textContent).toContain("Authenticate to Codex");
+    const labels = [...(card?.querySelectorAll("button") ?? [])].map((b) => b.textContent);
+    expect(labels).toEqual(["ChatGPT (device code)", "ChatGPT"]);
+    card?.querySelectorAll("button")[1]?.click();
+    expect(chosen).toEqual(["chatgpt"]);
+    expect(authChoiceCard(document, "X", [{ id: "api_key", name: "x" }], () => {})).toBeNull();
+  });
+});

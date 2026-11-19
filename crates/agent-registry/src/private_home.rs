@@ -198,12 +198,11 @@ mod tests {
         let app = tempfile::tempdir().unwrap();
         let profile = agent_profile("codex-acp");
         let home = PrivateAgentHome::open(app.path(), "codex-acp@2.7.0", &profile).unwrap();
-        assert_eq!(
-            home.environment()
-                .get(std::ffi::OsStr::new("NO_BROWSER"))
-                .unwrap(),
-            "1"
-        );
+        // The browser sign-in is set up by the Host (or switched off there), not by the profile.
+        assert!(!home
+            .environment()
+            .contains_key(std::ffi::OsStr::new("NO_BROWSER")));
+        assert_eq!(profile.login_callback_ports, [1455]);
         assert!(!home
             .environment()
             .contains_key(std::ffi::OsStr::new("OPENAI_API_KEY")));

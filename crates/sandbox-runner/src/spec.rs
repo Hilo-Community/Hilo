@@ -76,6 +76,10 @@ pub struct SandboxSpec {
     /// programs refuse to start when they cannot read their managed preferences). Reading,
     /// never writing, and no other domain. Other engines have no such service and ignore it.
     pub preference_domains: Vec<String>,
+    /// macOS only: loopback TCP ports the process may listen on and be reached on, for a
+    /// sign-in that returns to `http://localhost:<port>/...` in the user's browser. Only these
+    /// ports, only on loopback; outbound traffic is not widened. Other engines ignore it.
+    pub loopback_listen_ports: Vec<u16>,
     pub network: NetworkPolicy,
     pub limits: ResourceLimits,
 }
@@ -96,6 +100,7 @@ impl SandboxSpec {
             writable_paths: Vec::new(),
             denied_read_paths: Vec::new(),
             preference_domains: Vec::new(),
+            loopback_listen_ports: Vec::new(),
             network: NetworkPolicy::Denied,
             limits: ResourceLimits::default(),
         }
@@ -123,6 +128,8 @@ pub struct ValidatedSpec {
     pub denied_read_paths: Vec<PathBuf>,
     /// Checked: exact reverse-DNS names.
     pub preference_domains: Vec<String>,
+    /// Checked: unprivileged ports, few.
+    pub loopback_listen_ports: Vec<u16>,
     pub network: NetworkPolicy,
     pub limits: ResourceLimits,
     /// Private, writable temporary directory inside the worktree, purged when the run ends.
@@ -254,6 +261,13 @@ impl SandboxSpec {
                 "a preference domain must be an exact reverse-DNS name",
             ));
         }
+        if self.loopback_listen_ports.len() > 4
+            || self.loopback_listen_ports.iter().any(|port| *port < 1024)
+        {
+            return Err(invalid(
+                "at most four loopback ports, none below 1024, may be listened on",
+            ));
+        }
         Ok(ValidatedSpec {
             terminal_device: None,
             mediate_worktree_reads: self.mediate_worktree_reads,
@@ -267,6 +281,7 @@ impl SandboxSpec {
             writable_paths,
             denied_read_paths,
             preference_domains: self.preference_domains.clone(),
+            loopback_listen_ports: self.loopback_listen_ports.clone(),
             network: self.network,
             limits: self.limits,
             tmp_dir: PathBuf::new(),

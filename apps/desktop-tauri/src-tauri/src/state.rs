@@ -17,6 +17,9 @@ pub(crate) struct DesktopAppState {
     pub(crate) agents:
         Mutex<HashMap<u32, Arc<Mutex<judge_orchestrator::acp::AcpSessionSupervisor>>>>,
     pub(crate) next_agent_id: AtomicU32,
+    /// The sign-in page each agent's login printed, kept only when it is on a host reviewed for
+    /// that agent. The webview never supplies the address that gets opened.
+    pub(crate) login_urls: Mutex<HashMap<u32, String>>,
     /// The ACP agent registry of the Settings screen, opened on first use.
     pub(crate) agent_registry: Mutex<Option<Arc<agent_registry::AgentRegistry>>>,
     /// Serializes account resets against session startup/home provisioning.
@@ -64,6 +67,7 @@ impl DesktopAppState {
             bridge: Arc::new(Mutex::new(bridge)),
             agents: Mutex::new(HashMap::new()),
             next_agent_id: AtomicU32::new(1),
+            login_urls: Mutex::new(HashMap::new()),
             agent_registry: Mutex::new(None),
             agent_account_lock: Mutex::new(()),
             workspace_root: Mutex::new(None),
