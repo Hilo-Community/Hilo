@@ -34,7 +34,18 @@ fn main() {
     let mut cwd = String::new();
     for (id, result) in [
         (0, json!({"protocolVersion":1,"agentCapabilities":{}})),
-        (1, json!({"sessionId":"fake"})),
+        (
+            1,
+            if mode == "options" {
+                json!({"sessionId":"fake",
+                    "modes":{"currentModeId":"default","availableModes":[
+                        {"id":"default","name":"Default"},{"id":"plan","name":"Plan"}]},
+                    "models":{"currentModelId":"deep","availableModels":[
+                        {"modelId":"deep","name":"Deep"},{"modelId":"fast","name":"Fast"}]}})
+            } else {
+                json!({"sessionId":"fake"})
+            },
+        ),
     ] {
         let Some(Ok(line)) = lines.next() else {
             return;
@@ -45,7 +56,8 @@ fn main() {
         }
         emit(json!({"jsonrpc":"2.0","id":id,"result":result}));
     }
-    if lines.next().is_none() {
+    // Every mode waits for the prompt, except the one that only answers option changes.
+    if mode != "options" && lines.next().is_none() {
         return;
     }
     let request = |id, method, mut params: Value| {
@@ -131,6 +143,13 @@ fn main() {
                 json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"fake","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":format!("direct-secret={leaked}")}}}}),
             );
         }
+        "edit-update" => {
+            // An edit reported with absolute paths, as agents do; the cwd is the task snapshot.
+            let path = std::env::current_dir().unwrap().join("src/a.rs");
+            emit(
+                json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"fake","update":{"sessionUpdate":"tool_call","toolCallId":"edit-1","kind":"edit","title":"Edit","status":"completed","locations":[{"path":path}],"content":[{"type":"diff","path":path,"oldText":null,"newText":"fn a() {}"}]}}}),
+            );
+        }
         "direct-write" => {
             let wrote = std::fs::write("src/file.rs", "bypass").is_ok();
             emit(
@@ -162,6 +181,22 @@ fn main() {
         };
         if value["method"] == "session/cancel" {
             break;
+        }
+        if mode == "options" {
+            match value["method"].as_str() {
+                // The fake agent refuses to leave `default` for `plan` once, to test a refusal.
+                Some("session/set_mode") if value["params"]["modeId"] == "refused" => emit(
+                    json!({"jsonrpc":"2.0","id":value["id"],"error":{"code":-32602,"message":"no"}}),
+                ),
+                Some("session/set_mode" | "session/set_model") => {
+                    emit(json!({"jsonrpc":"2.0","id":value["id"],"result":{}}));
+                    emit(
+                        json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"fake","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":value.to_string()}}}}),
+                    );
+                }
+                _ => {}
+            }
+            continue;
         }
         emit(
             json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"fake","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":value.to_string()}}}}),

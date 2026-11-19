@@ -90,6 +90,7 @@ fn installed_gateway_transport_smoke() {
             mcp: None,
             _task: None,
         }),
+        shared_read_only_paths: vec![],
         clock: Arc::new(now),
         events: Arc::new(move |event| {
             let _ = tx.send(event);

@@ -12,8 +12,9 @@ const MAX_LCS_CELLS = 4_000_000;
  * minimal (longest common subsequence) diff when it is small enough.
  */
 export function diffLines(oldText: string, newText: string): DiffLine[] {
-  const a = oldText.split("\n");
-  const b = newText.split("\n");
+  // No text at all is no lines (a new or a deleted file), not one empty line.
+  const a = oldText === "" ? [] : oldText.split("\n");
+  const b = newText === "" ? [] : newText.split("\n");
   let start = 0;
   while (start < a.length && start < b.length && a[start] === b[start]) start++;
   let endA = a.length;

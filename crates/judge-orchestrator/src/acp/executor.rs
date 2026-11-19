@@ -39,6 +39,8 @@ pub struct AgentToolExecutor {
     reader: Arc<dyn WorkspaceText>,
     runner: Arc<dyn SandboxRunner>,
     limits: ResourceLimits,
+    /// Dependency folders the snapshot links to, readable (never writable) by its commands.
+    read_only_paths: Vec<PathBuf>,
     /// The agent process itself, killed only when the session stops.
     pub(crate) agent: Mutex<Option<Arc<Mutex<SandboxedChild>>>>,
     /// Running terminal commands, killed when the turn is cancelled too.
@@ -54,6 +56,7 @@ impl AgentToolExecutor {
         reader: Arc<dyn WorkspaceText>,
         runner: Arc<dyn SandboxRunner>,
         limits: ResourceLimits,
+        read_only_paths: Vec<PathBuf>,
         sink: EventSink,
     ) -> Self {
         Self {
@@ -61,6 +64,7 @@ impl AgentToolExecutor {
             reader,
             runner,
             limits,
+            read_only_paths,
             agent: Mutex::new(None),
             children: Arc::new(Mutex::new(Vec::new())),
             cancelled: Arc::new(AtomicBool::new(false)),
@@ -145,6 +149,7 @@ impl AgentToolExecutor {
         };
         // Until LOT-015 applies changes in a checkpoint, terminal tools cannot write source either.
         spec.worktree_read_only = true;
+        spec.read_only_paths = self.read_only_paths.clone();
         spec.limits = self.limits;
         let child;
         let stdout;
