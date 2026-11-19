@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./.github/assets/logo-dark.svg">
+  <img src="./.github/assets/logo-light.svg" alt="Coloride" width="80" height="80">
+</picture>
+
 # Coloride
 
 [![CI](https://github.com/Color-IDE/Coloride/actions/workflows/ci.yml/badge.svg)](https://github.com/Color-IDE/Coloride/actions/workflows/ci.yml)
