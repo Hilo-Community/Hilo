@@ -86,27 +86,23 @@
   font-size: 12px;
   color: var(--color-text-secondary, #878888);
 }
-/* The code is what the user types in the browser: large, spaced, selectable. */
+/* The code is what the user types in the browser: large, spaced, selectable. No box around it:
+   the text alone. Clicking copies it, and the text turns green for a moment to say so. */
 .coloride-agent-authentication-code {
-  padding: 8px 16px;
-  border: 0.5px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 600;
   letter-spacing: 0.14em;
   user-select: all;
   cursor: pointer;
-  transition: border-color 0.15s, background-color 0.15s;
+  transition: color 0.15s;
 }
 .coloride-agent-authentication-code:hover {
-  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
-/* A short confirmation in place of a "Copied" label, so the box keeps showing only the code. */
 .coloride-agent-authentication-code[data-copied] {
-  border-color: rgba(74, 222, 128, 0.7);
-  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
 }
 .coloride-agent-authentication-status {
   display: inline-flex;
