@@ -382,6 +382,7 @@ mod tests {
             writable_paths: Vec::new(),
             denied_read_paths: Vec::new(),
             preference_domains: Vec::new(),
+            loopback_listen_ports: Vec::new(),
             network: NetworkPolicy::Denied,
             limits: ResourceLimits::default(),
             tmp_dir: worktree.join(".coloride-tmp/x"),
