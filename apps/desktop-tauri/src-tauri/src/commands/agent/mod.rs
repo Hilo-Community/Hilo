@@ -175,6 +175,21 @@ pub fn agent_auth_choose_command(
         .choose_authentication(method_id)
         .map_err(|e| e.to_string())
 }
+/// The user's pick for a model, mode or effort the agent offered. The session only sends it
+/// if the value is one the agent itself advertised.
+#[tauri::command]
+pub fn agent_option_command(
+    state: tauri::State<'_, DesktopAppState>,
+    id: u32,
+    option_id: String,
+    value: String,
+) -> Result<(), String> {
+    agent(&state, id)?
+        .lock()
+        .map_err(|_| "agent lock poisoned")?
+        .set_option(option_id, value)
+        .map_err(|e| e.to_string())
+}
 /// Opens again the sign-in page the login printed, when the browser did not open or was
 /// closed. Only the address the Host kept is opened, never one the webview supplies.
 #[tauri::command]
