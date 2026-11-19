@@ -108,13 +108,11 @@ export class WorkspaceSidebar {
   private canClose(chatId: string): boolean {
     const state = this.options.stores.zone3.getState();
     return (
-      state.chats.length > 1 &&
-      state.activeRunningAgentChatId !== chatId &&
-      !state.sequentialAgentQueue.includes(chatId)
+      state.activeRunningAgentChatId !== chatId && !state.sequentialAgentQueue.includes(chatId)
     );
   }
 
-  /** Closes sessions one by one; the store keeps the last session of the app open. */
+  /** Closes sessions one by one. */
   private closeSessions(chatIds: readonly string[]): void {
     for (const id of chatIds) this.options.stores.closeChat(id);
   }

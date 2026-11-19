@@ -114,6 +114,8 @@
   .coloride-chat-cell {
     @apply !bg-transparent !border-0 rounded-none flex flex-col !text-text-primary;
     position: relative;
+    /* Where the panel menu (three dots) lines up on the right. */
+    --sidebar-edge: 8px;
     padding: 0;
     min-width: 0;
     min-height: 0;
@@ -219,7 +221,9 @@
     background: rgba(255, 255, 255, 0.12);
     color: var(--color-text-primary);
   }
-  .coloride-chat-cell-action[aria-pressed="true"] {
+  /* Pressed: the maximize button of a panel shown alone, and the ⋯ button while its menu is open. */
+  .coloride-chat-cell-action[aria-pressed="true"],
+  .coloride-chat-cell-action[aria-expanded="true"] {
     background: rgba(255, 255, 255, 0.12);
     color: var(--color-text-primary);
   }

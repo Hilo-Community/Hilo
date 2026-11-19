@@ -39,10 +39,7 @@ describe("installed agents in the new panel menu", () => {
     document.body.append(anchor);
     const openAgentInterface = vi.fn();
     const installAgents = vi.fn();
-    const show = () => {
-      menu.toggle(anchor, { openAgentInterface, installAgents });
-      document.querySelector<HTMLButtonElement>(".has-submenu")?.click();
-    };
+    const show = () => menu.toggle(anchor, { openAgentInterface, installAgents });
     return {
       menu,
       host,
@@ -57,17 +54,20 @@ describe("installed agents in the new panel menu", () => {
     };
   }
 
-  it("lists local installations with their mark, name and version", async () => {
+  it("lists local installations under External Agents, with their mark, then Add more", async () => {
     const s = setup([installed]);
     await settle();
     s.show();
-    const entries = document.querySelectorAll<HTMLButtonElement>(
-      ".coloride-new-panel-submenu button",
-    );
+    const entries = document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-menu button");
     expect(entries).toHaveLength(2);
-    expect(entries[0]?.textContent).toContain("Codex1.0");
+    expect(entries[0]?.querySelector(".coloride-new-panel-label")?.lastChild?.textContent).toBe(
+      "Codex",
+    );
     expect(entries[0]?.querySelector(".coloride-registry-mark")).not.toBeNull();
-    expect(entries[1]?.textContent).toBe("Install more agents…");
+    expect(entries[1]?.textContent).toBe("Add more agents");
+    expect(document.querySelector(".coloride-new-panel-heading")?.textContent).toBe(
+      "External Agents",
+    );
     entries[0]?.click();
     expect(s.openAgentInterface).toHaveBeenCalledWith(installed);
     expect(s.host.list).toHaveBeenCalledWith(false);
@@ -75,14 +75,15 @@ describe("installed agents in the new panel menu", () => {
     expect(s.stop).toHaveBeenCalledOnce();
   });
 
-  it("offers installation with no agents and refreshes an open submenu after changes", async () => {
+  it("offers installation with no agents and refreshes an open menu after changes", async () => {
     const s = setup([]);
     await settle();
     s.show();
     const entries = () => [
-      ...document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-submenu button"),
+      ...document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-menu button"),
     ];
     expect(entries().map((b) => b.textContent)).toEqual(["Install an agent…"]);
+    expect(document.querySelector<HTMLElement>(".coloride-new-panel-heading")?.hidden).toBe(true);
     s.change([installed]);
     await settle();
     expect(entries()).toHaveLength(2);

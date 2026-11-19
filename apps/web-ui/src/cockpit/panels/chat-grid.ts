@@ -2,7 +2,8 @@ import { AgentPanel } from "../../agent/panel.js";
 import type { AgentHost } from "../../agent/store.js";
 import { type LayoutNode, panel, panelIds, reconcileLayout } from "../../layout/layout-tree.js";
 import type { AgentRegistryHost, InstalledAgent } from "../../settings/agent-registry.js";
-import { PLUS_ICON } from "../../sidebar/icons.js";
+import { MORE_ICON, PLUS_ICON } from "../../sidebar/icons.js";
+import { SidebarMenu, type SidebarMenuAction } from "../../sidebar/sidebar-menu.js";
 import { sessionDisplayTitle } from "../../sidebar/sidebar-row.js";
 import {
   COLORIDE_DESIGN_TOKENS,
@@ -29,12 +30,13 @@ import {
 } from "./layout-handles.js";
 import { NewPanelMenu } from "./new-panel-menu.js";
 import { PanelDrag } from "./panel-drag.js";
+import { MAXIMIZE_ICON, SPLIT_DOWN_ICON, SPLIT_RIGHT_ICON } from "./panel-icons.js";
 import {
-  CLOSE_PANEL_ICON,
-  MAXIMIZE_ICON,
-  SPLIT_DOWN_ICON,
-  SPLIT_RIGHT_ICON,
-} from "./panel-icons.js";
+  type PanelShortcutAction,
+  panelShortcutAction,
+  settingsShortcutLabel,
+  shortcutLabel,
+} from "./panel-shortcuts.js";
 import { sessionIcon } from "./session-presentation.js";
 
 /** The icon of a session's header tab: the terminal glyph, the Codex mark, or its state glyph. */
@@ -50,6 +52,9 @@ export interface ChatGridTerminals {
   readonly createView: TerminalViewFactory;
 }
 
+/** An entry of a panel's menu; `id` when a keyboard shortcut also runs it. */
+type PanelMenuAction = SidebarMenuAction & { readonly id?: PanelShortcutAction };
+
 interface ChatCellNodes {
   readonly el: HTMLElement;
   readonly header: HTMLElement;
@@ -60,7 +65,8 @@ interface ChatCellNodes {
   readonly splitRight: HTMLButtonElement;
   readonly splitDown: HTMLButtonElement;
   readonly maximize: HTMLButtonElement;
-  readonly close: HTMLButtonElement;
+  /** The three-dots button of the panel's menu (reload, sign-in, settings, close). */
+  readonly more: HTMLButtonElement;
   readonly messages: HTMLElement;
   readonly logs: HTMLElement;
   readonly kind: "agent" | "terminal";
@@ -101,6 +107,7 @@ export class ChatGrid {
   private readonly newPanelMenu: NewPanelMenu;
   private readonly restoredChats: ReadonlySet<string>;
   private readonly stopOpenRequests: (() => void) | undefined;
+  private readonly stopPanelShortcuts: () => void;
   private focusedTerminalId: string | null = null;
   /** Moves a panel by its header. */
   private readonly panelDrag: PanelDrag;
@@ -122,6 +129,9 @@ export class ChatGrid {
     this.restoredChats = new Set(stores.zone3.getState().chats.map((chat) => chat.chatId));
     this.newPanelMenu = new NewPanelMenu(doc, registry);
     this.stopOpenRequests = registry?.onOpenRequested?.((agent) => this.openAgent(agent));
+    const onPanelShortcut = (event: KeyboardEvent) => this.runPanelShortcut(event);
+    doc.addEventListener("keydown", onPanelShortcut);
+    this.stopPanelShortcuts = () => doc.removeEventListener("keydown", onPanelShortcut);
     this.element = doc.createElement("main");
     this.element.className =
       "coloride-zone-3-multichat bg-main border-t border-b border-l border-white/8 flex flex-col h-full";
@@ -254,7 +264,6 @@ export class ChatGrid {
       cell.splitRight.title = right ? UI_STRINGS.chat.splitRight : noRoom;
       cell.splitDown.disabled = !down;
       cell.splitDown.title = down ? UI_STRINGS.chat.splitDown : noRoom;
-      cell.close.disabled = !this.canCloseSession(chatId);
       // Showing one panel alone only makes sense when there are others.
       const alone = this.maximizedId === chatId;
       cell.maximize.hidden = panelCount <= 1;
@@ -283,6 +292,7 @@ export class ChatGrid {
     this.resizeObserver?.disconnect();
     this.newPanelMenu.destroy();
     this.stopOpenRequests?.();
+    this.stopPanelShortcuts();
     for (const pane of this.panes.values()) pane.destroy();
     this.panes.clear();
     for (const pane of this.agentPanes.values()) pane.destroy();
@@ -326,14 +336,64 @@ export class ChatGrid {
     this.tabs.update(specs);
   }
 
-  /** The last session stays, and one with a running or queued agent cannot be closed. */
+  /**
+   * The entries of a panel's menu. An agent panel can be reloaded and signed out (or in again);
+   * every panel can open Settings and be closed, except the last one or one whose agent runs.
+   */
+  private panelActions(chatId: string): PanelMenuAction[] {
+    const text = UI_STRINGS.chat;
+    const doc = this.element.ownerDocument;
+    const keyed = (id: PanelShortcutAction, entry: SidebarMenuAction): PanelMenuAction => {
+      const hint = shortcutLabel(doc, id);
+      return { ...entry, id, ...(hint ? { hint } : {}) };
+    };
+    const actions: PanelMenuAction[] = [];
+    const pane = this.agentPanes.get(chatId);
+    if (pane) {
+      actions.push(keyed("reload", { label: text.reloadAgent, run: () => pane.reload() }));
+      if (pane.canSignOut())
+        actions.push(
+          keyed("reauthenticate", { label: text.reauthenticate, run: () => pane.reauthenticate() }),
+          keyed("logOut", { label: text.logOut, run: () => pane.logOut() }),
+        );
+    }
+    if (this.settings) {
+      const settings = this.settings;
+      actions.push({
+        label: UI_STRINGS.settings.title,
+        run: () => settings.select(),
+        hint: settingsShortcutLabel(doc),
+        separatorBefore: actions.length > 0,
+      });
+    }
+    const closable = this.canCloseSession(chatId);
+    actions.push(
+      keyed("close", {
+        label: text.closePanel,
+        run: () => this.stores.closeChat(chatId),
+        disabled: !closable,
+        ...(closable ? {} : { reason: text.cannotClose }),
+        separatorBefore: actions.length > 0,
+      }),
+    );
+    return actions;
+  }
+
+  /** A panel shortcut acts on the active panel, as its menu entry would. */
+  private runPanelShortcut(event: KeyboardEvent): void {
+    const id = panelShortcutAction(this.element.ownerDocument, event);
+    const chatId = this.stores.zone3.getState().activeChatId;
+    if (!id || !chatId) return;
+    const entry = this.panelActions(chatId).find((action) => action.id === id);
+    if (!entry || entry.disabled) return;
+    event.preventDefault();
+    entry.run();
+  }
+
+  /** A session with a running or queued agent cannot be closed. */
   private canCloseSession(chatId: string): boolean {
     const z3 = this.stores.zone3.getState();
-    return !(
-      z3.chats.length <= 1 ||
-      z3.activeRunningAgentChatId === chatId ||
-      z3.sequentialAgentQueue.includes(chatId)
-    );
+    return !(z3.activeRunningAgentChatId === chatId || z3.sequentialAgentQueue.includes(chatId));
   }
 
   private updateGrid(): void {
@@ -586,10 +646,14 @@ export class ChatGrid {
       if ((event.target as HTMLElement).closest("button")) return;
       this.stores.toggleMaximizeChat(chatId);
     });
-    const close = action("coloride-close-panel", CLOSE_PANEL_ICON, UI_STRINGS.chat.closePanel, () =>
-      this.stores.closeChat(chatId),
+    // The panel's menu: closing it, and for an agent reloading and signing in again.
+    const menu = new SidebarMenu(el);
+    const more = action("coloride-panel-menu", MORE_ICON, UI_STRINGS.chat.panelMenu, () =>
+      menu.open(more, this.panelActions(chatId)),
     );
-    actions.append(splitRight, splitDown, maximize, close);
+    more.setAttribute("aria-haspopup", "menu");
+    more.setAttribute("aria-expanded", "false");
+    actions.append(splitRight, splitDown, maximize, more);
     header.append(title, actions);
     const messages = doc.createElement("div");
     messages.className = "coloride-chat-cell-messages";
@@ -610,7 +674,7 @@ export class ChatGrid {
       splitRight,
       splitDown,
       maximize,
-      close,
+      more,
       messages,
       logs,
       kind,

@@ -5,6 +5,8 @@ export interface AgentChannel {
 }
 export function createTauriAgentHost(invoke: Invoke, channel: () => AgentChannel): AgentHost {
   return {
+    signOut: (installedAgentId) =>
+      invoke("agent_account_sign_out_command", { agentId: installedAgentId }),
     async start(config, onEvent) {
       const events = channel();
       events.onmessage = onEvent;
