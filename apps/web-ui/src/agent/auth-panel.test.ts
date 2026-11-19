@@ -104,7 +104,36 @@ describe("agent sign-in", () => {
     expect(f.store.getState().elicitations[0]?.accepted).toBe(true);
   });
 
-  it("copies the code and cancels the sign-in", async () => {
+  it("shows only the code, and copies it when it is clicked", async () => {
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    vi.useFakeTimers();
+    try {
+      const f = fake();
+      await settle();
+      f.emit(request);
+      f.store.flush();
+      await settle();
+      expect(button(f.panel.element, "Copy code")).toBeUndefined();
+      const code = f.panel.element.querySelector<HTMLElement>(
+        ".coloride-agent-authentication-code",
+      );
+      expect(code?.textContent).toBe("ABCD-1234");
+      expect(code?.dataset.copied).toBeUndefined();
+      code?.click();
+      await settle();
+      expect(writeText).toHaveBeenCalledWith("ABCD-1234");
+      expect(code?.dataset.copied).toBe("true");
+      // The confirmation is brief, and the code stays the only text in the box.
+      expect(code?.textContent).toBe("ABCD-1234");
+      vi.advanceTimersByTime(1600);
+      expect(code?.dataset.copied).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("copies from the keyboard", async () => {
     const writeText = vi.fn(async () => undefined);
     vi.stubGlobal("navigator", { clipboard: { writeText } });
     const f = fake();
@@ -112,9 +141,35 @@ describe("agent sign-in", () => {
     f.emit(request);
     f.store.flush();
     await settle();
-    button(f.panel.element, "Copy code")?.click();
+    const code = f.panel.element.querySelector<HTMLElement>(".coloride-agent-authentication-code");
+    expect(code?.getAttribute("role")).toBe("button");
+    expect(code?.tabIndex).toBe(0);
+    code?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
     await settle();
     expect(writeText).toHaveBeenCalledWith("ABCD-1234");
+    expect(code?.dataset.copied).toBe("true");
+  });
+
+  it("does not claim the code was copied when there is no clipboard", async () => {
+    vi.stubGlobal("navigator", {});
+    const f = fake();
+    await settle();
+    f.emit(request);
+    f.store.flush();
+    await settle();
+    const code = f.panel.element.querySelector<HTMLElement>(".coloride-agent-authentication-code");
+    code?.click();
+    await settle();
+    expect(code?.dataset.copied).toBeUndefined();
+    expect(f.store.getState().error).toBe("");
+  });
+
+  it("cancels the sign-in", async () => {
+    const f = fake();
+    await settle();
+    f.emit(request);
+    f.store.flush();
+    await settle();
     button(f.panel.element, "Cancel")?.click();
     await settle();
     expect(f.handle.elicit).toHaveBeenLastCalledWith("7", "cancel");

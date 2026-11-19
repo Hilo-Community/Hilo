@@ -63,26 +63,32 @@ export function authenticationCards(
     card.append(intro);
 
     if (code) {
-      const row = doc.createElement("div");
-      row.className = "coloride-agent-authentication-codebox";
-      const value = doc.createElement("code");
+      // Only the code is shown; clicking it (or Enter / Space on it) copies it. Not a <button>, so
+      // the panel's small button style does not apply to it.
+      const value = doc.createElement("div");
       value.className = "coloride-agent-authentication-code";
       value.textContent = code;
-      const copyButton = doc.createElement("button");
-      copyButton.type = "button";
-      copyButton.textContent = UI_STRINGS.agent.signInCopy;
-      copyButton.addEventListener("click", () =>
+      value.tabIndex = 0;
+      value.setAttribute("role", "button");
+      value.title = UI_STRINGS.agent.signInCopyHint;
+      value.setAttribute("aria-label", `${UI_STRINGS.agent.signInCopyHint}: ${code}`);
+      const copyCode = () =>
         run(async () => {
-          if (await copy(doc, code)) {
-            copyButton.textContent = UI_STRINGS.agent.signInCopied;
-            doc.defaultView?.setTimeout(() => {
-              copyButton.textContent = UI_STRINGS.agent.signInCopy;
-            }, 1500);
-          }
-        }),
-      );
-      row.append(value, copyButton);
-      card.append(row);
+          if (!(await copy(doc, code))) return;
+          value.dataset.copied = "true";
+          value.setAttribute("aria-label", UI_STRINGS.agent.signInCopied);
+          doc.defaultView?.setTimeout(() => {
+            delete value.dataset.copied;
+            value.setAttribute("aria-label", `${UI_STRINGS.agent.signInCopyHint}: ${code}`);
+          }, 1500);
+        });
+      value.addEventListener("click", copyCode);
+      value.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        copyCode();
+      });
+      card.append(value);
     }
 
     const status = doc.createElement("p");
