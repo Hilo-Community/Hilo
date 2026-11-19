@@ -106,7 +106,10 @@ impl<E: OsSandboxEngine> OsNativeSandbox<E> {
         if spec.limits.max_cpu_time.is_some() && !caps.enforces_cpu_limit {
             return Err(refuse_limit("CPU time"));
         }
-        if matches!(spec.network, NetworkPolicy::LocalProxyOnly(_)) && !caps.supports_local_proxy {
+        if matches!(spec.network, NetworkPolicy::LocalProxyOnly(_))
+            && !caps.supports_local_proxy
+            && !(cfg!(windows) && spec.worktree_read_only)
+        {
             return Err(SandboxError::NetworkPolicyNotEnforceable { engine: caps.name });
         }
         Ok(())
@@ -155,8 +158,11 @@ struct Prepared {
 
 impl<E: OsSandboxEngine> SandboxRunner for OsNativeSandbox<E> {
     fn supports_terminal(&self) -> bool {
-        cfg!(target_os = "macos")
-            && self.engine.capabilities().kind == crate::OsSandboxKind::MacOsSeatbelt
+        (cfg!(target_os = "macos")
+            && self.engine.capabilities().kind == crate::OsSandboxKind::MacOsSeatbelt)
+            || (cfg!(windows)
+                && self.engine.capabilities().kind
+                    == crate::OsSandboxKind::WindowsAppContainerJobObject)
     }
     fn spawn_terminal(
         &self,
@@ -180,7 +186,20 @@ impl<E: OsSandboxEngine> SandboxRunner for OsNativeSandbox<E> {
                 .map_err(|error| self.refuse(error))?;
             pty.spawn(launch, tmp, limits.wall_timeout, on_finish)
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            let pty = crate::supervisor::terminal::PreparedPty::open()?;
+            let Prepared {
+                launch,
+                tmp,
+                limits,
+                on_finish,
+            } = self
+                .prepare_with_terminal(spec, None)
+                .map_err(|error| self.refuse(error))?;
+            pty.spawn(launch, tmp, limits.wall_timeout, on_finish)
+        }
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = spec;
             Err(SandboxError::unavailable(

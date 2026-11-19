@@ -2,6 +2,22 @@
 //! broker, and the user's answers to permission requests.
 use super::*;
 
+pub(super) fn plain_path(path: &Path) -> PathBuf {
+    if let Some(text) = path.to_str() {
+        if let Some(rest) = text.strip_prefix(r"\\?\") {
+            let bytes = rest.as_bytes();
+            if bytes.len() >= 3
+                && bytes[0].is_ascii_alphabetic()
+                && bytes[1] == b':'
+                && bytes[2] == b'\\'
+            {
+                return PathBuf::from(rest);
+            }
+        }
+    }
+    path.to_path_buf()
+}
+
 impl Session {
     pub(super) fn translate(&self, message: &Value, key: &str) -> Result<ToolCall, String> {
         let params = &message["params"];
@@ -70,7 +86,9 @@ impl Session {
     /// ACP paths are absolute. One inside the worktree becomes the relative path the policy
     /// checks; any other path is passed on unchanged, for the policy to refuse.
     pub(super) fn relative(&self, path: &str) -> String {
-        match std::path::Path::new(path).strip_prefix(&self.host.worktree_root) {
+        let candidate = plain_path(std::path::Path::new(path));
+        let root = plain_path(&self.host.worktree_root);
+        match candidate.strip_prefix(&root) {
             Ok(rest) if rest.as_os_str().is_empty() => ".".into(),
             Ok(rest) => rest.to_string_lossy().replace('\\', "/"),
             Err(_) => path.into(),

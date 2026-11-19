@@ -33,13 +33,19 @@ struct Fixture {
     signed: judge_orchestrator::policy::SignedTaskSpec,
     authority: Arc<HostAuthority>,
 }
+const FAKE_AGENT_BINARY: &str = if cfg!(windows) {
+    "fake-agent.exe"
+} else {
+    "fake-agent"
+};
+
 impl Fixture {
     fn new() -> Self {
         let data = tempfile::tempdir().unwrap();
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir(root.path().join("src")).unwrap();
         std::fs::write(root.path().join("src/file.rs"), "disk text").unwrap();
-        let binary = root.path().join("fake-agent");
+        let binary = root.path().join(FAKE_AGENT_BINARY);
         std::fs::copy(env!("CARGO_BIN_EXE_coloride-acp-test-agent"), &binary).unwrap();
         let mut spec = common::spec();
         spec.policy.allowed_paths = vec![".".into()];
@@ -89,7 +95,7 @@ impl Fixture {
             preference_domains: vec![],
             loopback_listen_ports: vec![],
             environment: Default::default(),
-            program: self.root.path().join("fake-agent"),
+            program: self.root.path().join(FAKE_AGENT_BINARY),
             args: vec![mode.into()],
             credentials: AgentCredentials::Unauthenticated,
             network: AgentNetwork::Offline,
@@ -751,4 +757,49 @@ fn cancelling_a_turn_stops_its_command_but_not_the_agent() {
         .unwrap()
         .pending_intents
         .is_empty());
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn windows_acp_session_enforces_read_only_worktree_forbidden_paths_and_absolute_paths() {
+    for mode in ["direct-read", "direct-write", "direct-secret"] {
+        let f = Fixture::new();
+        if mode == "direct-secret" {
+            std::fs::create_dir(f.root.path().join("src/SECRETS")).unwrap();
+            std::fs::write(f.root.path().join("src/SECRETS/key"), "synthetic-secret").unwrap();
+        }
+        let (mut session, rx) = f.start(mode);
+        loop {
+            if let AcpEvent::Update { update } = next(&rx) {
+                let text = update["content"]["text"].as_str().unwrap();
+                let expected = if mode == "direct-read" {
+                    "direct-read=true"
+                } else {
+                    &format!("{mode}=false")
+                };
+                assert_eq!(text, expected);
+                break;
+            }
+        }
+        session.stop();
+        assert_eq!(f.disk(), "disk text");
+    }
+
+    let f = Fixture::new();
+    let (mut session, rx) = f.start("absolute");
+    let (mut read, mut location) = (false, false);
+    while !(read && location) {
+        if let AcpEvent::Update { update } = next(&rx) {
+            if update["sessionUpdate"] == "tool_call" {
+                assert_eq!(update["locations"][0]["path"], "src/file.rs");
+                location = true;
+            } else if update["content"]["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("unsaved"))
+            {
+                read = true;
+            }
+        }
+    }
+    session.stop();
 }

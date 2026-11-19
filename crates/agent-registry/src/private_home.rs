@@ -68,6 +68,22 @@ fn beneath(root: &Path, relative: &str, directory: bool) -> io::Result<PathBuf> 
     Ok(path)
 }
 
+fn plain_path(path: PathBuf) -> PathBuf {
+    if let Some(text) = path.to_str() {
+        if let Some(rest) = text.strip_prefix(r"\\?\") {
+            let bytes = rest.as_bytes();
+            if bytes.len() >= 3
+                && bytes[0].is_ascii_alphabetic()
+                && bytes[1] == b':'
+                && bytes[2] == b'\\'
+            {
+                return PathBuf::from(rest);
+            }
+        }
+    }
+    path
+}
+
 impl PrivateAgentHome {
     pub fn clear(app_data: &Path, installation_id: &str) -> io::Result<()> {
         if installation_id.is_empty()
@@ -79,7 +95,7 @@ impl PrivateAgentHome {
         {
             return Err(refuse("invalid agent installation identifier"));
         }
-        let homes = app_data.canonicalize()?.join("agent-homes");
+        let homes = plain_path(app_data.canonicalize()?).join("agent-homes");
         private_dir(&homes)?;
         let path = homes.join(installation_id);
         match fs::symlink_metadata(&path) {
@@ -107,7 +123,7 @@ impl PrivateAgentHome {
         {
             return Err(refuse("invalid agent installation identifier"));
         }
-        let app_data = app_data.canonicalize()?;
+        let app_data = plain_path(app_data.canonicalize()?);
         let homes = app_data.join("agent-homes");
         private_dir(&homes)?;
         let path = homes.join(installation_id);

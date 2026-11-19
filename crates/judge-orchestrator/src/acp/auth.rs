@@ -53,8 +53,43 @@ pub(crate) fn methods(value: &Value) -> Result<Vec<AuthMethod>, AcpError> {
     if value.is_null() {
         return Ok(Vec::new());
     }
-    let methods: Vec<AuthMethod> =
+    let mut methods: Vec<AuthMethod> =
         serde_json::from_value(value.clone()).map_err(|_| bad("invalid authMethods"))?;
+    for method in &mut methods {
+        if method.kind.is_none() {
+            if let Some(kind) = method.meta.get("type").and_then(Value::as_str) {
+                method.kind = Some(kind.to_owned());
+            } else if method.meta.get("terminal-auth").is_some() {
+                method.kind = Some("terminal".to_owned());
+            }
+        }
+        if method.args.is_empty() {
+            let meta_args = method.meta.get("args").or_else(|| {
+                method
+                    .meta
+                    .get("terminal-auth")
+                    .and_then(|v| v.get("args"))
+            });
+            if let Some(args) = meta_args {
+                if let Ok(parsed) = serde_json::from_value::<Vec<String>>(args.clone()) {
+                    method.args = parsed;
+                }
+            }
+        }
+        if method.env.is_empty() {
+            let meta_env = method
+                .meta
+                .get("env")
+                .or_else(|| method.meta.get("terminal-auth").and_then(|v| v.get("env")));
+            if let Some(env) = meta_env {
+                if let Ok(parsed) =
+                    serde_json::from_value::<BTreeMap<String, String>>(env.clone())
+                {
+                    method.env = parsed;
+                }
+            }
+        }
+    }
     let mut ids = std::collections::BTreeSet::new();
     if methods.len() > 32
         || methods.iter().any(|m| {
@@ -184,6 +219,8 @@ pub(crate) fn terminal_spec(
         }
         spec.env.insert(key.into(), value.into());
     }
+    spec.args
+        .retain(|arg| arg != "--acp" && arg != "--experimental-acp");
     spec.args.extend(method.args.iter().map(Into::into));
     spec.env.insert("TERM".into(), "xterm-256color".into());
     spec.env.insert("TERM_PROGRAM".into(), "Coloride".into());
@@ -249,5 +286,26 @@ mod tests {
             authentication(&credentials, &methods).unwrap(),
             AuthenticationPlan::Terminal(_)
         ));
+        let meta_terminal = super::methods(&json!([{
+            "id": "openai",
+            "name": "Use OpenAI API key",
+            "_meta": {
+                "type": "terminal",
+                "args": ["--auth-type=openai"]
+            }
+        }]))
+        .unwrap();
+        assert_eq!(meta_terminal[0].kind.as_deref(), Some("terminal"));
+        assert_eq!(meta_terminal[0].args, vec!["--auth-type=openai"]);
+        let mut base = sandbox_runner::SandboxSpec::new(".", "/bin/node");
+        base.args = vec!["cli-entry.js".into(), "--acp".into()];
+        let login_spec = terminal_spec(&base, &meta_terminal[0]).unwrap();
+        assert_eq!(
+            login_spec.args,
+            vec![
+                std::ffi::OsString::from("cli-entry.js"),
+                std::ffi::OsString::from("--auth-type=openai")
+            ]
+        );
     }
 }

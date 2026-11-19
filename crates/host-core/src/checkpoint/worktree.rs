@@ -61,6 +61,29 @@ pub struct TaskWorktree {
 impl CheckpointManager {
     /// Materializes the latest checkpoint of `task_id` into a fresh worktree.
     pub fn provision_worktree(&self, task_id: &str) -> Result<TaskWorktree, CheckpointError> {
+        self.provision_worktree_with_mode(task_id, true)
+    }
+
+    /// Materializes the latest checkpoint of `task_id` into a fresh worktree by Copy-on-Write when
+    /// the volume supports it, or by writing the checkpointed blobs when Copy-on-Write is
+    /// unavailable (e.g. NTFS, ext4, or when the worktrees directory is on another volume).
+    pub fn provision_worktree_or_copy(
+        &self,
+        task_id: &str,
+    ) -> Result<TaskWorktree, CheckpointError> {
+        match self.provision_worktree_with_mode(task_id, true) {
+            Err(CheckpointError::CowUnavailable { .. }) => {
+                self.provision_worktree_with_mode(task_id, false)
+            }
+            other => other,
+        }
+    }
+
+    fn provision_worktree_with_mode(
+        &self,
+        task_id: &str,
+        allow_cow: bool,
+    ) -> Result<TaskWorktree, CheckpointError> {
         validate_task_id(task_id)?;
         let started = Instant::now();
         let repo = self.lock();
@@ -83,8 +106,11 @@ impl CheckpointManager {
 
         let mut counts = (0, 0);
         let result = self
-            .materialize(&repo, latest.tree, &path, &mut counts)
+            .materialize(&repo, latest.tree, &path, allow_cow, &mut counts)
             .and_then(|()| {
+                if cfg!(windows) && !allow_cow {
+                    return Ok(Vec::new());
+                }
                 let scope = StoreScope {
                     repo: &repo,
                     workdir: &self.workdir,
@@ -132,21 +158,27 @@ impl CheckpointManager {
         repo: &Repository,
         tree: git2::Oid,
         root: &Path,
+        allow_cow: bool,
         counts: &mut (usize, usize),
     ) -> Result<(), CheckpointError> {
         // Blob ids the last snapshot read from disk, with the stat they had (read-only here).
-        let cache: HashMap<Vec<u8>, IndexEntry> = match Index::open(&self.cache_path) {
-            Ok(index) => index
-                .iter()
-                .map(|entry| (entry.path.clone(), entry))
-                .collect(),
-            Err(_) => HashMap::new(),
+        let cache: HashMap<Vec<u8>, IndexEntry> = if allow_cow {
+            match Index::open(&self.cache_path) {
+                Ok(index) => index
+                    .iter()
+                    .map(|entry| (entry.path.clone(), entry))
+                    .collect(),
+                Err(_) => HashMap::new(),
+            }
+        } else {
+            HashMap::new()
         };
         let walk = Materialize {
             repo,
             workdir: &self.workdir,
             root,
             cache: &cache,
+            allow_cow,
         };
         walk.tree(&repo.find_tree(tree)?, &[], counts)
     }
@@ -157,6 +189,7 @@ struct Materialize<'a> {
     workdir: &'a Path,
     root: &'a Path,
     cache: &'a HashMap<Vec<u8>, IndexEntry>,
+    allow_cow: bool,
 }
 
 impl Materialize<'_> {
@@ -176,7 +209,7 @@ impl Materialize<'_> {
                 let subtree = self.repo.find_tree(entry.id())?;
                 // One clone for a whole directory that is still exactly the checkpoint (macOS
                 // clones hierarchies; elsewhere files are cloned one by one).
-                if cfg!(target_os = "macos") {
+                if self.allow_cow && cfg!(target_os = "macos") {
                     if let Some(files) = self.clean_dir(&subtree, &git_path, &source)? {
                         clone(&source, &target)?;
                         counts.0 += files;
@@ -190,7 +223,10 @@ impl Materialize<'_> {
             if !matches!(mode, MODE_FILE | MODE_EXECUTABLE | MODE_SYMLINK) {
                 continue; // Submodules are never part of a checkpoint.
             }
-            if mode != MODE_SYMLINK && self.unchanged_file(&git_path, entry.id(), mode, &source) {
+            if self.allow_cow
+                && mode != MODE_SYMLINK
+                && self.unchanged_file(&git_path, entry.id(), mode, &source)
+            {
                 clone(&source, &target)?;
                 counts.0 += 1;
                 continue;

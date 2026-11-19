@@ -9,9 +9,11 @@
 //!   `sh` process blocks reading a pipe whose only write end the Host holds. The kernel closes
 //!   that end when the Host dies, whatever the cause; the watchdog then kills the group.
 //!
-//! No `unsafe` is involved: the group is created with `CommandExt::process_group` and signalled
-//! through `rustix`'s safe API. On platforms without this mechanism (Windows needs a Job
-//! Object) launching fails with an explicit error instead of starting an unsupervised process.
+//! No `unsafe` is involved: on Unix the group is created with `CommandExt::process_group` and
+//! signalled through `rustix`'s safe API; on Windows the process is placed in a Job Object
+//! with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` via `sandbox-windows`'s safe API. On platforms
+//! without either mechanism launching fails with an explicit error instead of starting an
+//! unsupervised process.
 
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, ExitStatus};
 
@@ -27,6 +29,7 @@ pub enum SupervisionError {
 }
 
 /// Kills a process group if the Host dies abruptly (see the module documentation).
+#[cfg(unix)]
 #[derive(Debug)]
 pub(crate) struct OrphanWatchdog {
     process: Child,
@@ -34,9 +37,9 @@ pub(crate) struct OrphanWatchdog {
     _trigger: Option<ChildStdin>,
 }
 
+#[cfg(unix)]
 impl OrphanWatchdog {
     /// Watches process group `group` (the pid of a child that leads its own group).
-    #[cfg(unix)]
     pub(crate) fn start(group: u32) -> Result<Self, SupervisionError> {
         use std::os::unix::process::CommandExt;
         use std::process::Stdio;
@@ -64,16 +67,54 @@ impl OrphanWatchdog {
         })
     }
 
-    #[cfg(not(unix))]
-    pub(crate) fn start(_group: u32) -> Result<Self, SupervisionError> {
-        Err(SupervisionError::Unsupported)
-    }
-
     /// The group is gone: stop watching before its id can be reused.
     pub(crate) fn stop(mut self) {
         let _ = self.process.kill();
         let _ = self.process.wait();
     }
+}
+
+/// Windows supervision: a Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. The kernel
+/// kills the whole process tree when the handle closes (including on an abrupt Host exit) or
+/// when `stop` terminates the job.
+#[cfg(windows)]
+#[derive(Debug)]
+pub(crate) struct OrphanWatchdog {
+    job: sandbox_windows::SupervisedJob,
+}
+
+#[cfg(windows)]
+impl OrphanWatchdog {
+    pub(crate) fn for_raw_handle(
+        handle: Option<std::os::windows::io::RawHandle>,
+    ) -> Result<Self, SupervisionError> {
+        let handle = handle.ok_or_else(|| {
+            SupervisionError::Watchdog(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "missing process handle",
+            ))
+        })?;
+        let job =
+            sandbox_windows::SupervisedJob::assign_raw(handle).map_err(SupervisionError::Watchdog)?;
+        Ok(Self { job })
+    }
+
+    pub(crate) fn stop(self) {
+        self.job.terminate();
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+#[derive(Debug)]
+pub(crate) struct OrphanWatchdog;
+
+#[cfg(not(any(unix, windows)))]
+impl OrphanWatchdog {
+    pub(crate) fn start(_group: u32) -> Result<Self, SupervisionError> {
+        Err(SupervisionError::Unsupported)
+    }
+
+    pub(crate) fn stop(self) {}
 }
 
 /// Sends `SIGKILL` to process group `group`. Returns false if it could not be signalled.
@@ -117,7 +158,27 @@ impl SupervisedChild {
         Ok(supervised)
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    pub(crate) fn spawn(mut command: Command) -> Result<Self, SupervisionError> {
+        use std::os::windows::io::AsRawHandle;
+        use std::os::windows::process::CommandExt;
+        // CREATE_NO_WINDOW: no console flashes when the app has none.
+        command.creation_flags(0x0800_0000);
+        let child = command.spawn().map_err(SupervisionError::Spawn)?;
+        let mut supervised = Self {
+            child,
+            watchdog: None,
+            reaped: false,
+        };
+        // If the Job Object cannot be attached, `supervised` is dropped here, which kills the
+        // child: never run unsupervised.
+        supervised.watchdog = Some(OrphanWatchdog::for_raw_handle(Some(
+            supervised.child.as_raw_handle(),
+        ))?);
+        Ok(supervised)
+    }
+
+    #[cfg(not(any(unix, windows)))]
     pub(crate) fn spawn(_command: Command) -> Result<Self, SupervisionError> {
         Err(SupervisionError::Unsupported)
     }
@@ -160,6 +221,10 @@ impl SupervisedChild {
     pub fn kill(&mut self) {
         if self.reaped {
             return;
+        }
+        #[cfg(windows)]
+        if let Some(watchdog) = self.watchdog.take() {
+            watchdog.stop();
         }
         // Not reaped yet, so the pid (and group id) still belongs to our child.
         if !kill_process_group(self.child.id()) {

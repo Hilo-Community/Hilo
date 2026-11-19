@@ -80,6 +80,12 @@ Any version change needs another review.
 Already in the dependency tree (via `tempfile`). Used for one call: `kill_process_group`
 (safe API), so `host-core` keeps `unsafe_code = "forbid"`.
 
+## `sandbox-windows` (workspace crate, Windows only)
+
+Workspace crate that isolates Win32 FFI behind a safe API. Used on Windows for `SupervisedJob`
+(a Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`), so `host-core` keeps
+`unsafe_code = "forbid"` while supervising child process trees and terminals.
+
 ## `@vtsls/language-server = 0.3.0`, `@xterm/xterm = 6.0.0`, `@xterm/addon-fit = 0.11.0` (npm)
 
 Pinned exactly. `vtsls` is a dev dependency so tests run the real server (it bundles the

@@ -62,12 +62,10 @@ fn same_name(left: &OsString, right: &str) -> bool {
     left.eq_ignore_ascii_case(right)
 }
 
-/// The environment of a sandboxed process: the system variables, then the caller's (which win,
-/// whatever their case), then the private temporary directory (which wins over both). Names are
-/// case-insensitive on Windows and a duplicate would be refused.
-fn environment<'a>(
+fn environment_for<'a>(
     caller: impl IntoIterator<Item = (&'a OsString, &'a OsString)>,
     tmp: &Path,
+    include_host_profile_vars: bool,
 ) -> Vec<(OsString, OsString)> {
     let mut env: Vec<(OsString, OsString)> = Vec::new();
     let mut set = |key: OsString, value: OsString| {
@@ -75,6 +73,9 @@ fn environment<'a>(
         env.push((key, value));
     };
     for var in SYSTEM_VARS {
+        if !include_host_profile_vars && matches!(var, "USERPROFILE" | "APPDATA" | "LOCALAPPDATA") {
+            continue;
+        }
         if let Some(value) = std::env::var_os(var) {
             set(var.into(), value);
         }
@@ -88,6 +89,16 @@ fn environment<'a>(
         set(var.into(), tmp.as_os_str().to_os_string());
     }
     env
+}
+
+/// The environment of a sandboxed process: the system variables, then the caller's (which win,
+/// whatever their case), then the private temporary directory (which wins over both). Names are
+/// case-insensitive on Windows and a duplicate would be refused.
+fn environment<'a>(
+    caller: impl IntoIterator<Item = (&'a OsString, &'a OsString)>,
+    tmp: &Path,
+) -> Vec<(OsString, OsString)> {
+    environment_for(caller, tmp, true)
 }
 
 /// The Windows engine: each run gets its own AppContainer profile and Job Object, recorded in a
@@ -117,27 +128,50 @@ impl AppContainerEngine {
     }
 
     fn launch_config(&self, spec: &ValidatedSpec) -> Result<LaunchConfig, SandboxError> {
-        if spec.worktree_read_only {
-            return Err(SandboxError::LimitNotEnforceable {
-                engine: "windows-appcontainer",
-                limit: "read-only agent worktree",
-            });
-        }
-        if !spec.read_only_paths.is_empty() {
+        if !spec.worktree_read_only && !spec.read_only_paths.is_empty() {
             return Err(SandboxError::InvalidSpec(
                 "the Windows sandbox cannot share read-only directories: that would change the \
                  permissions of files outside the worktree"
                     .to_string(),
             ));
         }
+        let mut denied_read_paths: Vec<PathBuf> =
+            spec.denied_read_paths.iter().map(|p| plain(p)).collect();
+        if spec.mediate_worktree_reads {
+            if let Ok(entries) = fs::read_dir(&spec.worktree_root) {
+                let program = plain(&spec.program);
+                let tmp = plain(&spec.tmp_dir);
+                for entry in entries.flatten() {
+                    let path = plain(&entry.path());
+                    if path != program && !tmp.starts_with(&path) && !path.starts_with(&tmp) {
+                        denied_read_paths.push(path);
+                    }
+                }
+            }
+        }
+        let (writable_dirs, read_only_dirs) = if spec.worktree_read_only {
+            (
+                std::iter::once(plain(&spec.tmp_dir))
+                    .chain(spec.writable_paths.iter().map(|path| plain(path)))
+                    .collect(),
+                std::iter::once(plain(&spec.worktree_root))
+                    .chain(spec.read_only_paths.iter().map(|path| plain(path)))
+                    .collect(),
+            )
+        } else {
+            (
+                std::iter::once(plain(&spec.worktree_root))
+                    .chain(spec.writable_paths.iter().map(|path| plain(path)))
+                    .collect(),
+                Vec::new(),
+            )
+        };
         Ok(LaunchConfig {
             program: plain(&spec.program),
             args: spec.args.clone(),
             cwd: plain(&spec.cwd),
-            env: environment(&spec.env, &plain(&spec.tmp_dir)),
-            writable_dirs: std::iter::once(plain(&spec.worktree_root))
-                .chain(spec.writable_paths.iter().map(|path| plain(path)))
-                .collect(),
+            env: environment_for(&spec.env, &plain(&spec.tmp_dir), !spec.worktree_read_only),
+            writable_dirs,
             journal_dir: self.journal_dir.clone(),
             limits: JobLimits {
                 max_processes: spec.limits.max_processes,
@@ -146,6 +180,9 @@ impl AppContainerEngine {
             },
             container_name: format!("coloride-{}", spec.run_id),
             stdin_piped: false,
+            use_app_container: !spec.worktree_read_only,
+            read_only_dirs,
+            denied_read_paths,
         })
     }
 }
@@ -253,6 +290,9 @@ impl Probe {
             limits: JobLimits::default(),
             container_name: format!("coloride-selftest-{}", new_run_id()),
             stdin_piped: false,
+            use_app_container: true,
+            read_only_dirs: Vec::new(),
+            denied_read_paths: Vec::new(),
         };
         let mut child = SandboxedChild::spawn_prepared(
             Launch::AppContainer(Box::new(config)),

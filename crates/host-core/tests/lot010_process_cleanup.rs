@@ -1,9 +1,10 @@
 //! LOT-010 risk mitigation: children launched by the Host never outlive it.
 //!
 //! Real processes only. The "Host" of the abrupt-exit scenario is this test binary re-executed
-//! in a helper mode, then killed with `SIGKILL` so that none of its destructors run.
-#![cfg(unix)]
-// Tests may start plain processes (the helper Host, `ps`); production code may not.
+//! in a helper mode, then killed with `SIGKILL` / `TerminateProcess` so that none of its
+//! destructors run.
+#![cfg(any(unix, windows))]
+// Tests may start plain processes (the helper Host, `ps` / `tasklist`); production code may not.
 #![allow(clippy::disallowed_methods)]
 
 use std::io::{BufRead, BufReader};
@@ -14,6 +15,7 @@ use host_core::{GatedCapability, WorkspaceTrustGate};
 
 const HELPER_ENV: &str = "COLORIDE_LOT010_HOST_HELPER_DIR";
 
+#[cfg(unix)]
 fn is_alive(pid: u32) -> bool {
     // `ps -p` exits 0 only while the pid exists (a zombie has `Z` state: treat as dead).
     let output = Command::new("ps")
@@ -24,6 +26,15 @@ fn is_alive(pid: u32) -> bool {
         && !String::from_utf8_lossy(&output.stdout)
             .trim()
             .starts_with('Z')
+}
+
+#[cfg(windows)]
+fn is_alive(pid: u32) -> bool {
+    let output = Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+        .output()
+        .expect("tasklist");
+    String::from_utf8_lossy(&output.stdout).contains(&pid.to_string())
 }
 
 fn wait_until_dead(pid: u32) -> bool {
@@ -39,6 +50,7 @@ fn wait_until_dead(pid: u32) -> bool {
 
 /// A long-lived child that ignores its stdin and starts a grandchild, like a language server
 /// that forks workers. Prints the grandchild's pid.
+#[cfg(unix)]
 fn spawn_stubborn_tree(gate: &WorkspaceTrustGate) -> (host_core::SupervisedChild, u32) {
     let mut command = gate
         .command(GatedCapability::WorkspaceLanguageServer, "/bin/sh")
@@ -47,6 +59,30 @@ fn spawn_stubborn_tree(gate: &WorkspaceTrustGate) -> (host_core::SupervisedChild
         .command_mut()
         .arg("-c")
         .arg("sleep 600 & echo $!; wait")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped());
+    let mut child = command.spawn().unwrap();
+    let mut line = String::new();
+    BufReader::new(child.take_stdout().unwrap())
+        .read_line(&mut line)
+        .unwrap();
+    let grandchild: u32 = line.trim().parse().expect("grandchild pid");
+    (child, grandchild)
+}
+
+#[cfg(windows)]
+fn spawn_stubborn_tree(gate: &WorkspaceTrustGate) -> (host_core::SupervisedChild, u32) {
+    let mut command = gate
+        .command(GatedCapability::WorkspaceLanguageServer, "powershell.exe")
+        .unwrap();
+    command
+        .command_mut()
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$p = Start-Process -FilePath 'ping.exe' -ArgumentList '-n','600','127.0.0.1' -PassThru -WindowStyle Hidden; [Console]::Out.WriteLine($p.Id); Wait-Process -Id $p.Id",
+        ])
         .stdin(Stdio::null())
         .stdout(Stdio::piped());
     let mut child = command.spawn().unwrap();

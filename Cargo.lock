@@ -2229,6 +2229,7 @@ dependencies = [
  "reflink-copy",
  "ropey",
  "rustix",
+ "sandbox-windows",
  "serde",
  "serde_json",
  "tempfile",

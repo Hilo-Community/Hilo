@@ -468,7 +468,7 @@ mod tests {
             mode: AccountMode::ApiKey,
             ..Default::default()
         };
-        for agent in ["codex-acp", "claude-acp"] {
+        for agent in ["codex-acp", "claude-acp", "qwen-code", "bob"] {
             let runtime =
                 runtime_with_key_reader(app.path(), agent, &launch(), &preferences, false, |_| {
                     Ok(Some(Zeroizing::new("fake-real-provider-key".into())))
@@ -489,8 +489,50 @@ mod tests {
                     "fake-real-provider-key"
                 );
             }
+            if agent == "qwen-code" {
+                assert_ne!(
+                    runtime
+                        .environment
+                        .get(std::ffi::OsStr::new("OPENAI_API_KEY"))
+                        .unwrap(),
+                    "fake-real-provider-key"
+                );
+            }
+            if agent == "bob" {
+                assert_ne!(
+                    runtime
+                        .environment
+                        .get(std::ffi::OsStr::new("BOB_API_KEY"))
+                        .unwrap(),
+                    "fake-real-provider-key"
+                );
+            }
             drop(runtime);
             // Each installation has its own setup in production; isolate the two fixture homes.
+            PrivateAgentHome::clear(app.path(), "agent@1").unwrap();
+        }
+        for (agent, expected_host) in [("qwen-code", "chat.qwen.ai"), ("bob", "bob.ibm.com")] {
+            let account_runtime = runtime_with_key_reader(
+                app.path(),
+                agent,
+                &launch(),
+                &AccountPreferences::default(),
+                false,
+                |_| Ok(None),
+            )
+            .unwrap();
+            assert!(matches!(
+                account_runtime.network,
+                AgentNetwork::Proxy { .. }
+            ));
+            assert!(matches!(
+                account_runtime.credentials,
+                AgentCredentials::Account {
+                    ref browser_hosts,
+                    ..
+                } if browser_hosts.iter().any(|host| host == expected_host)
+            ));
+            drop(account_runtime);
             PrivateAgentHome::clear(app.path(), "agent@1").unwrap();
         }
     }

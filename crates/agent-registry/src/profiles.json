@@ -45,6 +45,46 @@
       "keyHeader": "authorization",
       "keyPrefix": "Bearer ",
       "accountHosts": ["auth.x.ai", "cli-chat-proxy.grok.com", "api.x.ai", "grok.com"]
+    },
+    {
+      "id": "qwen",
+      "name": "Qwen",
+      "protocol": "openai",
+      "upstream": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "keyHeader": "authorization",
+      "keyPrefix": "Bearer ",
+      "accountHosts": [
+        "chat.qwen.ai",
+        "auth.qwen.ai",
+        "api.qwen.ai",
+        "portal.qwen.ai",
+        "dashscope.aliyuncs.com",
+        "dashscope-intl.aliyuncs.com",
+        "coding.dashscope.aliyuncs.com",
+        "coding-intl.dashscope.aliyuncs.com",
+        "maas.qwencloudapi.com",
+        "token-plan.maas.qwencloudapi.com",
+        "maas.qianwenaiapi.com",
+        "token-plan.maas.qianwenaiapi.com"
+      ]
+    },
+    {
+      "id": "bob",
+      "name": "IBM Bob",
+      "protocol": "openai",
+      "upstream": "https://api.us-east.bob.ibm.com",
+      "keyHeader": "authorization",
+      "keyPrefix": "Bearer ",
+      "accountHosts": [
+        "bob.ibm.com",
+        "api.us-east.bob.ibm.com",
+        "internal.bob.ibm.com",
+        "iam.cloud.ibm.com",
+        "iam.platform.saas.ibm.com",
+        "myibm.ibm.com",
+        "cloud.ibm.com",
+        "www.ibm.com"
+      ]
     }
   ],
   "agents": [
@@ -120,6 +160,51 @@
         "xai": ["XAI_API_KEY"]
       },
       "accountMethods": ["grok.com"]
+    },
+    {
+      "id": "qwen-code",
+      "providers": ["qwen", "openai", "anthropic", "google"],
+      "homeVariables": {
+        "QWEN_HOME": ".qwen"
+      },
+      "environment": {
+        "NO_BROWSER": "1",
+        "OPENAI_MODEL": "qwen3-coder-plus",
+        "QWEN_SANDBOX": "false",
+        "QWEN_USAGE_STATISTICS_ENABLED": "false"
+      },
+      "setup": [],
+      "baseUrlVariables": {
+        "qwen": ["OPENAI_BASE_URL"],
+        "openai": ["OPENAI_BASE_URL"],
+        "anthropic": ["ANTHROPIC_BASE_URL"]
+      },
+      "tokenVariables": {
+        "qwen": ["OPENAI_API_KEY"],
+        "openai": ["OPENAI_API_KEY"],
+        "anthropic": ["ANTHROPIC_API_KEY"],
+        "google": ["GEMINI_API_KEY"]
+      },
+      "accountMethods": ["qwen-oauth", "qwen-subscription", "openai"]
+    },
+    {
+      "id": "bob",
+      "providers": ["bob", "openai", "anthropic", "google"],
+      "homeVariables": {},
+      "environment": {},
+      "setup": [
+        {
+          "path": ".bob/settings/settings.json",
+          "content": "{\"licenseConsent\":true,\"bobShell\":{\"autoUpdate\":false}}\n"
+        }
+      ],
+      "baseUrlVariables": {
+        "bob": ["BOB_GATEWAY_URL"]
+      },
+      "tokenVariables": {
+        "bob": ["BOB_API_KEY"]
+      },
+      "accountMethods": ["sso"]
     }
   ]
 }

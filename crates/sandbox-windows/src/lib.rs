@@ -34,6 +34,8 @@ mod process;
 mod win;
 
 #[cfg(windows)]
+pub use job::SupervisedJob;
+#[cfg(windows)]
 pub use journal::recover_stale_runs;
 #[cfg(windows)]
 pub use process::{spawn, JobLimits, LaunchConfig, Process, Spawned, TreeKiller};

@@ -556,10 +556,8 @@ impl Session {
         self.request("initialize", json!({"protocolVersion":1,"clientInfo":{"name":"Coloride","version":"0.1.0"},"clientCapabilities":{"auth":{"terminal":self.host.runner.supports_terminal(),"_meta":{"gateway":true}},"elicitation":{"url":{}},"fs":{"readTextFile":true,"writeTextFile":true},"terminal":true,"_meta":{"writesAreProposals":true}}}))
     }
     fn new_session(&mut self) -> Result<(), AcpError> {
-        self.request(
-            "session/new",
-            json!({"cwd":self.host.worktree_root,"mcpServers":[]}),
-        )
+        let cwd = super::session::tools::plain_path(&self.host.worktree_root);
+        self.request("session/new", json!({"cwd":cwd,"mcpServers":[]}))
     }
     fn cancel_pending(&mut self) {
         self.elicitation_urls

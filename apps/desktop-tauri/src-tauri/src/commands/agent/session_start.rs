@@ -202,7 +202,7 @@ pub(super) fn provision(
         .create_checkpoint(&task_id, CheckpointKind::BeforeAgent, &buffers)
         .map_err(|e| e.to_string())?;
     let task = manager
-        .provision_worktree(&task_id)
+        .provision_worktree_or_copy(&task_id)
         .map_err(|e| e.to_string())?;
     let context_db = state.app_data_dir.join(format!("{task_id}-context.sqlite"));
     Ok(Provisioned {
