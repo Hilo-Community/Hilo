@@ -1,3 +1,4 @@
+import { SPINNER_ICON } from "../settings/agent-marks.js";
 import { UI_STRINGS } from "../ui/ui-strings.js";
 import type { AgentHandle, AgentStore } from "./store.js";
 
@@ -42,7 +43,7 @@ export function authenticationCards(
 ): HTMLElement[] {
   return store.getState().elicitations.map((request) => {
     const card = doc.createElement("section");
-    card.className = "coloride-agent-permission coloride-agent-authentication";
+    card.className = "coloride-agent-authentication";
     card.setAttribute("aria-label", "Agent account sign-in");
 
     const head = doc.createElement("div");
@@ -86,7 +87,14 @@ export function authenticationCards(
 
     const status = doc.createElement("p");
     status.className = "coloride-agent-authentication-status";
-    if (request.accepted) status.textContent = UI_STRINGS.agent.signInWaiting;
+    if (request.accepted) {
+      // The spinner is a constant of this app (agent-marks.ts), never agent-supplied markup.
+      const spinner = doc.createElement("span");
+      spinner.className = "coloride-agent-busy";
+      spinner.setAttribute("aria-hidden", "true");
+      spinner.innerHTML = SPINNER_ICON;
+      status.append(spinner, UI_STRINGS.agent.signInWaiting);
+    }
     card.append(status);
 
     const actions = doc.createElement("div");

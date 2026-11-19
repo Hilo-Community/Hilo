@@ -70,6 +70,9 @@ describe("agent sign-in", () => {
       "ABCD-1234",
     );
     expect(card?.textContent).toContain("auth.openai.com");
+    // A normal step, not a warning: it must not wear the permission card's yellow border.
+    expect(card?.classList.contains("coloride-agent-permission")).toBe(false);
+    expect(card?.querySelector(".coloride-agent-authentication-status svg")).not.toBeNull();
     expect(card?.textContent).toContain("Waiting for you to finish");
     // More renders never open the page again.
     f.store.setState((s) => ({ ...s }));
