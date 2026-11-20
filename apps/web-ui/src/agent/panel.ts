@@ -324,18 +324,21 @@ export class AgentPanel {
             });
           })
         : null;
-    this.login.render(s.terminalAuth);
     const bar = [
       ...(choice ? [choice] : []),
       ...prompts,
       ...(s.terminalAuth ? [this.login.element] : []),
     ];
-    this.signInBar.replaceChildren(...bar);
+    const same =
+      bar.length === this.signInBar.children.length &&
+      bar.every((node, index) => this.signInBar.children[index] === node);
+    if (!same) this.signInBar.replaceChildren(...bar);
     this.signInBar.hidden = bar.length === 0;
     if (bar.length > 0) {
       this.status.hidden = true;
       this.busyMark.hidden = true;
     }
+    this.login.render(s.terminalAuth);
   }
   /**
    * Opens the sign-in page of each new request by itself: the user chose to connect, and the Host

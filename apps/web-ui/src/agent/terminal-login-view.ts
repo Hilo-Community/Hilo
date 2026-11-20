@@ -72,14 +72,16 @@ export class TerminalLoginView {
     if (this.started) return;
     this.started = true;
     this.failed = false;
+    this.start.hidden = true;
+    this.again.hidden = false;
+    this.screen.hidden = false;
     this.run(async () => {
       try {
         const handle = this.handle();
         if (!handle?.startLogin) throw new Error("Interactive sign-in is unavailable.");
-        this.start.hidden = true;
-        this.screen.hidden = false;
         this.view = createXtermView();
         this.view.open(this.screen);
+        this.view.fit();
         this.view.onData((data) =>
           this.run(async () => {
             const write = this.handle()?.writeLogin;
@@ -87,8 +89,11 @@ export class TerminalLoginView {
             await write(data);
           }),
         );
+        if (this.view.cols >= 2 && this.view.rows >= 1) {
+          await handle.resizeLogin?.(this.view.cols, this.view.rows);
+        }
         await handle.startLogin();
-        this.fit();
+        this.fit(true);
         this.view.focus();
       } catch (error) {
         // A failed start is not retried by itself: the button is the way to try again.
@@ -128,8 +133,10 @@ export class TerminalLoginView {
   write(data: number[]): void {
     this.view?.write(Uint8Array.from(data));
   }
-  fit(): void {
-    if (this.element.isConnected && this.view && this.view.fit()) {
+  fit(force = false): void {
+    if (!this.element.isConnected || !this.view) return;
+    const changed = this.view.fit();
+    if ((changed || force) && this.view.cols >= 2 && this.view.rows >= 1) {
       const { cols, rows } = this.view;
       this.run(async () => {
         await this.handle()?.resizeLogin?.(cols, rows);

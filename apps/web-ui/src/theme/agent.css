@@ -326,10 +326,23 @@
   width: 100%;
   max-width: var(--agent-content-width);
   margin: 0 auto;
-  padding: 0 8px 10px;
+  padding: 0 6px 4px;
 }
 .coloride-agent-auth-bar[hidden] {
   display: none;
+}
+/* When an interactive sign-in terminal is active, collapse the empty output area above it and
+   let the terminal login fill the available height of the panel cleanly. */
+.coloride-agent-panel:has(.coloride-agent-terminal-login:not([hidden]))
+  .coloride-agent-output:empty {
+  display: none;
+}
+.coloride-agent-auth-bar:has(.coloride-agent-terminal-login:not([hidden])) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding-bottom: 0;
 }
 .coloride-agent-auth-choice strong {
   display: block;

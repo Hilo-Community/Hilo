@@ -73,6 +73,9 @@ impl Session {
             .expect("terminal launch lock")
             .take()
             .ok_or_else(|| bad("login launch replay refused"))?;
+        if let Some((cols, rows)) = self.login_size {
+            terminal.resize(cols, rows)?;
+        }
         self.login_input = Some(
             terminal
                 .take_stdin()
