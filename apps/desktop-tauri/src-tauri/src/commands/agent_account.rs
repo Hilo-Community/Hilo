@@ -203,28 +203,50 @@ const MACOS_CA_BUNDLE: &str = "/private/etc/ssl/cert.pem";
 /// What the Host sets up so an agent can sign in through the user's browser from the sandbox.
 struct BrowserLogin {
     ports: Vec<u16>,
-    shim_dir: PathBuf,
+    shim_dir: Option<PathBuf>,
+    ps_module_dir: Option<PathBuf>,
     url_file: PathBuf,
 }
 
 /// Name of the page file in the agent's private home.
 const OPEN_URL_FILE: &str = ".coloride-open-url";
 
-/// macOS only: an `open` command first on the agent's `PATH` that writes the page the agent
-/// wants shown to a file in its private home, which the Host opens (after checking its host).
+/// macOS and Windows: a browser-open shim in the agent's private home that writes the page the
+/// agent wants shown to `.coloride-open-url`, which the Host opens (after checking its host).
 /// The sandbox allows the agent to listen on its sign-in port, on loopback only. Elsewhere, or
 /// for an agent without a sign-in port, `None`: the agent is told not to use a browser.
 fn browser_login_support(
     home: &Path,
     profile: &AgentProfile,
 ) -> Result<Option<BrowserLogin>, String> {
-    if profile.login_callback_ports.is_empty() || !cfg!(target_os = "macos") {
+    if profile.login_callback_ports.is_empty()
+        || !cfg!(any(target_os = "macos", target_os = "windows"))
+    {
         return Ok(None);
     }
     let quoted = home.join(OPEN_URL_FILE);
     let text = quoted.to_string_lossy();
-    if text.contains(['\'', '\n', '\0']) {
+    if text.contains(['\'', '\n', '\r', '\0']) {
         return Ok(None);
+    }
+    if cfg!(target_os = "windows") {
+        let ps_module_dir = home.join(".coloride-ps");
+        let mgmt_dir = ps_module_dir.join("Microsoft.PowerShell.Management");
+        std::fs::create_dir_all(&mgmt_dir).map_err(|e| e.to_string())?;
+        let script = format!(
+            "function Start-Process {{\n    param(\n        [Parameter(Position=0)][string]$FilePath,\n        [Parameter(Position=1, ValueFromRemainingArguments=$true)]$ArgumentList\n    )\n    $url = if ($FilePath -like 'https://*') {{ $FilePath }} else {{ ($ArgumentList | Where-Object {{ $_ -like 'https://*' }} | Select-Object -First 1) }}\n    if ($url) {{\n        [System.IO.File]::WriteAllText('{text}', \"$url`n\")\n    }}\n}}\nExport-ModuleMember -Function Start-Process\n"
+        );
+        std::fs::write(
+            mgmt_dir.join("Microsoft.PowerShell.Management.psm1"),
+            script,
+        )
+        .map_err(|e| e.to_string())?;
+        return Ok(Some(BrowserLogin {
+            ports: profile.login_callback_ports.clone(),
+            shim_dir: None,
+            ps_module_dir: Some(ps_module_dir),
+            url_file: quoted,
+        }));
     }
     let shim_dir = home.join(".coloride-bin");
     std::fs::create_dir_all(&shim_dir).map_err(|e| e.to_string())?;
@@ -243,7 +265,8 @@ fn browser_login_support(
     }
     Ok(Some(BrowserLogin {
         ports: profile.login_callback_ports.clone(),
-        shim_dir,
+        shim_dir: Some(shim_dir),
+        ps_module_dir: None,
         url_file: quoted,
     }))
 }
@@ -297,9 +320,15 @@ pub(super) fn runtime_with_key_reader(
         environment.insert("NO_BROWSER".into(), "1".into());
     }
     let browser_login = browser_login_support(home.path(), &profile)?;
+    if let Some(ps_dir) = browser_login
+        .as_ref()
+        .and_then(|login| login.ps_module_dir.as_ref())
+    {
+        environment.insert("PSModulePath".into(), ps_dir.clone().into_os_string());
+    }
     let mut paths: Vec<PathBuf> = browser_login
         .as_ref()
-        .map(|login| login.shim_dir.clone())
+        .and_then(|login| login.shim_dir.clone())
         .into_iter()
         .collect();
     paths.extend(launch.program.parent().map(Path::to_path_buf));
@@ -400,6 +429,7 @@ pub(super) fn runtime_with_key_reader(
             // Explicitly clear proxy bypass lists. The OS still denies direct network access.
             environment.insert("NO_PROXY".into(), "".into());
             environment.insert("no_proxy".into(), "".into());
+            environment.insert("NODE_USE_ENV_PROXY".into(), "1".into());
             // macOS: TLS clients that use the platform verifier need trustd and securityd (the
             // keychain daemon), which the sandbox does not expose. Point them at the system's
             // certificate bundle instead (readable in the sandbox): no keychain access needed.
@@ -511,7 +541,11 @@ mod tests {
             // Each installation has its own setup in production; isolate the two fixture homes.
             PrivateAgentHome::clear(app.path(), "agent@1").unwrap();
         }
-        for (agent, expected_host) in [("qwen-code", "chat.qwen.ai"), ("bob", "bob.ibm.com")] {
+        for (agent, expected_host) in [
+            ("qwen-code", "chat.qwen.ai"),
+            ("bob", "bob.ibm.com"),
+            ("github-copilot-cli", "github.com"),
+        ] {
             let account_runtime = runtime_with_key_reader(
                 app.path(),
                 agent,
@@ -521,6 +555,13 @@ mod tests {
                 |_| Ok(None),
             )
             .unwrap();
+            assert_eq!(
+                account_runtime
+                    .environment
+                    .get(std::ffi::OsStr::new("NODE_USE_ENV_PROXY"))
+                    .and_then(|v| v.to_str()),
+                Some("1")
+            );
             assert!(matches!(
                 account_runtime.network,
                 AgentNetwork::Proxy { .. }

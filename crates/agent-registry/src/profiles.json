@@ -34,7 +34,9 @@
       "accountHosts": [
         "accounts.google.com",
         "oauth2.googleapis.com",
-        "generativelanguage.googleapis.com"
+        "generativelanguage.googleapis.com",
+        "antigravity.google",
+        "cloudaicompanion.googleapis.com"
       ]
     },
     {
@@ -79,11 +81,165 @@
         "bob.ibm.com",
         "api.us-east.bob.ibm.com",
         "internal.bob.ibm.com",
+        "login.ibm.com",
+        "w3id.sso.ibm.com",
+        "idaas.iam.ibm.com",
+        "prepiam.ice.ibmcloud.com",
         "iam.cloud.ibm.com",
         "iam.platform.saas.ibm.com",
         "myibm.ibm.com",
         "cloud.ibm.com",
         "www.ibm.com"
+      ]
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "protocol": "openai",
+      "upstream": "https://api.githubcopilot.com",
+      "keyHeader": "authorization",
+      "keyPrefix": "Bearer ",
+      "accountHosts": [
+        "github.com",
+        "api.github.com",
+        "api.githubcopilot.com",
+        "api.individual.githubcopilot.com",
+        "api.business.githubcopilot.com",
+        "api.enterprise.githubcopilot.com",
+        "copilot-proxy.githubusercontent.com",
+        "default.exp-tas.com"
+      ]
+    },
+    {
+      "id": "cline",
+      "name": "Cline",
+      "protocol": "openai",
+      "upstream": "https://api.cline.bot/v1",
+      "keyHeader": "authorization",
+      "keyPrefix": "Bearer ",
+      "accountHosts": ["cline.bot", "app.cline.bot", "api.cline.bot", "auth.cline.bot"]
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "protocol": "openai",
+      "upstream": "https://api2.cursor.sh",
+      "keyHeader": "authorization",
+      "keyPrefix": "Bearer ",
+      "accountHosts": [
+        "cursor.com",
+        "www.cursor.com",
+        "authenticator.cursor.sh",
+        "api2.cursor.sh",
+        "api3.cursor.sh"
+      ]
+    },
+    {
+      "id": "factory",
+      "name": "Factory",
+      "protocol": "openai",
+      "upstream": "https://api.factory.ai/v1",
+      "keyHeader": "authorization",
+      "keyPrefix": "Bearer ",
+      "accountHosts": ["factory.ai", "app.factory.ai", "api.factory.ai", "auth.factory.ai"]
+    },
+    {
+      "id": "kilo",
+      "name": "Kilo",
+      "protocol": "openai",
+      "upstream": "https://api.kilo.ai/api/openrouter/v1",
+      "keyHeader": "authorization",
+      "keyPrefix": "Bearer ",
+      "accountHosts": [
+        "kilo.ai",
+        "app.kilo.ai",
+        "api.kilo.ai",
+        "kilocode.ai",
+        "app.kilocode.ai",
+        "api.kilocode.ai"
+      ]
+    },
+    {
+      "id": "moonshot",
+      "name": "Moonshot AI",
+      "protocol": "openai",
+      "upstream": "https://api.moonshot.ai/v1",
+      "keyHeader": "authorization",
+      "keyPrefix": "Bearer ",
+      "accountHosts": [
+        "kimi.com",
+        "www.kimi.com",
+        "auth.kimi.com",
+        "api.kimi.com",
+        "platform.moonshot.ai",
+        "api.moonshot.ai",
+        "platform.moonshot.cn",
+        "api.moonshot.cn"
+      ]
+    },
+    {
+      "id": "kiro",
+      "name": "Kiro",
+      "protocol": "openai",
+      "upstream": "https://api.kiro.dev/v1",
+      "keyHeader": "authorization",
+      "keyPrefix": "Bearer ",
+      "accountHosts": [
+        "kiro.dev",
+        "app.kiro.dev",
+        "api.kiro.dev",
+        "auth.kiro.dev",
+        "prod.us-east-1.auth.desktop.kiro.dev",
+        "awsapps.com",
+        "oidc.us-east-1.amazonaws.com",
+        "device.sso.us-east-1.amazonaws.com"
+      ]
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax",
+      "protocol": "openai",
+      "upstream": "https://api.minimax.io/v1",
+      "keyHeader": "authorization",
+      "keyPrefix": "Bearer ",
+      "accountHosts": [
+        "agent.minimax.io",
+        "api.minimax.io",
+        "platform.minimax.io",
+        "minimaxi.com",
+        "api.minimaxi.com"
+      ]
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral AI",
+      "protocol": "openai",
+      "upstream": "https://api.mistral.ai/v1",
+      "keyHeader": "authorization",
+      "keyPrefix": "Bearer ",
+      "accountHosts": [
+        "mistral.ai",
+        "console.mistral.ai",
+        "auth.mistral.ai",
+        "api.mistral.ai",
+        "chat.mistral.ai"
+      ]
+    },
+    {
+      "id": "meta",
+      "name": "Meta",
+      "protocol": "openai",
+      "upstream": "https://api.llama.com/v1",
+      "keyHeader": "authorization",
+      "keyPrefix": "Bearer ",
+      "accountHosts": [
+        "dev.meta.ai",
+        "meta.ai",
+        "www.meta.ai",
+        "api.llama.com",
+        "auth.meta.com",
+        "facebook.com",
+        "www.facebook.com"
       ]
     }
   ],
@@ -191,7 +347,10 @@
       "id": "bob",
       "providers": ["bob", "openai", "anthropic", "google"],
       "homeVariables": {},
-      "environment": {},
+      "environment": {
+        "SSO_PORT": "3000"
+      },
+      "loginCallbackPorts": [3000],
       "setup": [
         {
           "path": ".bob/settings/settings.json",
@@ -205,6 +364,222 @@
         "bob": ["BOB_API_KEY"]
       },
       "accountMethods": ["sso"]
+    },
+    {
+      "id": "github-copilot-cli",
+      "providers": ["github", "openai", "anthropic", "google"],
+      "homeVariables": {
+        "COPILOT_HOME": ".copilot",
+        "COPILOT_CACHE_HOME": ".copilot-cache"
+      },
+      "environment": {
+        "COPILOT_AUTO_UPDATE": "false",
+        "COPILOT_TELEMETRY_DISABLED": "true",
+        "SSH_TTY": "1"
+      },
+      "setup": [],
+      "baseUrlVariables": {
+        "github": ["COPILOT_PROVIDER_BASE_URL"],
+        "openai": ["COPILOT_PROVIDER_BASE_URL"],
+        "anthropic": ["COPILOT_PROVIDER_BASE_URL"],
+        "google": ["COPILOT_PROVIDER_BASE_URL"]
+      },
+      "tokenVariables": {
+        "github": ["COPILOT_GITHUB_TOKEN"],
+        "openai": ["COPILOT_PROVIDER_API_KEY"],
+        "anthropic": ["COPILOT_PROVIDER_API_KEY"],
+        "google": ["COPILOT_PROVIDER_API_KEY"]
+      },
+      "accountMethods": ["copilot-login"]
+    },
+    {
+      "id": "antigravity-acp",
+      "providers": ["google"],
+      "homeVariables": {},
+      "environment": {},
+      "setup": [],
+      "baseUrlVariables": {},
+      "tokenVariables": {
+        "google": ["GEMINI_API_KEY", "GOOGLE_API_KEY"]
+      },
+      "accountMethods": ["google-login", "terminal-auth"]
+    },
+    {
+      "id": "cline",
+      "providers": ["cline", "anthropic", "openai", "google", "xai"],
+      "homeVariables": {},
+      "environment": {},
+      "setup": [],
+      "baseUrlVariables": {
+        "openai": ["OPENAI_BASE_URL"],
+        "anthropic": ["ANTHROPIC_BASE_URL"]
+      },
+      "tokenVariables": {
+        "cline": ["CLINE_API_KEY"],
+        "openai": ["OPENAI_API_KEY"],
+        "anthropic": ["ANTHROPIC_API_KEY"],
+        "google": ["GEMINI_API_KEY"],
+        "xai": ["XAI_API_KEY"]
+      },
+      "accountMethods": ["cline-oauth", "terminal-auth"]
+    },
+    {
+      "id": "cursor",
+      "providers": ["cursor", "openai", "anthropic", "google"],
+      "homeVariables": {},
+      "environment": {},
+      "setup": [],
+      "baseUrlVariables": {},
+      "tokenVariables": {
+        "cursor": ["CURSOR_API_KEY"],
+        "openai": ["OPENAI_API_KEY"],
+        "anthropic": ["ANTHROPIC_API_KEY"]
+      },
+      "accountMethods": ["cursor-login", "login", "terminal-auth"]
+    },
+    {
+      "id": "factory-droid",
+      "providers": ["factory", "anthropic", "openai", "google"],
+      "homeVariables": {},
+      "environment": {
+        "DROID_DISABLE_AUTO_UPDATE": "true",
+        "FACTORY_DROID_AUTO_UPDATE_ENABLED": "false",
+        "NO_BROWSER": "1"
+      },
+      "setup": [],
+      "baseUrlVariables": {
+        "openai": ["OPENAI_BASE_URL"],
+        "anthropic": ["ANTHROPIC_BASE_URL"]
+      },
+      "tokenVariables": {
+        "factory": ["FACTORY_API_KEY"],
+        "openai": ["OPENAI_API_KEY"],
+        "anthropic": ["ANTHROPIC_API_KEY"],
+        "google": ["GEMINI_API_KEY"]
+      },
+      "accountMethods": ["terminal-auth"]
+    },
+    {
+      "id": "kilo",
+      "providers": ["kilo", "anthropic", "openai", "google", "xai"],
+      "homeVariables": {},
+      "environment": {
+        "NO_BROWSER": "1",
+        "OPENCODE_DISABLE_AUTOUPDATE": "1"
+      },
+      "setup": [],
+      "baseUrlVariables": {
+        "openai": ["OPENAI_BASE_URL"],
+        "anthropic": ["ANTHROPIC_BASE_URL"]
+      },
+      "tokenVariables": {
+        "kilo": ["KILOCODE_API_KEY", "KILO_API_KEY"],
+        "openai": ["OPENAI_API_KEY"],
+        "anthropic": ["ANTHROPIC_API_KEY"],
+        "google": ["GEMINI_API_KEY"],
+        "xai": ["XAI_API_KEY"]
+      },
+      "accountMethods": ["terminal-auth"]
+    },
+    {
+      "id": "kimi",
+      "providers": ["moonshot", "openai", "anthropic"],
+      "homeVariables": {},
+      "environment": {},
+      "setup": [],
+      "baseUrlVariables": {
+        "moonshot": ["KIMI_BASE_URL", "OPENAI_BASE_URL"],
+        "openai": ["OPENAI_BASE_URL"],
+        "anthropic": ["ANTHROPIC_BASE_URL"]
+      },
+      "tokenVariables": {
+        "moonshot": ["KIMI_API_KEY", "MOONSHOT_API_KEY"],
+        "openai": ["OPENAI_API_KEY"],
+        "anthropic": ["ANTHROPIC_API_KEY"]
+      },
+      "accountMethods": ["kimi-login", "login", "terminal-auth"]
+    },
+    {
+      "id": "kimi-code",
+      "providers": ["moonshot", "openai", "anthropic"],
+      "homeVariables": {},
+      "environment": {},
+      "setup": [],
+      "baseUrlVariables": {
+        "moonshot": ["KIMI_BASE_URL", "OPENAI_BASE_URL"],
+        "openai": ["OPENAI_BASE_URL"],
+        "anthropic": ["ANTHROPIC_BASE_URL"]
+      },
+      "tokenVariables": {
+        "moonshot": ["KIMI_API_KEY", "MOONSHOT_API_KEY"],
+        "openai": ["OPENAI_API_KEY"],
+        "anthropic": ["ANTHROPIC_API_KEY"]
+      },
+      "accountMethods": ["kimi-login", "login", "terminal-auth"]
+    },
+    {
+      "id": "kiro",
+      "providers": ["kiro", "anthropic"],
+      "homeVariables": {},
+      "environment": {},
+      "setup": [],
+      "baseUrlVariables": {},
+      "tokenVariables": {
+        "anthropic": ["ANTHROPIC_API_KEY"]
+      },
+      "accountMethods": ["kiro-login", "terminal-auth"]
+    },
+    {
+      "id": "minimax-code",
+      "providers": ["minimax", "openai", "anthropic"],
+      "homeVariables": {},
+      "environment": {},
+      "setup": [],
+      "baseUrlVariables": {
+        "minimax": ["MINIMAX_BASE_URL", "ANTHROPIC_BASE_URL", "OPENAI_BASE_URL"],
+        "openai": ["OPENAI_BASE_URL"],
+        "anthropic": ["ANTHROPIC_BASE_URL"]
+      },
+      "tokenVariables": {
+        "minimax": ["MINIMAX_API_KEY"],
+        "openai": ["OPENAI_API_KEY"],
+        "anthropic": ["ANTHROPIC_API_KEY"]
+      },
+      "accountMethods": ["minimax-oauth", "login", "terminal-auth"]
+    },
+    {
+      "id": "mistral-vibe",
+      "providers": ["mistral", "openai"],
+      "homeVariables": {
+        "VIBE_HOME": ".vibe"
+      },
+      "environment": {},
+      "setup": [],
+      "baseUrlVariables": {
+        "mistral": ["MISTRAL_API_BASE", "OPENAI_BASE_URL"],
+        "openai": ["OPENAI_BASE_URL"]
+      },
+      "tokenVariables": {
+        "mistral": ["MISTRAL_API_KEY"],
+        "openai": ["OPENAI_API_KEY"]
+      },
+      "accountMethods": ["terminal-auth", "mistral"]
+    },
+    {
+      "id": "muse-code",
+      "providers": ["meta", "openai", "anthropic"],
+      "homeVariables": {},
+      "environment": {
+        "MUSE_EXPERIMENTAL_ACP": "on"
+      },
+      "setup": [],
+      "baseUrlVariables": {},
+      "tokenVariables": {
+        "meta": ["LLAMA_API_KEY", "MUSE_API_KEY"],
+        "openai": ["OPENAI_API_KEY"],
+        "anthropic": ["ANTHROPIC_API_KEY"]
+      },
+      "accountMethods": ["terminal-auth", "login"]
     }
   ]
 }

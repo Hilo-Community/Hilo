@@ -22,6 +22,8 @@ pub(crate) struct DesktopAppState {
     pub(crate) login_urls: Mutex<HashMap<u32, String>>,
     /// The ACP agent registry of the Settings screen, opened on first use.
     pub(crate) agent_registry: Mutex<Option<Arc<agent_registry::AgentRegistry>>>,
+    /// Verified OS sandbox runner, self-tested once on first use.
+    pub(crate) sandbox_runner: Mutex<Option<Arc<dyn sandbox_runner::SandboxRunner>>>,
     /// Serializes account resets against session startup/home provisioning.
     pub(crate) agent_account_lock: Mutex<()>,
     pub(crate) workspace_root: Mutex<Option<PathBuf>>,
@@ -69,6 +71,7 @@ impl DesktopAppState {
             next_agent_id: AtomicU32::new(1),
             login_urls: Mutex::new(HashMap::new()),
             agent_registry: Mutex::new(None),
+            sandbox_runner: Mutex::new(None),
             agent_account_lock: Mutex::new(()),
             workspace_root: Mutex::new(None),
             trust_gate: Mutex::new(None),

@@ -91,7 +91,34 @@ impl Session {
         match candidate.strip_prefix(&root) {
             Ok(rest) if rest.as_os_str().is_empty() => ".".into(),
             Ok(rest) => rest.to_string_lossy().replace('\\', "/"),
-            Err(_) => path.into(),
+            Err(_) => {
+                if cfg!(windows) {
+                    let mut cand_comps = candidate.components();
+                    let mut matched = true;
+                    for root_comp in root.components() {
+                        let Some(cand_comp) = cand_comps.next() else {
+                            matched = false;
+                            break;
+                        };
+                        if !cand_comp
+                            .as_os_str()
+                            .to_string_lossy()
+                            .eq_ignore_ascii_case(&root_comp.as_os_str().to_string_lossy())
+                        {
+                            matched = false;
+                            break;
+                        }
+                    }
+                    if matched {
+                        let rest = cand_comps.as_path();
+                        if rest.as_os_str().is_empty() {
+                            return ".".into();
+                        }
+                        return rest.to_string_lossy().replace('\\', "/");
+                    }
+                }
+                path.into()
+            }
         }
     }
 

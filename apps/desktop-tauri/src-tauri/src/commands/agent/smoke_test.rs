@@ -87,7 +87,7 @@ fn installed_gateway_transport_smoke() {
         text: Arc::new(HostText {
             root,
             bridge: state.bridge.clone(),
-            mcp: None,
+            mcp: Mutex::new(None),
             _task: None,
         }),
         clock: Arc::new(now),

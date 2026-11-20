@@ -210,7 +210,7 @@ export class AgentPanel {
           : "");
     this.start.textContent = s.error ? UI_STRINGS.agent.retry : UI_STRINGS.agent.connect;
     this.start.disabled = this.starting;
-    this.start.hidden = this.starting || (s.ready && !s.error);
+    this.start.hidden = this.starting || ((Boolean(this.handle) || s.ready) && !s.error);
     this.status.hidden = !this.error.textContent;
     // No input until there is a session to type to: signing in comes first.
     this.form.hidden = !s.ready;

@@ -9,7 +9,7 @@ use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::io::{AsRawHandle, OwnedHandle};
 use std::path::{Path, PathBuf};
 use std::ptr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use windows_sys::Win32::Foundation::{
@@ -99,8 +99,8 @@ pub struct Process {
     handle: OwnedHandle,
     pid: u32,
     job: Arc<Job>,
-    /// Dropped after `Drop::drop` has killed the tree.
-    _changes: Changes,
+    /// Released once `kill_tree` has terminated and waited on the tree.
+    changes: Mutex<Option<Changes>>,
 }
 
 /// What a run changed outside its process, undone when dropped: the access granted to
@@ -453,7 +453,7 @@ pub fn spawn(config: &LaunchConfig) -> io::Result<Spawned> {
         handle: handle?,
         pid: info.dwProcessId,
         job,
-        _changes: changes,
+        changes: Mutex::new(Some(changes)),
     };
     // From here, an error drops `process`, which kills the still-suspended process.
     let thread = thread?;
@@ -512,7 +512,8 @@ impl Process {
         }
     }
 
-    /// Kills the process and everything it started.
+    /// Kills the process and everything it started, then releases file locks and permission
+    /// changes once the root process has exited.
     pub fn kill_tree(&self) {
         self.job.terminate();
         // Also the process itself, in case it never made it into the job (a failure between
@@ -520,6 +521,10 @@ impl Process {
         // SAFETY: the handle is a live process handle owned by `self`; failure only means the
         // process has already ended.
         unsafe { TerminateProcess(self.handle.as_raw_handle(), KILLED_EXIT_CODE) };
+        let _ = self.wait_for(5_000);
+        if let Ok(mut guard) = self.changes.lock() {
+            guard.take();
+        }
     }
 }
 

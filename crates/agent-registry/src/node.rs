@@ -54,7 +54,7 @@ impl NodeToolchain {
 
 /// `\\?\C:\dir` to `C:\dir`: Node.js on Windows fails in `fs.realpathSync` (`EISDIR, lstat 'C:'`)
 /// when its entry script argument uses the verbatim `\\?\` prefix returned by `canonicalize`.
-fn plain_path(path: PathBuf) -> PathBuf {
+pub(crate) fn plain_path(path: PathBuf) -> PathBuf {
     if let Some(text) = path.to_str() {
         if let Some(rest) = text.strip_prefix(r"\\?\") {
             let bytes = rest.as_bytes();

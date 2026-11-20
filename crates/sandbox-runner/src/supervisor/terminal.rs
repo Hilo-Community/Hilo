@@ -248,9 +248,15 @@ mod windows_pty {
             }
             builder.cwd(&config.cwd);
             let stdout = self.pair.master.try_clone_reader().map_err(pty_error)?;
-            let stdin = self.pair.master.take_writer().map_err(pty_error)?;
+            let mut stdin = self.pair.master.take_writer().map_err(pty_error)?;
             let mut child = self.pair.slave.spawn_command(builder).map_err(pty_error)?;
             drop(self.pair.slave);
+            // `portable-pty` creates ConPTY with `PSEUDOCONSOLE_INHERIT_CURSOR`, which makes
+            // `conhost.exe` emit `ESC [ 6 n` and block all output until the initial cursor
+            // position (`ESC [ 1 ; 1 R`) is reported on the input pipe.
+            use std::io::Write;
+            stdin.write_all(b"\x1b[1;1R").map_err(pty_error)?;
+            stdin.flush().map_err(pty_error)?;
             let Some(pid) = child.process_id() else {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -286,7 +292,7 @@ mod windows_pty {
             Ok(Box::new(PtyTerminal {
                 child,
                 pid,
-                _master: self.pair.master,
+                master: Some(self.pair.master),
                 stdin: Some(stdin),
                 stdout: Some(stdout),
                 job,
@@ -305,7 +311,7 @@ mod windows_pty {
     struct PtyTerminal {
         child: Box<dyn Child + Send + Sync>,
         pid: u32,
-        _master: Box<dyn MasterPty + Send>,
+        master: Option<Box<dyn MasterPty + Send>>,
         stdin: Option<ChildInput>,
         stdout: Option<ChildOutput>,
         job: Arc<SupervisedJob>,
@@ -325,6 +331,8 @@ mod windows_pty {
                 timer.stop();
             }
             self.job.terminate();
+            // Closing the ConPTY pseudo-console flushes conhost.exe and closes its output pipe.
+            let _ = self.master.take();
             if let Some(hook) = self.on_finish.take() {
                 (hook.0)();
             }
@@ -333,7 +341,10 @@ mod windows_pty {
 
     impl SandboxedTerminal for PtyTerminal {
         fn resize(&self, cols: u16, rows: u16) -> io::Result<()> {
-            self._master
+            let Some(master) = self.master.as_ref() else {
+                return Err(io::Error::other("terminal has exited"));
+            };
+            master
                 .resize(PtySize {
                     cols,
                     rows,

@@ -4,12 +4,6 @@ import { UI_STRINGS } from "../ui/ui-strings.js";
 import type { AgentHandle, AgentState } from "./store.js";
 
 /**
- * Columns of the login's own terminal. Wide, so the agent never breaks the sign-in address over
- * several lines (the visible terminal wraps it softly instead, as one line).
- */
-const LOGIN_COLUMNS = 500;
-
-/**
  * Sign-in for an agent that only offers a terminal login, at the bottom of the panel: a small
  * terminal, and the Host opens the sign-in page it prints. It starts as soon as the user chose
  * the method. An agent that asks for extra arguments or environment shows them and keeps an
@@ -138,7 +132,7 @@ export class TerminalLoginView {
     if (this.element.isConnected && this.view && this.view.fit()) {
       const { cols, rows } = this.view;
       this.run(async () => {
-        await this.handle()?.resizeLogin?.(Math.max(cols, LOGIN_COLUMNS), rows);
+        await this.handle()?.resizeLogin?.(cols, rows);
       });
     }
   }

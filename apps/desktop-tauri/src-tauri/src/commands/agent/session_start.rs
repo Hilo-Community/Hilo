@@ -25,7 +25,7 @@ use tauri::{ipc::Channel, Manager};
 pub(super) struct HostText {
     pub(super) root: PathBuf,
     pub(super) bridge: Arc<Mutex<DesktopBinaryEditorBridge>>,
-    pub(super) mcp: Option<Mutex<context_engine::LocalMcpServer>>,
+    pub(super) mcp: Mutex<Option<context_engine::LocalMcpServer>>,
     // Dropped last: the MCP server above closes its database before the task files are removed.
     pub(super) _task: Option<TaskFiles>,
 }
@@ -34,6 +34,7 @@ pub(super) struct HostText {
 pub(super) struct TaskFiles {
     manager: CheckpointManager,
     task_id: String,
+    worktree: PathBuf,
     context_db: PathBuf,
 }
 
@@ -75,12 +76,21 @@ impl HostText {
 
 impl WorkspaceText for HostText {
     fn query_local_mcp(&self, request: &str) -> Result<String, String> {
-        let mut mcp = self
-            .mcp
-            .as_ref()
-            .ok_or("Local MCP is unavailable")?
-            .lock()
-            .map_err(|_| "MCP lock poisoned")?;
+        let mut guard = self.mcp.lock().map_err(|_| "MCP lock poisoned")?;
+        if guard.is_none() {
+            let files = self._task.as_ref().ok_or("Local MCP is unavailable")?;
+            let engine = context_engine::SqliteWalContextEngine::open_or_rebuild_from_workspace(
+                &files.context_db,
+                &files.worktree,
+                "acp-session",
+            )
+            .map_err(|e| e.to_string())?;
+            *guard = Some(context_engine::LocalMcpServer::new(
+                engine,
+                context_engine::ContextBundleAssembler::new(vec![AuthorizedDestination::LocalOnly]),
+            ));
+        }
+        let mcp = guard.as_mut().ok_or("Local MCP is unavailable")?;
         let bridge = self.bridge.lock().map_err(|_| "document lock poisoned")?;
         mcp.engine
             .overlay_mut()
@@ -209,6 +219,7 @@ pub(super) fn provision(
         files: TaskFiles {
             manager,
             task_id: task_id.clone(),
+            worktree: task.workspace.clone(),
             context_db,
         },
         task_id,
@@ -255,40 +266,57 @@ pub(super) fn start_task(
     Ok((Arc::new(repository), lease, signed, authority))
 }
 
+fn sandbox_runner(state: &DesktopAppState) -> Result<Arc<dyn sandbox_runner::SandboxRunner>, String> {
+    let mut cached = state
+        .sandbox_runner
+        .lock()
+        .map_err(|_| "sandbox runner lock poisoned")?;
+    if let Some(runner) = cached.as_ref() {
+        return Ok(Arc::clone(runner));
+    }
+    let runner: Arc<dyn sandbox_runner::SandboxRunner> =
+        Arc::from(sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).map_err(|e| e.to_string())?);
+    *cached = Some(Arc::clone(&runner));
+    Ok(runner)
+}
+
 pub(super) fn start_session(
     app: &tauri::AppHandle,
     installed_agent_id: String,
     events: Channel<AcpEvent>,
 ) -> Result<u32, String> {
     let state = app.state::<DesktopAppState>();
-    let _account_lock = state
-        .agent_account_lock
-        .lock()
-        .map_err(|_| "account lock poisoned")?;
     let gate = gate(&state)?;
-    // The program comes from the registry by id, never from the webview, and the user already
-    // confirmed it when installing; it still runs only in the read-only sandbox.
-    let mut launch = resolve_launch(&state, &installed_agent_id)?;
-    let registry = crate::commands::agent_registry::registry(&state)?;
-    let account = registry
-        .account(&launch.installation_id)
-        .map_err(|e| e.to_string())?;
-    let mut runtime = crate::commands::agent_account::runtime(
-        &state.app_data_dir,
-        &installed_agent_id,
-        &launch,
-        &account.preferences,
-        account.terminal_authenticated,
-    )?;
-    if let Some(prepared) = registry
-        .prepare_runtime(&installed_agent_id)
-        .map_err(|error| error.to_string())?
-    {
-        runtime
-            .environment
-            .insert(prepared.variable, prepared.program.into_os_string());
-        launch.read_only_paths.push(prepared.read_only_path);
-    }
+    let (launch, registry, runtime) = {
+        let _account_lock = state
+            .agent_account_lock
+            .lock()
+            .map_err(|_| "account lock poisoned")?;
+        // The program comes from the registry by id, never from the webview, and the user already
+        // confirmed it when installing; it still runs only in the read-only sandbox.
+        let mut launch = resolve_launch(&state, &installed_agent_id)?;
+        let registry = crate::commands::agent_registry::registry(&state)?;
+        let account = registry
+            .account(&launch.installation_id)
+            .map_err(|e| e.to_string())?;
+        let mut runtime = crate::commands::agent_account::runtime(
+            &state.app_data_dir,
+            &installed_agent_id,
+            &launch,
+            &account.preferences,
+            account.terminal_authenticated,
+        )?;
+        if let Some(prepared) = registry
+            .prepare_runtime(&installed_agent_id)
+            .map_err(|error| error.to_string())?
+        {
+            runtime
+                .environment
+                .insert(prepared.variable, prepared.program.into_os_string());
+            launch.read_only_paths.push(prepared.read_only_path);
+        }
+        (launch, registry, runtime)
+    };
     let installation_id = launch.installation_id.clone();
     // Only the reviewed account hosts of this agent's providers may be opened for its sign-in.
     let login_hosts = login_pages::hosts(&installed_agent_id);
@@ -306,8 +334,7 @@ pub(super) fn start_session(
     let mut spec = task_spec(&task.task_id, &root, task.checkpoint);
     spec.policy.network_allowed = matches!(runtime.network, AgentNetwork::Proxy { .. });
     let (repository, lease, signed, authority) = start_task(&state, spec)?;
-    let runner =
-        sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).map_err(|e| e.to_string())?;
+    let runner = sandbox_runner(&state)?;
     let text = workspace_text(&state, root, &task.worktree, task.files)?;
     let host = AcpHost {
         session_resources: runtime
@@ -321,7 +348,7 @@ pub(super) fn start_session(
         lease,
         signed,
         authority,
-        runner: Arc::from(runner),
+        runner,
         text: Arc::new(text),
         clock: Arc::new(now),
         events: Arc::new(event_sink(
@@ -333,6 +360,7 @@ pub(super) fn start_session(
             events,
         )),
     };
+    let home_dir = runtime.home.clone();
     let launch = AcpLaunch {
         identity: launch.installation_id,
         program,
@@ -351,6 +379,13 @@ pub(super) fn start_session(
         },
     };
     let supervisor = AcpSessionSupervisor::start(host, launch).map_err(|e| e.to_string())?;
+    let _account_lock = state
+        .agent_account_lock
+        .lock()
+        .map_err(|_| "account lock poisoned")?;
+    if !home_dir.is_dir() {
+        return Err("Agent account was signed out while starting".into());
+    }
     // Workspace switches/revocations close this same gate. Recheck while holding the map,
     // so cleanup either sees this session or this insertion observes the closed gate.
     let mut agents = state.agents.lock().map_err(|_| "agents lock poisoned")?;
@@ -358,6 +393,7 @@ pub(super) fn start_session(
         .map_err(|e| e.to_string())?;
     agents.insert(id, Arc::new(Mutex::new(supervisor)));
     drop(agents);
+    drop(_account_lock);
     if let Some(file) = open_url_file {
         login_pages::watch_shim_reports(app.clone(), id, file, login_hosts, SESSION_LIFETIME);
     }
@@ -365,27 +401,18 @@ pub(super) fn start_session(
 }
 
 /// What the agent reads of the workspace: open documents (unsaved edits included) and files of
-/// the task worktree, and a local MCP server over the task's own context database.
+/// the task worktree, and a local MCP server over the task's own context database (initialized
+/// lazily on first query so session startup is not blocked by full workspace indexing).
 fn workspace_text(
     state: &DesktopAppState,
     root: PathBuf,
-    worktree: &Path,
+    _worktree: &Path,
     files: TaskFiles,
 ) -> Result<HostText, String> {
-    let engine = context_engine::SqliteWalContextEngine::open_or_rebuild_from_workspace(
-        &files.context_db,
-        worktree,
-        "acp-session",
-    )
-    .map_err(|e| e.to_string())?;
-    let mcp = context_engine::LocalMcpServer::new(
-        engine,
-        context_engine::ContextBundleAssembler::new(vec![AuthorizedDestination::LocalOnly]),
-    );
     Ok(HostText {
         root,
         bridge: state.bridge.clone(),
-        mcp: Some(Mutex::new(mcp)),
+        mcp: Mutex::new(None),
         _task: Some(files),
     })
 }
