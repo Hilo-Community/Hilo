@@ -2,9 +2,13 @@ import { type PromptInput, createPromptInput } from "@coloride/editor-cm6";
 import { SPINNER_ICON, agentMark } from "../settings/agent-marks.js";
 import { UI_STRINGS } from "../ui/ui-strings.js";
 import { authChoiceCard, authenticationCards } from "./auth-panel.js";
-import { conversationElements } from "./conversation-view.js";
+import { ConversationView } from "./conversation-view.js";
+import { formatDuration } from "./duration.js";
+import { OptionBar } from "./option-bar.js";
 import { type AgentHandle, type AgentHost, type AgentState, AgentStore } from "./store.js";
 import { TerminalLoginView } from "./terminal-login-view.js";
+import { isWorktreePath } from "./tool-details.js";
+import { TranscriptKeeper } from "./transcript-keeper.js";
 
 const SVG =
   'xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
@@ -27,14 +31,19 @@ export class AgentPanel {
   /** Sign-in requests already opened, so each page opens once per session. */
   private readonly signInOpened = new Set<string>();
   private readonly unsubscribe: () => void;
+  private readonly keeper: TranscriptKeeper | null;
   private readonly prompt: PromptInput;
   private readonly start: HTMLButtonElement;
   private readonly submit: HTMLButtonElement;
   private readonly cancel: HTMLButtonElement;
   private readonly output: HTMLElement;
+  private readonly conversation = new ConversationView();
   private readonly error: HTMLElement;
   private readonly status: HTMLElement;
   private readonly busyMark: HTMLElement;
+  private readonly busyTime: HTMLElement;
+  private readonly options: OptionBar;
+  private tick: ReturnType<typeof setInterval> | undefined;
   private readonly login: TerminalLoginView;
   private readonly form: HTMLFormElement;
   private readonly signInBar: HTMLElement;
@@ -45,8 +54,14 @@ export class AgentPanel {
     private readonly identity: { agentId: string; name: string },
     autoStart = true,
     store = new AgentStore(),
+    /** `restore`: the panel comes from a previous run, so its saved conversation is shown. */
+    history?: { chatId: string; restore: boolean },
   ) {
     this.store = store;
+    this.keeper =
+      history && host.transcripts
+        ? new TranscriptKeeper(store, host.transcripts, history.chatId, identity.agentId)
+        : null;
     this.login = new TerminalLoginView(
       doc,
       () => this.handle,
@@ -59,6 +74,21 @@ export class AgentPanel {
     this.start.className = "coloride-agent-connect";
     this.output = doc.createElement("div");
     this.output.className = "coloride-agent-output";
+    // A file the agent mentions (`[App.jsx](<src/App.jsx:6>)`) opens in the editor at that line.
+    const openReference = (event: Event) => {
+      const ref = (event.target as Element | null)?.closest<HTMLElement>(".coloride-agent-ref");
+      const path = ref?.dataset.path;
+      const line = Number(ref?.dataset.line);
+      if (path && isWorktreePath(path) && Number.isSafeInteger(line) && line > 0) {
+        event.preventDefault();
+        this.run(() => this.openLocation(path, line));
+      }
+    };
+    this.output.addEventListener("click", openReference);
+    // Text that acts as a link opens with Enter, as a link does.
+    this.output.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") openReference(event);
+    });
     this.error = doc.createElement("p");
     this.error.setAttribute("role", "status");
     this.status = doc.createElement("div");
@@ -122,18 +152,53 @@ export class AgentPanel {
     this.busyMark.className = "coloride-agent-busy";
     this.busyMark.setAttribute("aria-hidden", "true");
     this.busyMark.innerHTML = SPINNER_ICON;
-    meta.append(sandbox, this.busyMark);
+    this.busyTime = doc.createElement("span");
+    this.busyTime.className = "coloride-agent-busy-time";
+    this.options = new OptionBar(doc, this.element, (optionId, value) =>
+      this.run(async () => {
+        await this.handle?.setOption?.(optionId, value);
+      }),
+    );
+    const end = doc.createElement("span");
+    end.className = "coloride-agent-meta-end";
+    end.append(this.options.element, this.busyTime, this.busyMark);
+    meta.append(sandbox, end);
     this.signInBar = doc.createElement("div");
     this.signInBar.className = "coloride-agent-auth-bar";
     this.signInBar.hidden = true;
     this.element.append(this.output, this.signInBar, this.status, form, meta);
-    this.unsubscribe = store.subscribe(() => this.render());
+    this.unsubscribe = store.subscribe(() => {
+      this.render();
+      this.keeper?.changed();
+    });
     this.render();
+    if (history?.restore) this.keeper?.restore();
     if (autoStart) void this.begin();
   }
   /** Restored sessions stay dormant until an explicit user interaction. */
   activate(): void {
     if (!this.handle && !this.store.getState().error) void this.begin();
+  }
+  /** Whether the Host can sign this agent out (the panel's menu offers it only then). */
+  canSignOut(): boolean {
+    return this.host.signOut !== undefined;
+  }
+  /** Stops the session and starts the agent again. */
+  reload(): void {
+    void this.begin();
+  }
+  /** Signs the agent out; the panel then waits for Connect, which asks how to sign in. */
+  logOut(): void {
+    this.run(async () => {
+      await this.host.signOut?.(this.identity.agentId);
+    });
+  }
+  /** Signs the agent out and connects again, which asks how to sign in. */
+  reauthenticate(): void {
+    this.run(async () => {
+      await this.host.signOut?.(this.identity.agentId);
+      await this.begin();
+    });
   }
   private button(label: string, click: () => void, className = ""): HTMLButtonElement {
     const button = this.element.ownerDocument.createElement("button");
@@ -160,7 +225,8 @@ export class AgentPanel {
       await this.handle?.stop();
       if (generation !== this.generation) return;
       this.handle = null;
-      this.store.reset();
+      // A new connection starts a new agent session; the conversation on screen stays.
+      this.store.reconnect();
       const handle = await this.host.start({ installedAgentId: this.identity.agentId }, (event) => {
         if (generation === this.generation) {
           if (event.type === "terminalAuthOutput") this.login.write(event.data);
@@ -180,21 +246,14 @@ export class AgentPanel {
   private render(): void {
     const s = this.store.getState();
     this.renderControls(s);
-    this.output.replaceChildren(
-      ...conversationElements(
-        this.element.ownerDocument,
-        s,
-        (label, click) => this.button(label, click),
-        {
-          openLocation: (path, line) => this.run(() => this.openLocation(path, line)),
-          answer: (id, allow) =>
-            this.run(async () => {
-              await this.handle?.answer(id, allow);
-              this.store.answered(id);
-            }),
-        },
-      ),
-    );
+    this.conversation.render(this.output, s, (label, click) => this.button(label, click), {
+      openLocation: (path, line) => this.run(() => this.openLocation(path, line)),
+      answer: (id, allow) =>
+        this.run(async () => {
+          await this.handle?.answer(id, allow);
+          this.store.answered(id);
+        }),
+    });
     this.renderSignIn(s);
     this.login.fit();
     this.openSignInPages();
@@ -220,6 +279,8 @@ export class AgentPanel {
     this.submit.hidden = s.busy;
     this.cancel.hidden = !s.busy;
     this.busyMark.hidden = !(s.busy || this.starting || (this.handle && !s.ready));
+    this.options.update(s.options, s.busy || !this.handle?.setOption);
+    this.showElapsed(s);
     // Nothing said yet: a roomy composer in the middle; afterwards a compact one at the bottom.
     const started =
       s.messages.length +
@@ -230,6 +291,21 @@ export class AgentPanel {
         0 || s.terminalAuth !== null;
     this.element.dataset.mode = started ? "chat" : "empty";
     this.prompt.setPlaceholder(started ? UI_STRINGS.agent.followUp : UI_STRINGS.agent.ask);
+  }
+  /** While the agent works, how long it has been at it; it ticks once a second. */
+  private showElapsed(s: AgentState): void {
+    const turn = s.turn;
+    if (!s.busy || !turn || turn.endedAt !== undefined) {
+      clearInterval(this.tick);
+      this.tick = undefined;
+      this.busyTime.textContent = "";
+      return;
+    }
+    const show = () => {
+      this.busyTime.textContent = formatDuration(Date.now() - turn.startedAt);
+    };
+    show();
+    this.tick ??= setInterval(show, 1000);
   }
   /**
    * Signing in, at the bottom above the composer, not in the conversation: the choice of method,
@@ -278,7 +354,15 @@ export class AgentPanel {
         .catch(() => undefined);
     }
   }
+  /** The panel was closed for good: its saved conversation is deleted too. */
+  discard(): void {
+    this.keeper?.discard();
+  }
   destroy(): void {
+    this.keeper?.flush();
+    clearInterval(this.tick);
+    this.conversation.dispose();
+    this.options.close();
     this.login.dispose();
     this.generation += 1;
     this.unsubscribe();

@@ -5,6 +5,13 @@ export interface AgentChannel {
 }
 export function createTauriAgentHost(invoke: Invoke, channel: () => AgentChannel): AgentHost {
   return {
+    transcripts: {
+      load: (chatId) => invoke("agent_transcript_load_command", { chatId }),
+      save: (chatId, json) => invoke("agent_transcript_save_command", { chatId, payload: json }),
+      remove: (chatId) => invoke("agent_transcript_delete_command", { chatId }),
+    },
+    signOut: (installedAgentId) =>
+      invoke("agent_account_sign_out_command", { agentId: installedAgentId }),
     async start(config, onEvent) {
       const events = channel();
       events.onmessage = onEvent;
@@ -15,6 +22,7 @@ export function createTauriAgentHost(invoke: Invoke, channel: () => AgentChannel
       return {
         startLogin: () => invoke("agent_terminal_auth_start_command", { id }),
         chooseAuth: (methodId) => invoke("agent_auth_choose_command", { id, methodId }),
+        setOption: (optionId, value) => invoke("agent_option_command", { id, optionId, value }),
         openLogin: () => invoke("agent_terminal_auth_open_command", { id }),
         writeLogin: (data) => invoke("agent_terminal_auth_input_command", { id, data }),
         resizeLogin: (cols, rows) =>

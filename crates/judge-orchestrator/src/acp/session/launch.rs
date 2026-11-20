@@ -130,6 +130,8 @@ pub(super) fn sandbox_spec(
     )?;
     spec.args = launch.args.iter().map(Into::into).collect();
     spec.read_only_paths = launch.read_only_paths.clone();
+    spec.read_only_paths
+        .extend(host.shared_read_only_paths.iter().cloned());
     spec.writable_paths = launch.writable_paths.clone();
     spec.preference_domains = launch.preference_domains.clone();
     spec.loopback_listen_ports = launch.loopback_listen_ports.clone();

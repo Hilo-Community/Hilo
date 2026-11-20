@@ -12,7 +12,11 @@ export function createXtermView(): TerminalView {
       .trim() || "#1e1e1e";
   const terminal = new Terminal({
     cursorBlink: true,
-    fontFamily: 'Menlo, "SF Mono", Consolas, "Liberation Mono", monospace',
+    fontFamily:
+      globalThis.document?.defaultView
+        ?.getComputedStyle(document.documentElement)
+        .getPropertyValue("--font-terminal")
+        .trim() || 'Menlo, "SF Mono", Consolas, "Liberation Mono", monospace',
     fontSize: 12,
     scrollback: 5_000,
     theme: { background, foreground: "#d4d4d4" },

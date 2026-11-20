@@ -9,6 +9,7 @@ use launch::{sandbox_spec, spawn_agent, LaunchExecutor};
 use super::{
     auth::{self, AgentCredentials, AuthMethod, AuthenticationPlan},
     executor::{AgentToolExecutor, EventSink, WorkspaceText},
+    options::{self, AgentOption},
     protocol::*,
 };
 use crate::{
@@ -24,7 +25,7 @@ use host_core::{
 use sandbox_runner::{ChildInput, ResourceLimits, SandboxRunner, SandboxSpec, SandboxedChild};
 use serde_json::{json, Value};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     ffi::OsString,
     io::{BufReader, Read},
     path::{Path, PathBuf},
@@ -74,6 +75,10 @@ pub struct AcpHost {
     pub authority: Arc<HostAuthority>,
     pub runner: Arc<dyn SandboxRunner>,
     pub text: Arc<dyn WorkspaceText>,
+    /// The user's dependency folders (`node_modules`) that the task snapshot links to. The agent
+    /// and the commands it asks for may read them, never write: without this the links resolve
+    /// outside the sandbox and a build or a test cannot find its packages.
+    pub shared_read_only_paths: Vec<PathBuf>,
     pub clock: Arc<dyn Fn() -> Millis + Send + Sync>,
     pub events: EventSink,
 }
@@ -83,6 +88,7 @@ enum Control {
     StartTerminalAuth,
     ChooseAuth(String),
     TerminalInput(String),
+    SetOption(String, String),
     Prompt(String),
     Permission(String, bool),
     Elicitation(String, String),
@@ -123,6 +129,7 @@ impl AcpSessionSupervisor {
             host.text.clone(),
             host.runner.clone(),
             launch.limits,
+            host.shared_read_only_paths.clone(),
             host.events.clone(),
         ));
         let program = launch
@@ -177,6 +184,15 @@ impl AcpSessionSupervisor {
         }
         self.controls
             .try_send(Control::Prompt(text))
+            .map_err(|_| bad("session closed or pending request limit"))
+    }
+    /// Trusted Host UI entry point: the user's pick for one of the options the agent offered.
+    pub fn set_option(&self, option_id: String, value: String) -> Result<(), AcpError> {
+        if option_id.is_empty() || option_id.len() > 256 || value.is_empty() || value.len() > 256 {
+            return Err(bad("option size limit"));
+        }
+        self.controls
+            .try_send(Control::SetOption(option_id, value))
             .map_err(|_| bad("session closed or pending request limit"))
     }
     pub fn identity(&self) -> &str {
@@ -304,6 +320,9 @@ struct Session {
     broker: ToolBroker,
     input: ChildInput,
     session_id: Option<String>,
+    /// What the agent offers for this session, and the picks sent but not yet answered.
+    options: Vec<AgentOption>,
+    pending_options: VecDeque<(String, String)>,
     outgoing: BTreeMap<u64, String>,
     next_id: u64,
     seen: BTreeSet<String>,
@@ -351,6 +370,8 @@ impl Session {
             broker,
             input,
             session_id: None,
+            options: Vec::new(),
+            pending_options: VecDeque::new(),
             outgoing: BTreeMap::new(),
             next_id: 0,
             seen: BTreeSet::new(),
@@ -482,6 +503,7 @@ impl Session {
                     input.write_all(text.as_bytes())?;
                     input.flush()?;
                 }
+                Ok(Control::SetOption(id, value)) => self.set_option(&id, &value)?,
                 Ok(Control::Prompt(text)) => {
                     if self.session_id.is_none() || self.prompt_active {
                         (self.host.events)(AcpEvent::Error {
@@ -555,6 +577,31 @@ impl Session {
     fn initialize(&mut self) -> Result<(), AcpError> {
         self.request("initialize", json!({"protocolVersion":1,"clientInfo":{"name":"Coloride","version":"0.1.0"},"clientCapabilities":{"auth":{"terminal":self.host.runner.supports_terminal(),"_meta":{"gateway":true}},"elicitation":{"url":{}},"fs":{"readTextFile":true,"writeTextFile":true},"terminal":true,"_meta":{"writesAreProposals":true}}}))
     }
+    fn publish_options(&self) {
+        (self.host.events)(AcpEvent::Options {
+            options: self.options.clone(),
+        });
+    }
+    /// Sends the user's pick to the agent, but only a value the agent itself offered, and only
+    /// between turns. Anything else leaves the panel showing what is really in force.
+    fn set_option(&mut self, id: &str, value: &str) -> Result<(), AcpError> {
+        let request = match (&self.session_id, self.prompt_active) {
+            (Some(session), false) => self
+                .options
+                .iter()
+                .find(|option| option.id == id)
+                .filter(|option| option.choices.iter().any(|choice| choice.value == value))
+                .map(|option| options::change_request(option, session, value)),
+            _ => None,
+        };
+        let Some((method, params)) = request else {
+            self.publish_options();
+            return Ok(());
+        };
+        self.request(method, params)?;
+        self.pending_options.push_back((id.into(), value.into()));
+        Ok(())
+    }
     fn new_session(&mut self) -> Result<(), AcpError> {
         let cwd = super::session::tools::plain_path(&self.host.worktree_root);
         self.request("session/new", json!({"cwd":cwd,"mcpServers":[]}))
@@ -617,6 +664,12 @@ impl Session {
             .remove(&id)
             .ok_or_else(|| bad("unsolicited response"))?;
         if let Some(error) = message.get("error") {
+            // A refused model or mode change is not a broken session: show what is in force.
+            if method.starts_with("session/set_") {
+                self.pending_options.pop_front();
+                self.publish_options();
+                return Ok(());
+            }
             // A saved successful terminal login is only a hint. An expired/revoked login
             // must go through the agent's advertised flow again, once, without a fallback.
             if method == "session/new"
@@ -656,10 +709,29 @@ impl Session {
                     .ok_or_else(|| bad("invalid session id"))?
                     .to_string();
                 self.session_id = Some(id.clone());
+                self.options = options::parse(&message["result"]);
+                self.pending_options.clear();
                 (self.host.events)(AcpEvent::Ready { session_id: id });
+                if !self.options.is_empty() {
+                    self.publish_options();
+                }
                 if std::mem::take(&mut self.signed_in) {
                     (self.host.events)(AcpEvent::Authenticated);
                 }
+            }
+            "session/set_config_option" | "session/set_mode" | "session/set_model" => {
+                if let Some((id, value)) = self.pending_options.pop_front() {
+                    // A config change answers with the whole list: it can move other options.
+                    let all = options::parse(
+                        &json!({"configOptions":message["result"]["configOptions"]}),
+                    );
+                    if method == "session/set_config_option" && !all.is_empty() {
+                        self.options = all;
+                    } else {
+                        options::select(&mut self.options, &id, &value);
+                    }
+                }
+                self.publish_options();
             }
             "session/prompt" => {
                 self.prompt_active = false;
@@ -713,6 +785,34 @@ impl Session {
                     location["path"] = json!(self.relative(path));
                 }
             }
+        }
+        // The same for the files of an edit: the card shows `src/a.ts`, not the snapshot's folder.
+        if let Some(blocks) = update.get_mut("content").and_then(Value::as_array_mut) {
+            for block in blocks {
+                if block["type"] == "diff" {
+                    if let Some(path) = block["path"].as_str() {
+                        block["path"] = json!(self.relative(path));
+                    }
+                }
+            }
+        }
+        // The agent changed its own mode or options (it can, for instance, leave plan mode).
+        match update["sessionUpdate"].as_str() {
+            Some("current_mode_update") => {
+                if let Some(mode) = update["currentModeId"].as_str() {
+                    if options::select(&mut self.options, "mode", mode) {
+                        self.publish_options();
+                    }
+                }
+            }
+            Some("config_option_update") => {
+                let all = options::parse(&json!({"configOptions":update["configOptions"]}));
+                if !all.is_empty() {
+                    self.options = all;
+                    self.publish_options();
+                }
+            }
+            _ => {}
         }
         (self.host.events)(AcpEvent::Update { update });
         Ok(())

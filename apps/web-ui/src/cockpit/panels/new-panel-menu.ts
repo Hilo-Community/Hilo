@@ -1,10 +1,9 @@
 import { agentMark } from "../../settings/agent-marks.js";
 import type { AgentRegistryHost, InstalledAgent } from "../../settings/agent-registry.js";
+import { PLUS_ICON } from "../../sidebar/icons.js";
 import { UI_STRINGS } from "../../ui/ui-strings.js";
-import { CODEX_ICON, TERMINAL_ICON } from "./panel-icons.js";
-
-const CHEVRON_RIGHT =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6l-6 6"/></svg>';
+import { TERMINAL_ICON } from "./panel-icons.js";
+import { isMacPlatform } from "./panel-shortcuts.js";
 
 export interface NewPanelMenuActions {
   /** A plain shell panel; absent when the host offers no terminal. */
@@ -14,17 +13,17 @@ export interface NewPanelMenuActions {
 }
 
 /**
- * The "+" menu offers a terminal and a submenu of locally installed agents.
+ * The "+" menu, flat: a terminal (with its shortcut), the locally installed agents under
+ * "External Agents", and a way to install more.
  */
 export class NewPanelMenu {
   private menu: HTMLElement | null = null;
-  private submenu: HTMLElement | null = null;
   private anchor: HTMLElement | null = null;
   private cleanup: (() => void) | null = null;
   private installed: readonly InstalledAgent[] = [];
   private request = 0;
   private disposed = false;
-  private refreshSubmenu: (() => void) | null = null;
+  private refreshAgents: (() => void) | null = null;
   private readonly stopListening: (() => void) | undefined;
 
   constructor(
@@ -42,7 +41,7 @@ export class NewPanelMenu {
       const listing = await this.registry.list(false);
       if (this.disposed || request !== this.request) return;
       this.installed = listing.installed;
-      this.refreshSubmenu?.();
+      this.refreshAgents?.();
     } catch {
       // Settings remains available to diagnose the local registry or install an agent.
     }
@@ -112,69 +111,56 @@ export class NewPanelMenu {
     return panel;
   }
 
+  private separator(): HTMLElement {
+    const line = this.doc.createElement("div");
+    line.className = "coloride-new-panel-separator";
+    line.setAttribute("role", "separator");
+    return line;
+  }
+
   private open(anchor: HTMLElement, actions: NewPanelMenuActions): void {
-    const menu = this.panel(UI_STRINGS.chat.newMenu);
+    const text = UI_STRINGS.chat;
+    const menu = this.panel(text.newMenu);
     if (actions.openTerminal) {
+      // Cmd/Ctrl+J opens a terminal from anywhere (see the shell shortcuts).
+      const shortcut = isMacPlatform(this.doc) ? "⌘J" : "Ctrl+J";
       menu.append(
-        this.item(UI_STRINGS.chat.newTerminal, actions.openTerminal, undefined, TERMINAL_ICON),
+        this.item(text.newTerminal, actions.openTerminal, shortcut, TERMINAL_ICON),
+        this.separator(),
       );
     }
-    const agent = this.item(UI_STRINGS.chat.newAgent, null, undefined, CODEX_ICON);
-    agent.disabled = false;
-    agent.classList.add("has-submenu");
-    agent.setAttribute("aria-haspopup", "menu");
-    agent.setAttribute("aria-expanded", "false");
-    const chevron = this.doc.createElement("span");
-    chevron.className = "coloride-new-panel-chevron";
-    chevron.innerHTML = CHEVRON_RIGHT;
-    agent.append(chevron);
-    const populate = (sub: HTMLElement) => {
-      sub.replaceChildren();
-      for (const installed of this.installed) {
-        const entry = this.item(
-          installed.name,
-          () => actions.openAgentInterface(installed),
-          installed.version,
-        );
-        entry
-          .querySelector(".coloride-new-panel-label")
-          ?.prepend(agentMark(this.doc, installed.agentId, installed.name));
-        sub.append(entry);
-      }
-      sub.append(
+    const heading = this.doc.createElement("div");
+    heading.className = "coloride-new-panel-heading";
+    heading.textContent = text.externalAgents;
+    const agents = this.doc.createElement("div");
+    agents.setAttribute("role", "group");
+    agents.setAttribute("aria-label", text.externalAgents);
+    const install = this.doc.createElement("div");
+    install.className = "coloride-new-panel-install";
+    const populate = () => {
+      agents.replaceChildren(
+        ...this.installed.map((installed) => {
+          const entry = this.item(installed.name, () => actions.openAgentInterface(installed));
+          entry
+            .querySelector(".coloride-new-panel-label")
+            ?.prepend(agentMark(this.doc, installed.agentId, installed.name));
+          return entry;
+        }),
+      );
+      heading.hidden = this.installed.length === 0;
+      install.replaceChildren(
+        ...(this.installed.length ? [this.separator()] : []),
         this.item(
-          this.installed.length ? UI_STRINGS.chat.installMoreAgents : UI_STRINGS.chat.installAgent,
+          this.installed.length ? text.addMoreAgents : text.installAgent,
           actions.installAgents,
+          undefined,
+          PLUS_ICON,
         ),
       );
     };
-    const showSubmenu = () => {
-      if (this.submenu) return;
-      const sub = this.panel(UI_STRINGS.chat.newAgent);
-      sub.classList.add("coloride-new-panel-submenu");
-      populate(sub);
-      this.refreshSubmenu = () => populate(sub);
-      this.doc.body.append(sub);
-      const rect = agent.getBoundingClientRect();
-      sub.style.left = `${rect.right + 4}px`;
-      sub.style.top = `${rect.top - 4}px`;
-      this.submenu = sub;
-      agent.setAttribute("aria-expanded", "true");
-      sub.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
-    };
-    const hideSubmenu = () => {
-      this.refreshSubmenu = null;
-      this.submenu?.remove();
-      this.submenu = null;
-      agent.setAttribute("aria-expanded", "false");
-    };
-    agent.addEventListener("click", showSubmenu);
-    agent.addEventListener("pointerenter", showSubmenu);
-    menu.append(agent);
-    // Hovering another entry of the first level closes the second one.
-    for (const other of menu.querySelectorAll<HTMLElement>(".coloride-new-panel-item")) {
-      if (other !== agent) other.addEventListener("pointerenter", hideSubmenu);
-    }
+    populate();
+    this.refreshAgents = populate;
+    menu.append(heading, agents, install);
 
     this.doc.body.append(menu);
     const rect = anchor.getBoundingClientRect();
@@ -185,25 +171,12 @@ export class NewPanelMenu {
     anchor.setAttribute("aria-expanded", "true");
 
     const keydown = (event: KeyboardEvent) => {
-      const scope = this.submenu?.contains(this.doc.activeElement) ? this.submenu : menu;
       if (event.key === "Escape") {
         event.preventDefault();
-        if (scope === this.submenu) {
-          hideSubmenu();
-          agent.focus();
-        } else this.close();
-      } else if (event.key === "ArrowRight" && this.doc.activeElement === agent) {
-        event.preventDefault();
-        showSubmenu();
-      } else if (event.key === "ArrowLeft" && scope === this.submenu) {
-        event.preventDefault();
-        hideSubmenu();
-        agent.focus();
+        this.close();
       } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
-        const items = Array.from(
-          scope.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"),
-        );
+        const items = Array.from(menu.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
         const index = items.indexOf(this.doc.activeElement as HTMLButtonElement);
         const step = event.key === "ArrowDown" ? 1 : -1;
         items[(index + step + items.length) % items.length]?.focus();
@@ -211,8 +184,7 @@ export class NewPanelMenu {
     };
     const outside = (event: Event) => {
       const target = event.target as Node;
-      if (menu.contains(target) || this.submenu?.contains(target) || anchor.contains(target))
-        return;
+      if (menu.contains(target) || anchor.contains(target)) return;
       this.close(false);
     };
     this.doc.addEventListener("pointerdown", outside);
@@ -228,9 +200,7 @@ export class NewPanelMenu {
     const anchor = this.anchor;
     this.cleanup?.();
     this.cleanup = null;
-    this.refreshSubmenu = null;
-    this.submenu?.remove();
-    this.submenu = null;
+    this.refreshAgents = null;
     this.menu?.remove();
     this.menu = null;
     this.anchor = null;

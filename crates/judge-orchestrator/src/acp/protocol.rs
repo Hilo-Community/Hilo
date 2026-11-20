@@ -112,6 +112,11 @@ pub enum AcpEvent {
     Ready {
         session_id: String,
     },
+    /// What the agent lets the user choose for this session (model, mode, effort). Sent again
+    /// whenever one changes, and also when a change was refused, so the panel shows the truth.
+    Options {
+        options: Vec<super::options::AgentOption>,
+    },
     Update {
         update: Value,
     },

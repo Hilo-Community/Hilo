@@ -496,9 +496,15 @@ describe("Zone 2 option menus", () => {
     expect(stores.navigation.getState().groups[0]?.maximizedChatId).toBeNull();
   });
 
-  it("cannot close the last session or one with a running agent", () => {
+  it("can close the last session, but not one with a running agent", () => {
     const { root, get, stores } = setup();
     stores.closeChat("b");
+    get(".sidebar-row--session .sidebar-more").click();
+    expect(menuItem(root, "Close session").disabled).toBe(false);
+    root
+      .querySelector('[role="menu"]')
+      ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    stores.zone3.setState((prev) => ({ ...prev, activeRunningAgentChatId: "a" }));
     get(".sidebar-row--session .sidebar-more").click();
     const close = menuItem(root, "Close session");
     expect(close.disabled).toBe(true);

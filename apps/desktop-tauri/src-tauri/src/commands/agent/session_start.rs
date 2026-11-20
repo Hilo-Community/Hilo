@@ -180,6 +180,8 @@ pub(super) struct Provisioned {
     task_id: String,
     checkpoint: String,
     worktree: PathBuf,
+    /// The user's dependency folders the worktree links to; the sandbox shares them read-only.
+    shared_packages: Vec<PathBuf>,
     files: TaskFiles,
 }
 
@@ -225,6 +227,11 @@ pub(super) fn provision(
         task_id,
         checkpoint: checkpoint.commit,
         worktree: task.workspace,
+        shared_packages: task
+            .shared_package_stores
+            .into_iter()
+            .map(|store| store.source)
+            .collect(),
     })
 }
 
@@ -350,6 +357,7 @@ pub(super) fn start_session(
         authority,
         runner,
         text: Arc::new(text),
+        shared_read_only_paths: task.shared_packages,
         clock: Arc::new(now),
         events: Arc::new(event_sink(
             app.clone(),

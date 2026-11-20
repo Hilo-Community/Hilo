@@ -166,23 +166,15 @@ describe("terminal as a Zone 3 panel", () => {
     expect(terminals()).toHaveLength(1);
   });
 
-  it("the + button offers Terminal and Agent, with the installed agents in its submenu", async () => {
+  it("the + button offers Terminal, then the installed agents, then Add more agents", async () => {
     const { plus, item, terminals, stores, opened } = setup();
     const sessionsBefore = stores.zone3.getState().chats.length;
     await settle();
     plus()?.click();
     expect(item("Terminal")).toBeDefined();
-    expect(item("Agent")).toBeDefined();
-    expect(item("Codex")).toBeUndefined();
-    item("Agent")?.click();
-    expect(item("Codex")).toBeDefined();
     expect(item("Terminal")?.disabled ?? false).toBe(false);
-    const agentTerminal = Array.from(
-      document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-submenu button"),
-    ).find((button) => button.textContent?.startsWith("Terminal"));
-    expect(agentTerminal).toBeUndefined();
-    agentTerminal?.click();
-    expect(stores.zone3.getState().chats).toHaveLength(sessionsBefore);
+    expect(item("Codex")).toBeDefined();
+    expect(item("Add more agents")).toBeDefined();
     item("Codex")?.click();
     expect(stores.zone3.getState().chats).toHaveLength(sessionsBefore + 1);
     expect(terminals()).toHaveLength(0);
@@ -266,7 +258,6 @@ describe("terminal as a Zone 3 panel", () => {
         : null;
     };
     plus()?.click();
-    item("Agent")?.click();
     item("Codex")?.click();
     plus()?.click();
     item("Terminal")?.click();
@@ -315,6 +306,8 @@ describe("terminal as a Zone 3 panel", () => {
 
   it("'New session' in the sidebar and in an empty group opens a terminal when the host has one", async () => {
     const { stores, terminals, opened } = setup();
+    // The installed agents are listed once the registry answered.
+    await settle();
     document
       .querySelector<HTMLButtonElement>(
         '.sidebar-group[data-group-id="initial-group"] .sidebar-add',
@@ -325,7 +318,8 @@ describe("terminal as a Zone 3 panel", () => {
       Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"));
     expect(entries().map((item) => item.textContent)).toEqual([
       expect.stringMatching(/Terminal/),
-      expect.stringMatching(/Agent/),
+      expect.stringMatching(/Codex/),
+      expect.stringMatching(/Add more agents/),
     ]);
     entries()[0]?.click();
     await settle();
@@ -341,9 +335,6 @@ describe("terminal as a Zone 3 panel", () => {
     // The + menu of the header still offers both: Codex > Interface makes an agent session.
     const before = stores.zone3.getState().chats.length;
     document.querySelector<HTMLButtonElement>(".coloride-header-tab-add")?.click();
-    Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"))
-      .find((item) => item.textContent?.startsWith("Agent"))
-      ?.click();
     Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"))
       .find((item) => item.textContent?.trim().startsWith("Codex"))
       ?.click();

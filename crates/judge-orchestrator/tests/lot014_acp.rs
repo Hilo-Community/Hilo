@@ -79,6 +79,7 @@ impl Fixture {
                 authority: self.authority.clone(),
                 runner,
                 text: Arc::new(Text),
+                shared_read_only_paths: vec![],
                 clock: Arc::new(|| 2),
                 events: Arc::new(move |event| {
                     let _ = tx.send(event);
@@ -312,6 +313,94 @@ fn unsafe_or_unbound_url_elicitation_never_reaches_the_host_ui() {
         assert!(matches!(next(&rx), AcpEvent::Stopped { .. }));
         session.stop();
     }
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn the_files_of_an_edit_reach_the_ui_relative_to_the_worktree() {
+    let f = Fixture::new();
+    let (mut session, rx) = f.start("edit-update");
+    let update = loop {
+        if let AcpEvent::Update { update } = next(&rx) {
+            if update["sessionUpdate"] == "tool_call" {
+                break update;
+            }
+        }
+    };
+    session.stop();
+    assert_eq!(update["content"][0]["path"], "src/a.rs");
+    assert_eq!(update["locations"][0]["path"], "src/a.rs");
+    assert_eq!(update["content"][0]["newText"], "fn a() {}");
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn the_user_can_pick_a_mode_or_model_the_agent_offered_and_nothing_else() {
+    let f = Fixture::new();
+    let runner = sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).unwrap();
+    let (host, rx) = f.host(Arc::from(runner));
+    let mut session = AcpSessionSupervisor::start(host, f.launch("options")).unwrap();
+    assert!(matches!(next(&rx), AcpEvent::Ready { .. }));
+    let options = |rx: &Receiver<AcpEvent>| loop {
+        if let AcpEvent::Options { options } = next(rx) {
+            return options;
+        }
+    };
+    let offered = options(&rx);
+    let current = |options: &[judge_orchestrator::acp::AgentOption], id: &str| {
+        options
+            .iter()
+            .find(|o| o.id == id)
+            .map(|o| o.current.clone())
+            .unwrap()
+    };
+    assert_eq!(current(&offered, "mode"), "default");
+    assert_eq!(current(&offered, "model"), "deep");
+    // A value the agent never offered is not sent; the panel is told what is in force.
+    session
+        .set_option("mode".into(), "bypassEverything".into())
+        .unwrap();
+    assert_eq!(current(&options(&rx), "mode"), "default");
+    session.set_option("model".into(), "fast".into()).unwrap();
+    let after = options(&rx);
+    assert_eq!(current(&after, "model"), "fast");
+    assert_eq!(current(&after, "mode"), "default");
+    session.set_option("mode".into(), "plan".into()).unwrap();
+    assert_eq!(current(&options(&rx), "mode"), "plan");
+    session.stop();
+}
+
+/// The task snapshot links its `node_modules` to the user's installation: the agent must be able
+/// to read through those links, and still never write to them.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn shared_dependency_folders_are_readable_but_never_writable_by_the_agent() {
+    let f = Fixture::new();
+    let shared = tempfile::tempdir().unwrap();
+    let binary = shared.path().join("agent");
+    std::fs::copy(env!("CARGO_BIN_EXE_coloride-acp-test-agent"), &binary).unwrap();
+    let module = shared.path().join("module.txt");
+    std::fs::write(&module, "shared package").unwrap();
+    let runner = sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).unwrap();
+    let (mut host, rx) = f.host(Arc::from(runner));
+    host.shared_read_only_paths = vec![shared.path().to_path_buf()];
+    let mut launch = f.launch("installation");
+    launch.program = binary;
+    assert!(launch.read_only_paths.is_empty());
+    let mut session = AcpSessionSupervisor::start(host, launch).unwrap();
+    assert!(matches!(next(&rx), AcpEvent::Ready { .. }));
+    session.prompt("test".into()).unwrap();
+    loop {
+        if let AcpEvent::Update { update } = next(&rx) {
+            assert_eq!(
+                update["content"]["text"],
+                "module=shared package; write=false"
+            );
+            break;
+        }
+    }
+    session.stop();
+    assert_eq!(std::fs::read_to_string(module).unwrap(), "shared package");
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
