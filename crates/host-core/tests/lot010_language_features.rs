@@ -56,9 +56,6 @@ fn fixture() -> Fixture {
     services
         .try_ensure_server(&vtsls_server_spec(tool("vtsls")))
         .unwrap_or_else(|error| panic!("language server did not start: {error}"));
-    services
-        .try_ensure_server(&biome_server_spec(tool("biome")))
-        .unwrap_or_else(|error| panic!("language server did not start: {error}"));
     let mut documents = DocumentService::new_in_memory();
     documents
         .open_document_from_disk(DOCUMENT_ID, GENERATION, root.join(DOCUMENT_ID))
@@ -278,6 +275,11 @@ fn completions_list_symbols_in_scope() {
 #[test]
 fn formatting_comes_from_biome_and_edits_the_revision_it_was_asked_for() {
     let mut fx = fixture();
+    // Only formatting depends on Biome. Semantic tests must exercise vtsls even when
+    // the independent Biome daemon cannot start; this test still requires both servers.
+    fx.services
+        .try_ensure_server(&biome_server_spec(tool("biome")))
+        .unwrap_or_else(|error| panic!("Biome did not start: {error}"));
     let end = fx.text().encode_utf16().count() as u32;
     fx.edit(end, end, "const   spaced   =   1 ;\n");
     let LanguageFeatureResult::Edits { edits } = fx

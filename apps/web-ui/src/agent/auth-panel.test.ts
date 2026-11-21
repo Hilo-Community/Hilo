@@ -197,5 +197,12 @@ describe("choosing how to sign in", () => {
     card?.querySelectorAll("button")[1]?.click();
     expect(chosen).toEqual(["chatgpt"]);
     expect(authChoiceCard(document, "X", [{ id: "api_key", name: "x" }], () => {})).toBeNull();
+    const terminalCard = authChoiceCard(
+      document,
+      "Qwen Code",
+      [{ id: "openai", name: "Use OpenAI API key", type: "terminal" }],
+      (id) => chosen.push(id),
+    );
+    expect(terminalCard?.querySelector("button")?.textContent).toBe("Use OpenAI API key");
   });
 });

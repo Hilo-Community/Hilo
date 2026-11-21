@@ -151,16 +151,10 @@ fn covered(text: &str, batch: &DocumentDiagnostics, code: &str) -> String {
         .unwrap()
 }
 
-fn is_alive(pid: u32) -> bool {
-    let output = std::process::Command::new("ps")
-        .args(["-o", "stat=", "-p", &pid.to_string()])
-        .output()
-        .unwrap();
-    output.status.success()
-        && !String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .starts_with('Z')
-}
+#[path = "../../../test-support/process.rs"]
+mod process_checks;
+#[cfg(unix)]
+use process_checks::is_alive;
 
 #[test]
 fn real_biome_reports_diagnostics_tagged_with_the_revision_they_were_computed_for() {

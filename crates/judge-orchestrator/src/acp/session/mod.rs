@@ -311,6 +311,7 @@ struct Session {
     signed_in: bool,
     base_spec: SandboxSpec,
     login_method: Option<AuthMethod>,
+    login_size: Option<(u16, u16)>,
     login_terminal: Arc<Mutex<Option<Box<dyn sandbox_runner::SandboxedTerminal>>>>,
     login_input: Option<ChildInput>,
     restart_readers: Vec<JoinHandle<()>>,
@@ -355,6 +356,7 @@ impl Session {
             signed_in: false,
             base_spec,
             login_method: None,
+            login_size: None,
             login_terminal: ui.login_terminal,
             login_input: None,
             restart_readers: vec![],
@@ -481,65 +483,69 @@ impl Session {
             if self.session_id.is_none() && Instant::now() > deadline {
                 return Err(bad("handshake timeout"));
             }
-            match controls.try_recv() {
-                Ok(Control::TerminalResize(cols, rows)) => {
-                    if let Some(terminal) = self
-                        .login_terminal
-                        .lock()
-                        .expect("login terminal lock")
-                        .as_ref()
-                    {
-                        terminal.resize(cols, rows)?;
-                    }
-                }
-                Ok(Control::StartTerminalAuth) => self.start_terminal()?,
-                Ok(Control::ChooseAuth(id)) => self.choose_method(&id)?,
-                Ok(Control::TerminalInput(text)) => {
-                    use std::io::Write;
-                    let input = self
-                        .login_input
-                        .as_mut()
-                        .ok_or_else(|| bad("no interactive login is running"))?;
-                    input.write_all(text.as_bytes())?;
-                    input.flush()?;
-                }
-                Ok(Control::SetOption(id, value)) => self.set_option(&id, &value)?,
-                Ok(Control::Prompt(text)) => {
-                    if self.session_id.is_none() || self.prompt_active {
-                        (self.host.events)(AcpEvent::Error {
-                            reason: "Session is not ready or a prompt is already running".into(),
-                        });
-                    } else {
-                        self.request("session/prompt", json!({"sessionId":self.session_id,"prompt":[{"type":"text","text":text}]}))?;
-                        self.prompt_active = true;
-                        (self.host.events)(AcpEvent::Message {
-                            role: "user".into(),
-                            text,
-                        });
-                    }
-                }
-                Ok(Control::Permission(id, allow)) => self.permission(&id, allow)?,
-                Ok(Control::Elicitation(id, action)) => {
-                    if let Some(elicitation) = self.elicitations.get_mut(&id) {
-                        if !elicitation.answered {
-                            elicitation.answered = true;
-                            let request = elicitation.request.clone();
-                            // After an accept the agent is still waiting for the user to finish
-                            // in the browser: the page can be opened again until the agent says
-                            // it is complete (`elicitation/complete`) or the turn is cancelled.
-                            if action != "accept" {
-                                self.elicitation_urls
-                                    .lock()
-                                    .expect("elicitation lock")
-                                    .remove(&id);
-                            }
-                            self.reply(&request, Ok(json!({"action":action})))?;
+            loop {
+                match controls.try_recv() {
+                    Ok(Control::TerminalResize(cols, rows)) => {
+                        self.login_size = Some((cols, rows));
+                        if let Some(terminal) = self
+                            .login_terminal
+                            .lock()
+                            .expect("login terminal lock")
+                            .as_ref()
+                        {
+                            terminal.resize(cols, rows)?;
                         }
                     }
+                    Ok(Control::StartTerminalAuth) => self.start_terminal()?,
+                    Ok(Control::ChooseAuth(id)) => self.choose_method(&id)?,
+                    Ok(Control::TerminalInput(text)) => {
+                        use std::io::Write;
+                        let input = self
+                            .login_input
+                            .as_mut()
+                            .ok_or_else(|| bad("no interactive login is running"))?;
+                        input.write_all(text.as_bytes())?;
+                        input.flush()?;
+                    }
+                    Ok(Control::SetOption(id, value)) => self.set_option(&id, &value)?,
+                    Ok(Control::Prompt(text)) => {
+                        if self.session_id.is_none() || self.prompt_active {
+                            (self.host.events)(AcpEvent::Error {
+                                reason: "Session is not ready or a prompt is already running"
+                                    .into(),
+                            });
+                        } else {
+                            self.request("session/prompt", json!({"sessionId":self.session_id,"prompt":[{"type":"text","text":text}]}))?;
+                            self.prompt_active = true;
+                            (self.host.events)(AcpEvent::Message {
+                                role: "user".into(),
+                                text,
+                            });
+                        }
+                    }
+                    Ok(Control::Permission(id, allow)) => self.permission(&id, allow)?,
+                    Ok(Control::Elicitation(id, action)) => {
+                        if let Some(elicitation) = self.elicitations.get_mut(&id) {
+                            if !elicitation.answered {
+                                elicitation.answered = true;
+                                let request = elicitation.request.clone();
+                                // After an accept the agent is still waiting for the user to finish
+                                // in the browser: the page can be opened again until the agent says
+                                // it is complete (`elicitation/complete`) or the turn is cancelled.
+                                if action != "accept" {
+                                    self.elicitation_urls
+                                        .lock()
+                                        .expect("elicitation lock")
+                                        .remove(&id);
+                                }
+                                self.reply(&request, Ok(json!({"action":action})))?;
+                            }
+                        }
+                    }
+                    Ok(Control::CancelTurn) => self.cancel_pending(),
+                    Err(TryRecvError::Disconnected) => return Ok(()),
+                    Err(TryRecvError::Empty) => break,
                 }
-                Ok(Control::CancelTurn) => self.cancel_pending(),
-                Err(TryRecvError::Disconnected) => return Ok(()),
-                Err(TryRecvError::Empty) => {}
             }
             let terminal_status = self
                 .login_terminal
@@ -603,10 +609,8 @@ impl Session {
         Ok(())
     }
     fn new_session(&mut self) -> Result<(), AcpError> {
-        self.request(
-            "session/new",
-            json!({"cwd":self.host.worktree_root,"mcpServers":[]}),
-        )
+        let cwd = super::session::tools::plain_path(&self.host.worktree_root);
+        self.request("session/new", json!({"cwd":cwd,"mcpServers":[]}))
     }
     fn cancel_pending(&mut self) {
         self.elicitation_urls

@@ -68,8 +68,7 @@ fn extended_limits(limits: &JobLimits) -> JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
 }
 
 impl Job {
-    /// A job that kills its whole tree when its last handle closes, forbids the UI escapes
-    /// (clipboard, desktop, ...) and applies `limits`.
+    /// A sandbox job that kills its whole tree on close, forbids UI escapes and applies limits.
     pub(crate) fn create(limits: &JobLimits) -> io::Result<Self> {
         // SAFETY: default security and no name (both null); no other precondition.
         let raw = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
@@ -114,5 +113,66 @@ impl Job {
     pub(crate) fn terminate(&self) -> bool {
         // SAFETY: the handle is a live job.
         unsafe { TerminateJobObject(self.handle.as_raw_handle(), KILLED_EXIT_CODE) != 0 }
+    }
+}
+
+/// A Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` that ties a Host-supervised process
+/// tree (`host-core` terminal, language server or debug adapter) to the Host's lifetime.
+pub struct SupervisedJob {
+    handle: OwnedHandle,
+}
+
+impl fmt::Debug for SupervisedJob {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SupervisedJob").finish_non_exhaustive()
+    }
+}
+
+impl SupervisedJob {
+    /// Places `process` in a fresh Job Object whose processes are killed when the handle closes
+    /// (including on an abrupt Host exit) or when [`Self::terminate`] is called.
+    // A Windows `RawHandle` (`HANDLE`) is an opaque kernel handle-table index, never dereferenced
+    // as a memory pointer; the kernel validates it and returns `ERROR_INVALID_HANDLE` if invalid.
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    pub fn assign_raw(process: std::os::windows::io::RawHandle) -> io::Result<Self> {
+        if process.is_null() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "missing process handle",
+            ));
+        }
+        // SAFETY: default security and no name (both null); no other precondition.
+        let raw = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
+        let job = Self {
+            handle: owned_handle(raw)?,
+        };
+        let info = extended_limits(&JobLimits::default());
+        let size = u32::try_from(mem::size_of_val(&info)).expect("job information struct is small");
+        // SAFETY: the handle is a live job; `info` points to `size` readable bytes of
+        // `JOBOBJECT_EXTENDED_LIMIT_INFORMATION` and outlives the call.
+        check_bool(unsafe {
+            SetInformationJobObject(
+                job.handle.as_raw_handle(),
+                JobObjectExtendedLimitInformation,
+                ptr::from_ref(&info).cast::<c_void>(),
+                size,
+            )
+        })?;
+        // SAFETY: `job.handle` is a live job; `process` is a non-null OS handle validated by the
+        // kernel (`AssignProcessToJobObject` fails with `ERROR_INVALID_HANDLE` if invalid).
+        check_bool(unsafe { AssignProcessToJobObject(job.handle.as_raw_handle(), process) })?;
+        Ok(job)
+    }
+
+    /// Kills every process in the job. Returns false if the kernel refused.
+    pub fn terminate(&self) -> bool {
+        // SAFETY: the handle is a live job.
+        unsafe { TerminateJobObject(self.handle.as_raw_handle(), KILLED_EXIT_CODE) != 0 }
+    }
+}
+
+impl Drop for SupervisedJob {
+    fn drop(&mut self) {
+        self.terminate();
     }
 }

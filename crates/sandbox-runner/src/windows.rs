@@ -12,9 +12,10 @@
 //!   before any permission changes, since the access granted would follow the link outside.
 //! * **Crash safety:** each run is recorded in a journal (`%LOCALAPPDATA%\Coloride\sandbox-runs`)
 //!   until it has undone its changes; the self-test first undoes the runs of a Host that died.
-//! * **Shared read-only directories** (`read_only_paths`) are refused: sharing one would mean
-//!   changing the permissions of the user's own files, and nothing here could restore them if
-//!   the Host died in between. This engine says so instead of weakening the isolation.
+//! * **Read-only worktrees and shares:** read/execute ACLs grant access to the unique run SID;
+//!   shares are split around forbidden content so it receives no inherited grants. All changed
+//!   paths are journaled before mutation and the
+//!   SID's entries are revoked on cleanup or crash recovery. Host permissions are preserved.
 //! * **Network:** no capability is granted, so there is no network at all, loopback included.
 //!   `NetworkPolicy::LocalProxyOnly` is therefore refused (as on Linux): LOT-014 hands the
 //!   agent another channel.
@@ -62,12 +63,10 @@ fn same_name(left: &OsString, right: &str) -> bool {
     left.eq_ignore_ascii_case(right)
 }
 
-/// The environment of a sandboxed process: the system variables, then the caller's (which win,
-/// whatever their case), then the private temporary directory (which wins over both). Names are
-/// case-insensitive on Windows and a duplicate would be refused.
-fn environment<'a>(
+fn environment_for<'a>(
     caller: impl IntoIterator<Item = (&'a OsString, &'a OsString)>,
     tmp: &Path,
+    include_host_profile_vars: bool,
 ) -> Vec<(OsString, OsString)> {
     let mut env: Vec<(OsString, OsString)> = Vec::new();
     let mut set = |key: OsString, value: OsString| {
@@ -75,6 +74,13 @@ fn environment<'a>(
         env.push((key, value));
     };
     for var in SYSTEM_VARS {
+        if !include_host_profile_vars && matches!(var, "USERPROFILE" | "APPDATA" | "LOCALAPPDATA") {
+            // CreateProcessW still needs these entries for an AppContainer. Point them at
+            // this run's writable scratch space instead of omitting them (error 203) or
+            // exposing the Host's profile locations.
+            set(var.into(), tmp.as_os_str().to_os_string());
+            continue;
+        }
         if let Some(value) = std::env::var_os(var) {
             set(var.into(), value);
         }
@@ -88,6 +94,16 @@ fn environment<'a>(
         set(var.into(), tmp.as_os_str().to_os_string());
     }
     env
+}
+
+/// The environment of a sandboxed process: the system variables, then the caller's (which win,
+/// whatever their case), then the private temporary directory (which wins over both). Names are
+/// case-insensitive on Windows and a duplicate would be refused.
+fn environment<'a>(
+    caller: impl IntoIterator<Item = (&'a OsString, &'a OsString)>,
+    tmp: &Path,
+) -> Vec<(OsString, OsString)> {
+    environment_for(caller, tmp, true)
 }
 
 /// The Windows engine: each run gets its own AppContainer profile and Job Object, recorded in a
@@ -117,27 +133,49 @@ impl AppContainerEngine {
     }
 
     fn launch_config(&self, spec: &ValidatedSpec) -> Result<LaunchConfig, SandboxError> {
-        if spec.worktree_read_only {
-            return Err(SandboxError::LimitNotEnforceable {
-                engine: "windows-appcontainer",
-                limit: "read-only agent worktree",
-            });
-        }
-        if !spec.read_only_paths.is_empty() {
+        if !spec.worktree_read_only && !spec.read_only_paths.is_empty() {
             return Err(SandboxError::InvalidSpec(
-                "the Windows sandbox cannot share read-only directories: that would change the \
-                 permissions of files outside the worktree"
-                    .to_string(),
+                "the Windows sandbox only supports read-only shares with a read-only worktree"
+                    .into(),
             ));
+        }
+        let root = plain(&spec.worktree_root);
+        let mut denied_read_paths: Vec<_> = spec
+            .denied_read_paths
+            .iter()
+            .map(|path| plain(path))
+            .collect();
+        if spec.mediate_worktree_reads {
+            for entry in fs::read_dir(&spec.worktree_root)? {
+                let path = plain(&entry?.path());
+                if path != plain(&spec.program) && !plain(&spec.tmp_dir).starts_with(&path) {
+                    denied_read_paths.push(path);
+                }
+            }
+        }
+        let writable_dirs = std::iter::once(if spec.worktree_read_only {
+            plain(&spec.tmp_dir)
+        } else {
+            root.clone()
+        })
+        .chain(spec.writable_paths.iter().map(|path| plain(path)))
+        .collect();
+        let mut read_only_dirs: Vec<_> = spec
+            .read_only_paths
+            .iter()
+            .map(|path| plain(path))
+            .collect();
+        if spec.worktree_read_only {
+            read_only_dirs.insert(0, root);
         }
         Ok(LaunchConfig {
             program: plain(&spec.program),
             args: spec.args.clone(),
             cwd: plain(&spec.cwd),
-            env: environment(&spec.env, &plain(&spec.tmp_dir)),
-            writable_dirs: std::iter::once(plain(&spec.worktree_root))
-                .chain(spec.writable_paths.iter().map(|path| plain(path)))
-                .collect(),
+            env: environment_for(&spec.env, &plain(&spec.tmp_dir), !spec.worktree_read_only),
+            writable_dirs,
+            read_only_dirs,
+            denied_read_paths,
             journal_dir: self.journal_dir.clone(),
             limits: JobLimits {
                 max_processes: spec.limits.max_processes,
@@ -249,6 +287,8 @@ impl Probe {
             cwd: self.work.clone(),
             env: environment([], tmp.path()),
             writable_dirs: vec![self.work.clone()],
+            read_only_dirs: Vec::new(),
+            denied_read_paths: Vec::new(),
             journal_dir: self.journal_dir.clone(),
             limits: JobLimits::default(),
             container_name: format!("coloride-selftest-{}", new_run_id()),
@@ -385,5 +425,44 @@ mod tests {
             Path::new(r"\\?\UNC\server\share")
         );
         assert_eq!(plain(Path::new(r"C:\work")), Path::new(r"C:\work"));
+    }
+    #[test]
+    fn read_only_and_denied_paths_are_in_the_appcontainer_launch_plan() {
+        use super::{AppContainerEngine, Launch, OsSandboxEngine};
+        use crate::SandboxSpec;
+        let work = tempfile::tempdir().unwrap();
+        let root = work.path().canonicalize().unwrap();
+        let file = root.join("source.txt");
+        std::fs::write(&file, "unchanged").unwrap();
+        let scratch = root.join("scratch");
+        std::fs::create_dir(&scratch).unwrap();
+        let engine = AppContainerEngine::with_journal_dir(root.join("journal"));
+        let mut spec = SandboxSpec::new(&root, std::env::current_exe().unwrap());
+        spec.worktree_read_only = true;
+        spec.denied_read_paths.push(file.clone());
+        let mut validated = spec.validate().unwrap();
+        validated.tmp_dir = scratch.clone();
+        let Launch::AppContainer(config) = engine.prepare(&validated).unwrap() else {
+            panic!("AppContainer required")
+        };
+        assert_eq!(config.writable_dirs, vec![super::plain(&scratch)]);
+        for name in ["USERPROFILE", "APPDATA", "LOCALAPPDATA"] {
+            let value = config
+                .env
+                .iter()
+                .find(|(key, _)| key.eq_ignore_ascii_case(name))
+                .map(|(_, value)| value.as_os_str());
+            assert_eq!(value, Some(super::plain(&scratch).as_os_str()));
+        }
+        assert_eq!(
+            config.read_only_dirs,
+            vec![super::plain(&work.path().canonicalize().unwrap())]
+        );
+        assert_eq!(
+            config.denied_read_paths,
+            vec![super::plain(&file.canonicalize().unwrap())]
+        );
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "unchanged");
+        assert!(!work.path().join("journal").exists());
     }
 }

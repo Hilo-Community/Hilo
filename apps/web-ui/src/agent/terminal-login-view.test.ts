@@ -24,16 +24,19 @@ const visible = (view: TerminalLoginView) =>
   [...view.element.querySelectorAll("button")].filter((b) => !b.hidden).map((b) => b.textContent);
 
 describe("terminal sign-in at the bottom", () => {
-  it("starts by itself once, with no start button", async () => {
+  it("starts by itself once, with no start button, and synchronizes terminal dimensions", async () => {
     const { handle, view } = fixture();
+    document.body.replaceChildren(view.element);
     view.render({ name: "Claude Subscription", args: ["--cli"], env: {} });
     await settle();
     expect(handle.startLogin).toHaveBeenCalledOnce();
+    expect(handle.resizeLogin).toHaveBeenCalled();
     view.render({ name: "Claude Subscription", args: ["--cli"], env: {} });
     await settle();
     expect(handle.startLogin).toHaveBeenCalledOnce();
     expect(visible(view)).toEqual(["Open page again", "Cancel"]);
     expect(view.element.textContent).not.toContain("--cli");
+    view.dispose();
   });
 
   it("asks first when the agent wants environment overrides", async () => {

@@ -1,6 +1,6 @@
 //! LOT-010 — integrated terminal on a real pseudo-terminal with real shells.
-#![cfg(unix)]
-#![allow(clippy::disallowed_methods)] // `ps` and the helper Host in tests
+#![cfg(any(unix, windows))]
+#![allow(clippy::disallowed_methods)] // `ps` / `tasklist` and the helper Host in tests
 
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
@@ -28,10 +28,32 @@ fn gate(dir: &std::path::Path, trusted: bool) -> WorkspaceTrustGate {
     gate
 }
 
+#[cfg(unix)]
 fn sh(script: &str) -> TerminalLaunch {
     TerminalLaunch {
         program: Some("/bin/sh".into()),
         args: vec!["-c".into(), script.into()],
+    }
+}
+
+#[cfg(windows)]
+fn cmd_launch(args: &[&str]) -> TerminalLaunch {
+    TerminalLaunch {
+        program: Some("cmd.exe".into()),
+        args: args.iter().map(|s| (*s).to_string()).collect(),
+    }
+}
+
+#[cfg(windows)]
+fn stubborn_job_launch() -> TerminalLaunch {
+    TerminalLaunch {
+        program: Some("powershell.exe".into()),
+        args: vec![
+            "-NoProfile".into(),
+            "-NonInteractive".into(),
+            "-Command".into(),
+            "$p = Start-Process -FilePath 'ping.exe' -ArgumentList '-n','600','127.0.0.1' -PassThru -WindowStyle Hidden; [Console]::Out.WriteLine('job=' + $p.Id + '='); Wait-Process -Id $p.Id".into(),
+        ],
     }
 }
 
@@ -75,15 +97,19 @@ fn read_until(events: &Receiver<(Instant, TerminalEvent)>, needle: &str) -> Stri
     String::from_utf8_lossy(&output).into_owned()
 }
 
+#[cfg(unix)]
+#[path = "../../../test-support/process.rs"]
+mod process_checks;
+#[cfg(unix)]
+use process_checks::is_alive;
+
+#[cfg(windows)]
 fn is_alive(pid: u32) -> bool {
-    let output = Command::new("ps")
-        .args(["-o", "stat=", "-p", &pid.to_string()])
+    let output = Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/NH"])
         .output()
         .unwrap();
-    output.status.success()
-        && !String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .starts_with('Z')
+    String::from_utf8_lossy(&output.stdout).contains(&pid.to_string())
 }
 
 fn wait_until_dead(pid: u32) -> bool {
@@ -112,6 +138,7 @@ fn an_untrusted_workspace_gets_no_terminal() {
     assert_eq!(gate.spawned_process_count(), 0);
 }
 
+#[cfg(unix)]
 #[test]
 fn keystrokes_reach_the_shell_in_the_workspace_and_its_output_comes_back() {
     let dir = tempfile::tempdir().unwrap();
@@ -134,14 +161,45 @@ fn keystrokes_reach_the_shell_in_the_workspace_and_its_output_comes_back() {
     assert!(read_until(&events, "41 132").contains("41 132"));
 }
 
+#[cfg(windows)]
+#[test]
+fn keystrokes_reach_the_shell_in_the_workspace_and_its_output_comes_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let gate = gate(dir.path(), true);
+    let (session, events) = open(&gate, &cmd_launch(&["/Q"]));
+    session
+        .write(b"set /a 40+2 & echo. & echo CWD=%cd%\r\n")
+        .unwrap();
+    let output = read_until(&events, "CWD=");
+    assert!(
+        output.contains("42") && output.contains("\\workspace"),
+        "{output}"
+    );
+    assert_eq!(gate.spawned_process_count(), 1);
+
+    session
+        .resize(TerminalSize {
+            cols: 132,
+            rows: 41,
+        })
+        .unwrap();
+    session.write(b"mode con\r\n").unwrap();
+    let resized = read_until(&events, "132");
+    assert!(
+        resized.contains("41") && resized.contains("132"),
+        "{resized}"
+    );
+}
+
 #[test]
 fn output_is_delivered_in_frames_at_most_one_per_16_ms() {
     let dir = tempfile::tempdir().unwrap();
     let gate = gate(dir.path(), true);
-    let (_session, events) = open(
-        &gate,
-        &sh("i=0; while [ $i -lt 3000 ]; do echo line$i; i=$((i+1)); done"),
-    );
+    #[cfg(unix)]
+    let launch = sh("i=0; while [ $i -lt 3000 ]; do echo line$i; i=$((i+1)); done");
+    #[cfg(windows)]
+    let launch = cmd_launch(&["/d", "/c", "for /L %i in (0,1,2999) do @echo line%i"]);
+    let (_session, events) = open(&gate, &launch);
     let mut frames = Vec::new();
     let mut output = Vec::new();
     loop {
@@ -172,13 +230,32 @@ fn output_is_delivered_in_frames_at_most_one_per_16_ms() {
     }
 }
 
+fn parse_job_pid(output: &str) -> u32 {
+    let rest = output.split("job=").nth(1).expect("job= prefix");
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().expect("job pid")
+}
+
 #[test]
 fn closing_the_terminal_kills_the_shell_and_its_background_jobs() {
     let dir = tempfile::tempdir().unwrap();
     let gate = gate(dir.path(), true);
-    let (session, events) = open(&gate, &sh("sleep 600 & echo job=$!; wait"));
+    #[cfg(unix)]
+    let launch = sh("sleep 600 & echo job=$!; wait");
+    #[cfg(windows)]
+    let launch = stubborn_job_launch();
+    let (session, events) = open(&gate, &launch);
+    #[cfg(unix)]
     let output = read_until(&events, "\n");
-    let job: u32 = output.split("job=").nth(1).unwrap().trim().parse().unwrap();
+    #[cfg(windows)]
+    let output = read_until(&events, "=");
+    #[cfg(windows)]
+    let output = if output.matches('=').count() < 2 {
+        format!("{output}{}", read_until(&events, "\n"))
+    } else {
+        output
+    };
+    let job = parse_job_pid(&output);
     let shell = session.process_id();
     assert!(is_alive(shell) && is_alive(job));
     drop(session);
@@ -193,9 +270,16 @@ fn helper_host_with_a_terminal() {
         return;
     };
     let gate = gate(std::path::Path::new(&dir), true);
-    let (session, events) = open(&gate, &sh("sleep 600 & echo job=$!; wait"));
+    #[cfg(unix)]
+    let launch = sh("sleep 600 & echo job=$!; wait");
+    #[cfg(windows)]
+    let launch = stubborn_job_launch();
+    let (session, events) = open(&gate, &launch);
+    #[cfg(unix)]
     let output = read_until(&events, "\n");
-    let job = output.split("job=").nth(1).unwrap().trim().to_string();
+    #[cfg(windows)]
+    let output = read_until(&events, "\n");
+    let job = parse_job_pid(&output);
     println!("\nPIDS {} {}", session.process_id(), job);
     std::thread::sleep(Duration::from_secs(600));
 }

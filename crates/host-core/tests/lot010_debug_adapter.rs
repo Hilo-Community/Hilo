@@ -98,20 +98,21 @@ fn wait_for(
             )
         });
         assert!(!frame.is_empty());
+        for event in &frame {
+            assert_ne!(
+                event.event, "launchFailed",
+                "debug launch failed: {}",
+                event.body
+            );
+        }
         seen.extend(frame.into_iter().map(|event| (at, event)));
     }
 }
 
-fn is_alive(pid: u32) -> bool {
-    let output = std::process::Command::new("ps")
-        .args(["-o", "stat=", "-p", &pid.to_string()])
-        .output()
-        .unwrap();
-    output.status.success()
-        && !String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .starts_with('Z')
-}
+#[path = "../../../test-support/process.rs"]
+mod process_checks;
+#[cfg(unix)]
+use process_checks::is_alive;
 
 #[test]
 fn nothing_is_launched_for_an_untrusted_workspace_or_a_program_outside_it() {
@@ -259,16 +260,9 @@ fn stopping_the_session_kills_the_adapter_and_the_debuggee() {
     assert!(is_alive(debuggee) && is_alive(adapter));
     // The debuggee is in the adapter's process group, so the orphan watchdog that kills the
     // adapter's group on an abrupt Host exit kills it too.
-    let group = |pid: u32| {
-        let output = std::process::Command::new("ps")
-            .args(["-o", "pgid=", "-p", &pid.to_string()])
-            .output()
-            .unwrap();
-        String::from_utf8_lossy(&output.stdout).trim().to_string()
-    };
     assert_eq!(
-        group(debuggee),
-        adapter.to_string(),
+        process_checks::process_group(debuggee),
+        adapter,
         "debuggee is outside the adapter's group"
     );
 

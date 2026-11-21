@@ -34,21 +34,40 @@ pub struct NodeToolchain {
 impl NodeToolchain {
     /// `npm` ready to take its arguments, and the `PATH` entry its children need.
     pub fn npm_command(&self) -> Result<Command, String> {
+        let node = plain_path(self.node.clone());
         let mut command = if let Some(cli) = &self.npm_cli {
-            let mut command = Command::new(&self.node);
-            command.arg(cli);
+            let mut command = Command::new(&node);
+            command.arg(plain_path(cli.clone()));
             command
         } else if let Some(program) = &self.npm_program {
-            Command::new(program)
+            Command::new(plain_path(program.clone()))
         } else {
             return Err("npm was not found next to this Node.js".into());
         };
         command.env_clear();
-        for (key, value) in clean_environment(self.node.parent()) {
+        for (key, value) in clean_environment(node.parent()) {
             command.env(key, value);
         }
         Ok(command)
     }
+}
+
+/// `\\?\C:\dir` to `C:\dir`: Node.js on Windows fails in `fs.realpathSync` (`EISDIR, lstat 'C:'`)
+/// when its entry script argument uses the verbatim `\\?\` prefix returned by `canonicalize`.
+pub(crate) fn plain_path(path: PathBuf) -> PathBuf {
+    if let Some(text) = path.to_str() {
+        if let Some(rest) = text.strip_prefix(r"\\?\") {
+            let bytes = rest.as_bytes();
+            if bytes.len() >= 3
+                && bytes[0].is_ascii_alphabetic()
+                && bytes[1] == b':'
+                && bytes[2] == b'\\'
+            {
+                return PathBuf::from(rest);
+            }
+        }
+    }
+    path
 }
 
 /// The environment of this process without what would redirect Node, with Node's folder first
@@ -159,7 +178,9 @@ fn probe(node: &Path) -> Result<u32, String> {
 
 /// Where npm lives for the Node at `node`.
 fn npm_for(node: &Path) -> (Option<PathBuf>, Option<PathBuf>) {
-    let real = std::fs::canonicalize(node).unwrap_or_else(|_| node.to_path_buf());
+    let real = std::fs::canonicalize(node)
+        .map(plain_path)
+        .unwrap_or_else(|_| plain_path(node.to_path_buf()));
     let real_dir = real.parent().map(Path::to_path_buf).unwrap_or_default();
     let cli = [
         // Unix: <prefix>/bin/node and <prefix>/lib/node_modules/npm
@@ -179,11 +200,18 @@ fn npm_for(node: &Path) -> (Option<PathBuf>, Option<PathBuf>) {
     ]
     .into_iter()
     .find(|candidate| candidate.is_file())
-    .and_then(|candidate| std::fs::canonicalize(candidate).ok());
-    let dir = node.parent().map(Path::to_path_buf).unwrap_or_default();
-    let program = [dir.join("npm"), dir.join("npm.cmd")]
-        .into_iter()
-        .find(|candidate| candidate.is_file());
+    .and_then(|candidate| std::fs::canonicalize(candidate).ok())
+    .map(plain_path);
+    let dir = plain_path(node.to_path_buf())
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
+    let programs = if cfg!(windows) {
+        [dir.join("npm.cmd"), dir.join("npm.exe")]
+    } else {
+        [dir.join("npm"), dir.join("npm.cmd")]
+    };
+    let program = programs.into_iter().find(|candidate| candidate.is_file());
     (cli, program)
 }
 
@@ -204,6 +232,7 @@ impl NodeLocator for SystemNode {
         for node in candidates.into_iter().filter(|node| node.is_file()) {
             match probe(&node) {
                 Ok(major) if major >= MIN_NODE_MAJOR => {
+                    let node = plain_path(node);
                     let (npm_cli, npm_program) = npm_for(&node);
                     if npm_cli.is_none() && npm_program.is_none() {
                         continue;
@@ -274,5 +303,57 @@ mod tests {
             npm_program: None,
         };
         assert!(toolchain.npm_command().is_err());
+    }
+
+    #[test]
+    fn windows_verbatim_drive_prefixes_are_stripped_for_node() {
+        assert_eq!(
+            plain_path(PathBuf::from(
+                r"\\?\C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js"
+            )),
+            PathBuf::from(r"C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js")
+        );
+        assert_eq!(
+            plain_path(PathBuf::from(r"C:\Program Files\nodejs\node.exe")),
+            PathBuf::from(r"C:\Program Files\nodejs\node.exe")
+        );
+        assert_eq!(
+            plain_path(PathBuf::from(r"\\server\share\node.exe")),
+            PathBuf::from(r"\\server\share\node.exe")
+        );
+        let toolchain = NodeToolchain {
+            node: PathBuf::from(r"\\?\C:\Program Files\nodejs\node.exe"),
+            npm_cli: Some(PathBuf::from(
+                r"\\?\C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js",
+            )),
+            npm_program: None,
+        };
+        let command = toolchain.npm_command().unwrap();
+        assert_eq!(command.get_program(), r"C:\Program Files\nodejs\node.exe");
+        let args: Vec<_> = command.get_args().collect();
+        assert_eq!(
+            args,
+            [std::ffi::OsStr::new(
+                r"C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js"
+            )]
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let node = dir.path().join("node.exe");
+        let cli = dir
+            .path()
+            .join("node_modules")
+            .join("npm")
+            .join("bin")
+            .join("npm-cli.js");
+        std::fs::create_dir_all(cli.parent().unwrap()).unwrap();
+        std::fs::write(&node, "").unwrap();
+        std::fs::write(&cli, "").unwrap();
+        let (found_cli, _) = npm_for(&node);
+        let found_cli = found_cli.unwrap();
+        assert!(
+            !found_cli.to_string_lossy().starts_with(r"\\?\"),
+            "npm_cli must not carry a verbatim prefix: {}",
+            found_cli.display()
+        );
     }
 }

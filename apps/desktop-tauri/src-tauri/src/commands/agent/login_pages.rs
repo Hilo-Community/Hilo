@@ -129,10 +129,14 @@ fn strip_terminal_escapes(text: &str) -> String {
             continue;
         }
         match chars.next() {
-            // CSI: parameters, then one final byte.
+            // CSI: parameters, then one final byte. Cursor-positioning and erase sequences
+            // separate screen cells in TUIs and Windows ConPTY without emitting `\r\n`.
             Some('[') => {
                 for next in chars.by_ref() {
                     if ('\u{40}'..='\u{7e}').contains(&next) {
+                        if next != 'm' && !out.ends_with(char::is_whitespace) {
+                            out.push(' ');
+                        }
                         break;
                     }
                 }
@@ -237,5 +241,14 @@ mod tests {
         assert!(watch
             .feed(b"https://claude.com/again\r\n", &hosts)
             .is_none());
+        let qwen_hosts = vec!["chat.qwen.ai".to_string()];
+        assert_eq!(
+            login_url(
+                "\u{1b}[10;1Hhttps://chat.qwen.ai/authorize?user_code=ABCD-1234\u{1b}[0m\u{1b}[11;1HWaiting",
+                &qwen_hosts
+            )
+            .as_deref(),
+            Some("https://chat.qwen.ai/authorize?user_code=ABCD-1234")
+        );
     }
 }

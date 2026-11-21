@@ -271,7 +271,7 @@ mod tests {
         HostText {
             root: root.canonicalize().unwrap(),
             bridge: Arc::new(Mutex::new(bridge)),
-            mcp: None,
+            mcp: Mutex::new(None),
             _task: None,
         }
     }

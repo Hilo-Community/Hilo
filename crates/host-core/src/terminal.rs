@@ -6,7 +6,9 @@
 //! dies abruptly.
 
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+#[cfg(windows)]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -16,6 +18,24 @@ use thiserror::Error;
 
 use crate::process::{kill_process_group, OrphanWatchdog, SupervisionError};
 use crate::trust::{GatedCapability, TrustError, WorkspaceTrustGate};
+
+/// `\\?\C:\dir` to `C:\dir`: `cmd.exe` rejects the verbatim prefix returned by `canonicalize`
+/// ("UNC paths are not supported. Defaulting to Windows directory").
+fn plain_cwd(path: &Path) -> PathBuf {
+    if let Some(text) = path.to_str() {
+        if let Some(rest) = text.strip_prefix(r"\\?\") {
+            let bytes = rest.as_bytes();
+            if bytes.len() >= 3
+                && bytes[0].is_ascii_alphabetic()
+                && bytes[1] == b':'
+                && bytes[2] == b'\\'
+            {
+                return PathBuf::from(rest);
+            }
+        }
+    }
+    path.to_path_buf()
+}
 
 /// Output is sent at most once per frame (`AGENTS.md`: 16 ms stream batching).
 pub const TERMINAL_FRAME: Duration = Duration::from_millis(16);
@@ -72,8 +92,8 @@ pub struct TerminalLaunch {
 
 pub struct TerminalSession {
     writer: Mutex<Box<dyn Write + Send>>,
-    master: Mutex<Box<dyn MasterPty + Send>>,
-    child: Mutex<Box<dyn Child + Send + Sync>>,
+    master: Arc<Mutex<Option<Box<dyn MasterPty + Send>>>>,
+    child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
     watchdog: Mutex<Option<OrphanWatchdog>>,
     pid: u32,
 }
@@ -110,7 +130,7 @@ impl TerminalSession {
             }
             None => CommandBuilder::new_default_prog(),
         };
-        command.cwd(gate.workspace_root());
+        command.cwd(plain_cwd(gate.workspace_root()));
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
         command.env("TERM_PROGRAM", "Coloride");
@@ -120,7 +140,13 @@ impl TerminalSession {
         drop(pair.slave);
         gate.note_spawned();
         let pid = child.process_id().unwrap_or_default();
-        let watchdog = match OrphanWatchdog::start(pid) {
+        #[cfg(unix)]
+        let watchdog_result = OrphanWatchdog::start(pid);
+        #[cfg(windows)]
+        let watchdog_result = OrphanWatchdog::for_raw_handle(child.as_raw_handle());
+        #[cfg(not(any(unix, windows)))]
+        let watchdog_result = OrphanWatchdog::start(pid);
+        let watchdog = match watchdog_result {
             Ok(watchdog) => watchdog,
             Err(error) => {
                 // Never leave an unsupervised shell running.
@@ -132,11 +158,49 @@ impl TerminalSession {
         };
         let reader = pair.master.try_clone_reader().map_err(pty_error)?;
         let writer = pair.master.take_writer().map_err(pty_error)?;
-        spawn_output_pump(reader, sink);
+        #[cfg(windows)]
+        let mut writer = writer;
+        #[cfg(windows)]
+        {
+            // `portable-pty` creates ConPTY with `PSEUDOCONSOLE_INHERIT_CURSOR`, which makes
+            // `conhost.exe` emit `ESC [ 6 n` and block all output until the initial cursor
+            // position (`ESC [ 1 ; 1 R`) is reported on the input pipe.
+            writer.write_all(b"\x1b[1;1R").map_err(pty_error)?;
+            writer.flush().map_err(pty_error)?;
+        }
+        let master = Arc::new(Mutex::new(Some(pair.master)));
+        let child = Arc::new(Mutex::new(child));
+        #[cfg(windows)]
+        let active = Arc::new(AtomicBool::new(false));
+        spawn_output_pump(
+            reader,
+            sink,
+            #[cfg(windows)]
+            Arc::clone(&active),
+        );
+        #[cfg(windows)]
+        {
+            let child = Arc::clone(&child);
+            let master = Arc::clone(&master);
+            std::thread::spawn(move || {
+                while !matches!(lock(&child).try_wait(), Ok(Some(_))) {
+                    if lock(&master).is_none() {
+                        return;
+                    }
+                    std::thread::sleep(TERMINAL_FRAME);
+                }
+                while active.swap(false, Ordering::SeqCst) {
+                    std::thread::sleep(TERMINAL_FRAME);
+                }
+                // Closing the ConPTY pseudo-console flushes conhost.exe and closes its output
+                // pipe, so the reader thread sees EOF once the shell has exited.
+                let _ = lock(&master).take();
+            });
+        }
         Ok(Self {
             writer: Mutex::new(writer),
-            master: Mutex::new(pair.master),
-            child: Mutex::new(child),
+            master,
+            child,
             watchdog: Mutex::new(Some(watchdog)),
             pid,
         })
@@ -156,7 +220,11 @@ impl TerminalSession {
     }
 
     pub fn resize(&self, size: TerminalSize) -> Result<(), TerminalError> {
-        lock(&self.master).resize(size.pty()).map_err(pty_error)
+        let master = lock(&self.master);
+        let Some(master) = master.as_ref() else {
+            return Err(pty_error("terminal has exited"));
+        };
+        master.resize(size.pty()).map_err(pty_error)
     }
 
     /// Whether the shell has exited.
@@ -167,6 +235,10 @@ impl TerminalSession {
 
     /// Kills the shell and every job it started, then reaps it.
     pub fn kill(&self) {
+        #[cfg(windows)]
+        if let Some(watchdog) = lock(&self.watchdog).take() {
+            watchdog.stop();
+        }
         let mut child = lock(&self.child);
         if !matches!(child.try_wait(), Ok(Some(_))) {
             // Not reaped, so the group id still belongs to this shell.
@@ -174,9 +246,12 @@ impl TerminalSession {
             let _ = child.kill();
             let _ = child.wait();
         }
+        drop(child);
         if let Some(watchdog) = lock(&self.watchdog).take() {
             watchdog.stop();
         }
+        #[cfg(windows)]
+        let _ = lock(&self.master).take();
     }
 }
 
@@ -188,7 +263,11 @@ impl Drop for TerminalSession {
 
 /// Reads the pty on one thread and hands frames to `sink` from another, so a slow consumer
 /// never stalls the shell and a fast shell never floods the consumer.
-fn spawn_output_pump(mut reader: Box<dyn Read + Send>, sink: TerminalSink) {
+fn spawn_output_pump(
+    mut reader: Box<dyn Read + Send>,
+    sink: TerminalSink,
+    #[cfg(windows)] active: Arc<AtomicBool>,
+) {
     let (chunks, received) = mpsc::channel::<Vec<u8>>();
     std::thread::spawn(move || {
         let mut buffer = [0_u8; 16 * 1024];
@@ -196,6 +275,8 @@ fn spawn_output_pump(mut reader: Box<dyn Read + Send>, sink: TerminalSink) {
             match reader.read(&mut buffer) {
                 Ok(0) | Err(_) => break, // EOF / EIO once the shell and its jobs are gone
                 Ok(read) => {
+                    #[cfg(windows)]
+                    active.store(true, Ordering::SeqCst);
                     if chunks.send(buffer[..read].to_vec()).is_err() {
                         break;
                     }

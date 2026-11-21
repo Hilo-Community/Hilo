@@ -114,7 +114,7 @@ export interface TimelineRef {
 export interface AgentState {
   terminalAuth: { name: string; args: string[]; env: Record<string, string> } | null;
   /** The sign-in methods to choose from, while the Host waits for the user's pick. */
-  authChoice: { id: string; name: string }[] | null;
+  authChoice: { id: string; name: string; type?: string }[] | null;
   ready: boolean;
   busy: boolean;
   /** The conversation was loaded from a previous run; the agent does not remember it. */
@@ -375,8 +375,17 @@ export class AgentStore extends AtomicStore<AgentState> {
           case "authChoice":
             s.authChoice = event.methods.flatMap((item) => {
               const method = record(item);
+              const meta = record(method._meta);
+              const kind =
+                typeof method.type === "string"
+                  ? method.type
+                  : typeof meta.type === "string"
+                    ? meta.type
+                    : meta["terminal-auth"] !== undefined
+                      ? "terminal"
+                      : undefined;
               return typeof method.id === "string" && typeof method.name === "string"
-                ? [{ id: method.id, name: method.name }]
+                ? [{ id: method.id, name: method.name, ...(kind ? { type: kind } : {}) }]
                 : [];
             });
             break;

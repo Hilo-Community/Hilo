@@ -116,8 +116,8 @@ pub fn terminal_close_command(state: tauri::State<'_, DesktopAppState>, id: u32)
     }
 }
 
-/// Real shells: they need process supervision, which only exists on Unix.
-#[cfg(all(test, unix))]
+/// Real shells: they need process supervision (Unix process groups + watchdog, or Windows Job Objects).
+#[cfg(all(test, any(unix, windows)))]
 mod tests {
     use super::*;
     use crate::commands::trust::{apply_trust_decision, revoke_workspace_trust};
@@ -156,7 +156,7 @@ mod tests {
 }
 
 /// Without process supervision a terminal is refused, even in a trusted folder (fail closed).
-#[cfg(all(test, not(unix)))]
+#[cfg(all(test, not(any(unix, windows))))]
 mod unsupported_platform_tests {
     use super::*;
     use crate::commands::trust::apply_trust_decision;

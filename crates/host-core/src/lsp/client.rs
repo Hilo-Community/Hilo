@@ -5,7 +5,7 @@
 //! untrusted data: it is parsed defensively and never interpreted as an instruction.
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
+use std::io::BufReader;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 use super::transport::{read_message, write_message};
-use crate::process::SupervisedChild;
+use crate::process::{diagnostics::StderrCapture, SupervisedChild};
 use crate::trust::{GatedCommand, TrustError};
 
 #[derive(Debug, Error)]
@@ -25,6 +25,8 @@ pub enum LspError {
     Trust(#[from] TrustError),
     #[error("language server exited or closed its connection")]
     Disconnected,
+    #[error("{detail}")]
+    ProcessExited { detail: String },
     #[error("language server did not answer `{method}` in time")]
     Timeout { method: String },
     #[error("language server answered `{method}` with an error: {message}")]
@@ -49,6 +51,7 @@ pub struct LspClient {
     alive: Arc<AtomicBool>,
     /// Dropping the client drops the child, which kills its whole process group.
     child: Mutex<SupervisedChild>,
+    stderr: StderrCapture,
 }
 
 impl std::fmt::Debug for LspClient {
@@ -91,12 +94,7 @@ impl LspClient {
             // Dropping stdin here closes the pipe: a well-behaved server exits on EOF.
         });
 
-        std::thread::spawn(move || {
-            // Drained so a chatty server never blocks on a full pipe.
-            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-                tracing::debug!(target: "coloride::lsp", "{line}");
-            }
-        });
+        let stderr = StderrCapture::start(stderr);
 
         {
             let alive = Arc::clone(&alive);
@@ -119,6 +117,7 @@ impl LspClient {
             next_id: AtomicI64::new(1),
             alive,
             child: Mutex::new(child),
+            stderr,
         })
     }
 
@@ -135,11 +134,11 @@ impl LspClient {
 
     pub fn notify(&self, method: &str, params: Value) -> Result<(), LspError> {
         if !self.is_alive() {
-            return Err(LspError::Disconnected);
+            return Err(self.disconnected());
         }
         self.outgoing
             .send(json!({"jsonrpc": "2.0", "method": method, "params": params}))
-            .map_err(|_| LspError::Disconnected)
+            .map_err(|_| self.disconnected())
     }
 
     pub fn request(
@@ -159,7 +158,7 @@ impl LspClient {
         params: Value,
     ) -> Result<PendingRequest<'_>, LspError> {
         if !self.is_alive() {
-            return Err(LspError::Disconnected);
+            return Err(self.disconnected());
         }
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (answer, answered) = mpsc::channel();
@@ -169,7 +168,7 @@ impl LspClient {
             .send(json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}));
         if sent.is_err() {
             lock(&self.pending).remove(&id);
-            return Err(LspError::Disconnected);
+            return Err(self.disconnected());
         }
         Ok(PendingRequest {
             client: self,
@@ -177,6 +176,13 @@ impl LspClient {
             method: method.to_string(),
             answered,
         })
+    }
+
+    fn disconnected(&self) -> LspError {
+        let detail = self
+            .stderr
+            .with_context("language server exited or closed its connection");
+        LspError::ProcessExited { detail }
     }
 
     /// Asks the server to stop, then kills its process group whatever it answered.
@@ -215,7 +221,7 @@ impl PendingRequest<'_> {
                     method: self.method,
                 })
             }
-            Err(RecvTimeoutError::Disconnected) => Err(LspError::Disconnected),
+            Err(RecvTimeoutError::Disconnected) => Err(self.client.disconnected()),
         }
     }
 }

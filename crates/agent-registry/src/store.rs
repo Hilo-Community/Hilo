@@ -77,6 +77,7 @@ impl Store {
         version: &str,
     ) -> Result<PathBuf, RegistryError> {
         let mut location = fs::canonicalize(self.packages())
+            .map(crate::node::plain_path)
             .map_err(RegistryError::io("Reading runtime cache root"))?;
         for component in [id, version] {
             if component.is_empty()

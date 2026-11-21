@@ -250,7 +250,9 @@ impl LanguageServices {
         let mut attempt = 1;
         loop {
             match LanguageServerSession::start(&self.gate, profile, self.sink.clone()) {
-                Err(LspError::Disconnected) if attempt < START_ATTEMPTS => {
+                Err(LspError::Disconnected | LspError::ProcessExited { .. })
+                    if attempt < START_ATTEMPTS =>
+                {
                     tracing::debug!(
                         target: "coloride::lsp",
                         "{:?} disconnected while starting (attempt {attempt}), starting it again",

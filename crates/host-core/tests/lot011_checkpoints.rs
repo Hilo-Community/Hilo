@@ -624,6 +624,20 @@ fn a_task_worktree_materializes_the_checkpoint_by_copy_on_write_or_fails_closed(
             !task_dir_exists(worktrees.path(), "task-wt"),
             "a partial worktree was left behind"
         );
+        let worktree = manager.provision_worktree_or_copy("task-wt").unwrap();
+        assert_eq!(worktree.cloned_files, 0);
+        assert_eq!(worktree.written_files, 51);
+        let wt = &worktree.path;
+        assert_eq!(
+            read(wt, "src/module_0.ts"),
+            b"export const n = 'unsaved';\n"
+        );
+        assert_eq!(read(wt, "src/module_1.ts"), b"export const n = 1;\n");
+        assert_eq!(read(wt, "src/module_42.ts"), b"export const n = 42;\n");
+        assert_eq!(read(wt, "untracked.txt"), b"untracked\n");
+        assert!(!wt.join(".git").exists());
+        assert!(manager.release_worktree("task-wt").unwrap());
+        assert!(!wt.exists());
         return;
     }
 

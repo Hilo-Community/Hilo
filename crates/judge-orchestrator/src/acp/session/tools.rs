@@ -2,6 +2,22 @@
 //! broker, and the user's answers to permission requests.
 use super::*;
 
+pub(super) fn plain_path(path: &Path) -> PathBuf {
+    if let Some(text) = path.to_str() {
+        if let Some(rest) = text.strip_prefix(r"\\?\") {
+            let bytes = rest.as_bytes();
+            if bytes.len() >= 3
+                && bytes[0].is_ascii_alphabetic()
+                && bytes[1] == b':'
+                && bytes[2] == b'\\'
+            {
+                return PathBuf::from(rest);
+            }
+        }
+    }
+    path.to_path_buf()
+}
+
 impl Session {
     pub(super) fn translate(&self, message: &Value, key: &str) -> Result<ToolCall, String> {
         let params = &message["params"];
@@ -70,10 +86,39 @@ impl Session {
     /// ACP paths are absolute. One inside the worktree becomes the relative path the policy
     /// checks; any other path is passed on unchanged, for the policy to refuse.
     pub(super) fn relative(&self, path: &str) -> String {
-        match std::path::Path::new(path).strip_prefix(&self.host.worktree_root) {
+        let candidate = plain_path(std::path::Path::new(path));
+        let root = plain_path(&self.host.worktree_root);
+        match candidate.strip_prefix(&root) {
             Ok(rest) if rest.as_os_str().is_empty() => ".".into(),
             Ok(rest) => rest.to_string_lossy().replace('\\', "/"),
-            Err(_) => path.into(),
+            Err(_) => {
+                if cfg!(windows) {
+                    let mut cand_comps = candidate.components();
+                    let mut matched = true;
+                    for root_comp in root.components() {
+                        let Some(cand_comp) = cand_comps.next() else {
+                            matched = false;
+                            break;
+                        };
+                        if !cand_comp
+                            .as_os_str()
+                            .to_string_lossy()
+                            .eq_ignore_ascii_case(&root_comp.as_os_str().to_string_lossy())
+                        {
+                            matched = false;
+                            break;
+                        }
+                    }
+                    if matched {
+                        let rest = cand_comps.as_path();
+                        if rest.as_os_str().is_empty() {
+                            return ".".into();
+                        }
+                        return rest.to_string_lossy().replace('\\', "/");
+                    }
+                }
+                path.into()
+            }
         }
     }
 

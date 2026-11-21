@@ -142,7 +142,9 @@
 
 .coloride-agent-terminal-login {
   display: flex;
+  flex: 1;
   flex-direction: column;
+  min-height: 0;
   gap: 6px;
 }
 .coloride-agent-terminal-login[hidden],
@@ -159,10 +161,20 @@
   font-size: 13px;
 }
 .coloride-agent-login-screen {
+  flex: 1;
   min-width: 0;
+  min-height: 200px;
   width: 100%;
-  height: 200px;
   margin-top: 4px;
+  overflow: hidden;
+}
+.coloride-agent-login-screen > .xterm {
+  height: 100%;
+  padding: 4px 0;
+  background: var(--color-main);
+}
+.coloride-agent-login-screen .xterm-viewport {
+  background-color: transparent !important;
 }
 .coloride-agent-terminal-login pre {
   margin: 0;

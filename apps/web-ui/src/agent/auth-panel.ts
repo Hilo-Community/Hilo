@@ -138,10 +138,12 @@ const API_KEY_METHOD = /api[\s_-]?key/i;
 export function authChoiceCard(
   doc: Document,
   agentName: string,
-  methods: readonly { id: string; name: string }[],
+  methods: readonly { id: string; name: string; type?: string }[],
   choose: (methodId: string) => void,
 ): HTMLElement | null {
-  const offered = methods.filter((m) => !API_KEY_METHOD.test(m.id) && !API_KEY_METHOD.test(m.name));
+  const offered = methods.filter(
+    (m) => m.type === "terminal" || (!API_KEY_METHOD.test(m.id) && !API_KEY_METHOD.test(m.name)),
+  );
   if (offered.length === 0) return null;
   const card = doc.createElement("section");
   card.className = "coloride-agent-auth-choice";

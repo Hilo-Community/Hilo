@@ -20,8 +20,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.24.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -50,8 +48,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10.24.0
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -123,8 +119,6 @@ jobs:
       - name: Install pnpm
         if: runner.os != 'Windows'
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.24.0
 
       - name: Install Node.js
         if: runner.os != 'Windows'
@@ -154,7 +148,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run Cargo workspace tests
-        run: cargo test --workspace
+        run: cargo test --workspace --no-fail-fast
 
       - name: Verify protocol-types bindings are up-to-date (Zero Drift)
         run: |

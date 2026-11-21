@@ -8,7 +8,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, OwnedHandle};
 use std::path::PathBuf;
 use std::ptr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use windows_sys::Win32::Foundation::{
@@ -48,6 +48,10 @@ pub struct LaunchConfig {
     /// removed when the [`Process`] is dropped. A directory containing a junction, a symbolic
     /// link or a hard link is refused: the entry would follow it outside.
     pub writable_dirs: Vec<PathBuf>,
+    /// Read/execute shares. All ACL changes are journaled and scoped to the unique run SID.
+    pub read_only_dirs: Vec<PathBuf>,
+    /// Worktree paths whose contents this run must not read.
+    pub denied_read_paths: Vec<PathBuf>,
     /// Where the run is recorded until it has cleaned up (see [`crate::recover_stale_runs`]).
     pub journal_dir: PathBuf,
     /// Limits of the whole process tree.
@@ -89,8 +93,8 @@ pub struct Process {
     handle: OwnedHandle,
     pid: u32,
     job: Arc<Job>,
-    /// Dropped after `Drop::drop` has killed the tree.
-    _changes: Changes,
+    /// Released once `kill_tree` has terminated and waited on the tree.
+    changes: Mutex<Option<Changes>>,
 }
 
 /// What a run changed outside its process, undone when dropped: the access granted to
@@ -235,6 +239,49 @@ fn check_config(config: &LaunchConfig) -> io::Result<()> {
     Ok(())
 }
 
+/// AppContainer access is grant-gated: a deny on the package SID cannot carve a hole
+/// in a recursive allow. Split shares around exclusions, granting their ancestors
+/// only on the directory itself. Every resulting ACL mutation is journaled.
+fn read_grants(config: &LaunchConfig) -> io::Result<Vec<(PathBuf, bool)>> {
+    let denied = config
+        .denied_read_paths
+        .iter()
+        .map(std::fs::canonicalize)
+        .collect::<io::Result<Vec<_>>>()?;
+    for writable in &config.writable_dirs {
+        let writable = std::fs::canonicalize(writable)?;
+        if denied
+            .iter()
+            .any(|path| path.starts_with(&writable) || writable.starts_with(path))
+        {
+            return Err(invalid_input(
+                "a writable share overlaps a forbidden read path",
+            ));
+        }
+    }
+    let mut pending = config
+        .read_only_dirs
+        .iter()
+        .map(std::fs::canonicalize)
+        .collect::<io::Result<Vec<_>>>()?;
+    let mut grants = Vec::new();
+    while let Some(path) = pending.pop() {
+        if denied.iter().any(|denied| path.starts_with(denied)) {
+            continue;
+        }
+        let shallow = denied.iter().any(|denied| denied.starts_with(&path));
+        if shallow {
+            // Check before walking: reparse points must never widen the share.
+            crate::acl::ensure_self_contained(&path)?;
+            for entry in std::fs::read_dir(&path)? {
+                pending.push(entry?.path());
+            }
+        }
+        grants.push((path, shallow));
+    }
+    Ok(grants)
+}
+
 /// The child's ends of its three standard streams, and the Host's ends.
 struct Pipes {
     child: [OwnedHandle; 3],
@@ -264,6 +311,7 @@ fn pipes() -> io::Result<Pipes> {
 /// job. It inherits nothing from the Host but its three pipes.
 pub fn spawn(config: &LaunchConfig) -> io::Result<Spawned> {
     check_config(config)?;
+    let read_grants = read_grants(config)?;
     let program = wide_nul(config.program.as_os_str())?;
     let cwd = wide_nul(config.cwd.as_os_str())?;
     let args: Vec<Vec<u16>> = config.args.iter().map(|arg| utf16(arg)).collect();
@@ -279,30 +327,53 @@ pub fn spawn(config: &LaunchConfig) -> io::Result<Spawned> {
 
     // Recorded first: if anything below fails, or the Host dies, it is undone.
     let mut changes = Changes::default();
+    let changed_paths: Vec<_> = config
+        .writable_dirs
+        .iter()
+        .chain(read_grants.iter().map(|(path, _)| path))
+        .chain(&config.denied_read_paths)
+        .cloned()
+        .collect();
     changes.journal = Some(JournalEntry::create(
         &config.journal_dir,
         &config.container_name,
-        &config.writable_dirs,
+        &changed_paths,
     )?);
     let container = changes
         .container
         .insert(Container::create(&config.container_name)?);
     let sid = Arc::clone(container.sid());
     for dir in &config.writable_dirs {
-        changes.grants.push(Grant::full_access(dir, &sid)?);
+        let index = changes.grants.len();
+        changes.grants.push(Grant::prepare(dir, &sid)?);
+        changes.grants[index].full_access()?;
+    }
+    for (dir, shallow) in &read_grants {
+        let index = changes.grants.len();
+        changes.grants.push(Grant::prepare(dir, &sid)?);
+        if *shallow {
+            changes.grants[index].read_only_shallow()?;
+        } else {
+            changes.grants[index].read_only()?;
+        }
+    }
+    for path in &config.denied_read_paths {
+        let index = changes.grants.len();
+        changes.grants.push(Grant::prepare(path, &sid)?);
+        changes.grants[index].deny_read()?;
     }
     let job = Arc::new(Job::create(&config.limits)?);
     let pipes = pipes()?;
 
+    let inherited = pipes.child.each_ref().map(AsRawHandle::as_raw_handle);
     let capabilities = SECURITY_CAPABILITIES {
         AppContainerSid: sid.as_ptr(),
         Capabilities: ptr::null_mut(),
         CapabilityCount: 0,
         Reserved: 0,
     };
-    let inherited = pipes.child.each_ref().map(AsRawHandle::as_raw_handle);
     let mut attributes = AttributeList::new(2)?;
-    // SAFETY: `capabilities` is a local SECURITY_CAPABILITIES that outlives `CreateProcessW`.
+    // SAFETY: `capabilities` outlives CreateProcessW and refers to the live container SID.
     unsafe { attributes.set(PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES, &capabilities)? };
     // SAFETY: `inherited` is a local array of the three live child handles that outlives
     // `CreateProcessW`; only these handles are inherited.
@@ -350,7 +421,7 @@ pub fn spawn(config: &LaunchConfig) -> io::Result<Spawned> {
         handle: handle?,
         pid: info.dwProcessId,
         job,
-        _changes: changes,
+        changes: Mutex::new(Some(changes)),
     };
     // From here, an error drops `process`, which kills the still-suspended process.
     let thread = thread?;
@@ -409,7 +480,8 @@ impl Process {
         }
     }
 
-    /// Kills the process and everything it started.
+    /// Kills the process and everything it started, then releases file locks and permission
+    /// changes once the root process has exited.
     pub fn kill_tree(&self) {
         self.job.terminate();
         // Also the process itself, in case it never made it into the job (a failure between
@@ -417,6 +489,10 @@ impl Process {
         // SAFETY: the handle is a live process handle owned by `self`; failure only means the
         // process has already ended.
         unsafe { TerminateProcess(self.handle.as_raw_handle(), KILLED_EXIT_CODE) };
+        let _ = self.wait_for(5_000);
+        if let Ok(mut guard) = self.changes.lock() {
+            guard.take();
+        }
     }
 }
 
