@@ -74,6 +74,10 @@ fn environment_for<'a>(
     };
     for var in SYSTEM_VARS {
         if !include_host_profile_vars && matches!(var, "USERPROFILE" | "APPDATA" | "LOCALAPPDATA") {
+            // CreateProcessW still needs these entries for an AppContainer. Point them at
+            // this run's writable scratch space instead of omitting them (error 203) or
+            // exposing the Host's profile locations.
+            set(var.into(), tmp.as_os_str().to_os_string());
             continue;
         }
         if let Some(value) = std::env::var_os(var) {
@@ -434,6 +438,14 @@ mod tests {
             panic!("AppContainer required")
         };
         assert_eq!(config.writable_dirs, vec![super::plain(&scratch)]);
+        for name in ["USERPROFILE", "APPDATA", "LOCALAPPDATA"] {
+            let value = config
+                .env
+                .iter()
+                .find(|(key, _)| key.eq_ignore_ascii_case(name))
+                .map(|(_, value)| value.as_os_str());
+            assert_eq!(value, Some(super::plain(&scratch).as_os_str()));
+        }
         assert_eq!(
             config.read_only_dirs,
             vec![super::plain(&work.path().canonicalize().unwrap())]
