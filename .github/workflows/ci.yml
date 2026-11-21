@@ -148,7 +148,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run Cargo workspace tests
-        run: cargo test --workspace
+        run: cargo test --workspace --no-fail-fast
 
       - name: Verify protocol-types bindings are up-to-date (Zero Drift)
         run: |

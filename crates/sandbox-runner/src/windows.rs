@@ -133,6 +133,12 @@ impl AppContainerEngine {
     }
 
     fn launch_config(&self, spec: &ValidatedSpec) -> Result<LaunchConfig, SandboxError> {
+        if !spec.worktree_read_only && !spec.read_only_paths.is_empty() {
+            return Err(SandboxError::InvalidSpec(
+                "the Windows sandbox only supports read-only shares with a read-only worktree"
+                    .into(),
+            ));
+        }
         let root = plain(&spec.worktree_root);
         let mut denied_read_paths: Vec<_> = spec
             .denied_read_paths
@@ -425,12 +431,13 @@ mod tests {
         use super::{AppContainerEngine, Launch, OsSandboxEngine};
         use crate::SandboxSpec;
         let work = tempfile::tempdir().unwrap();
-        let file = work.path().join("source.txt");
+        let root = work.path().canonicalize().unwrap();
+        let file = root.join("source.txt");
         std::fs::write(&file, "unchanged").unwrap();
-        let scratch = work.path().join("scratch");
+        let scratch = root.join("scratch");
         std::fs::create_dir(&scratch).unwrap();
-        let engine = AppContainerEngine::with_journal_dir(work.path().join("journal"));
-        let mut spec = SandboxSpec::new(work.path(), std::env::current_exe().unwrap());
+        let engine = AppContainerEngine::with_journal_dir(root.join("journal"));
+        let mut spec = SandboxSpec::new(&root, std::env::current_exe().unwrap());
         spec.worktree_read_only = true;
         spec.denied_read_paths.push(file.clone());
         let mut validated = spec.validate().unwrap();
