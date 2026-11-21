@@ -157,7 +157,9 @@ impl TerminalSession {
             }
         };
         let reader = pair.master.try_clone_reader().map_err(pty_error)?;
-        let mut writer = pair.master.take_writer().map_err(pty_error)?;
+        let writer = pair.master.take_writer().map_err(pty_error)?;
+        #[cfg(windows)]
+        let mut writer = writer;
         #[cfg(windows)]
         {
             // `portable-pty` creates ConPTY with `PSEUDOCONSOLE_INHERIT_CURSOR`, which makes

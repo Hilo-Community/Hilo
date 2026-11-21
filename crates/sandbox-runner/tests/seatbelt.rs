@@ -416,22 +416,10 @@ fn a_long_lived_process_runs_in_the_sandbox_over_pipes() {
     let pid = child.id();
     drop(child);
     let deadline = Instant::now() + Duration::from_secs(10);
-    while Instant::now() < deadline
-        && std::process::Command::new("/bin/ps")
-            .args(["-p", &pid.to_string()])
-            .output()
-            .unwrap()
-            .status
-            .success()
-    {
+    while Instant::now() < deadline && common::is_alive(pid) {
         std::thread::sleep(Duration::from_millis(50));
     }
-    assert!(!std::process::Command::new("/bin/ps")
-        .args(["-p", &pid.to_string()])
-        .output()
-        .unwrap()
-        .status
-        .success());
+    assert!(!common::is_alive(pid));
 }
 
 /// A real build toolchain works in the sandbox: the TypeScript compiler (Node) type-checks a

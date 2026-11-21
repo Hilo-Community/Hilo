@@ -273,7 +273,9 @@ pub(super) fn start_task(
     Ok((Arc::new(repository), lease, signed, authority))
 }
 
-fn sandbox_runner(state: &DesktopAppState) -> Result<Arc<dyn sandbox_runner::SandboxRunner>, String> {
+fn sandbox_runner(
+    state: &DesktopAppState,
+) -> Result<Arc<dyn sandbox_runner::SandboxRunner>, String> {
     let mut cached = state
         .sandbox_runner
         .lock()
@@ -281,8 +283,9 @@ fn sandbox_runner(state: &DesktopAppState) -> Result<Arc<dyn sandbox_runner::San
     if let Some(runner) = cached.as_ref() {
         return Ok(Arc::clone(runner));
     }
-    let runner: Arc<dyn sandbox_runner::SandboxRunner> =
-        Arc::from(sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).map_err(|e| e.to_string())?);
+    let runner: Arc<dyn sandbox_runner::SandboxRunner> = Arc::from(
+        sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).map_err(|e| e.to_string())?,
+    );
     *cached = Some(Arc::clone(&runner));
     Ok(runner)
 }

@@ -1,13 +1,12 @@
 //! Creating the process inside the AppContainer and the Job Object, and watching it.
 
 use std::ffi::{c_void, OsStr, OsString};
-use std::fs::{self, File, OpenOptions};
+use std::fs::File;
 use std::io;
 use std::mem;
 use std::os::windows::ffi::OsStrExt;
-use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::io::{AsRawHandle, OwnedHandle};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::ptr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -49,6 +48,10 @@ pub struct LaunchConfig {
     /// removed when the [`Process`] is dropped. A directory containing a junction, a symbolic
     /// link or a hard link is refused: the entry would follow it outside.
     pub writable_dirs: Vec<PathBuf>,
+    /// Read/execute shares. All ACL changes are journaled and scoped to the unique run SID.
+    pub read_only_dirs: Vec<PathBuf>,
+    /// Worktree paths whose contents this run must not read.
+    pub denied_read_paths: Vec<PathBuf>,
     /// Where the run is recorded until it has cleaned up (see [`crate::recover_stale_runs`]).
     pub journal_dir: PathBuf,
     /// Limits of the whole process tree.
@@ -57,15 +60,6 @@ pub struct LaunchConfig {
     pub container_name: String,
     /// Whether the Host writes to the process; otherwise its stdin is at end of file.
     pub stdin_piped: bool,
-    /// Whether the process runs inside an AppContainer token (`false` for read-only ACP agent
-    /// sessions that need loopback gateway proxy access and read-only package shares).
-    pub use_app_container: bool,
-    /// Directories whose files are made read-only for the duration of the run (excluding
-    /// [`Self::writable_dirs`]).
-    pub read_only_dirs: Vec<PathBuf>,
-    /// Files or directories inside the worktree whose contents are locked against direct reading
-    /// for the duration of the run (`share_mode(0)`).
-    pub denied_read_paths: Vec<PathBuf>,
 }
 
 /// Limits the Job Object enforces on the whole process tree.
@@ -111,21 +105,10 @@ struct Changes {
     journal: Option<JournalEntry>,
     container: Option<Container>,
     grants: Vec<Grant>,
-    read_only_files: Vec<PathBuf>,
-    locked_files: Vec<File>,
 }
 
 impl Drop for Changes {
     fn drop(&mut self) {
-        self.locked_files.clear();
-        for file in self.read_only_files.drain(..) {
-            if let Ok(meta) = fs::symlink_metadata(&file) {
-                let mut perms = meta.permissions();
-                #[allow(clippy::permissions_set_readonly_false)]
-                perms.set_readonly(false);
-                let _ = fs::set_permissions(&file, perms);
-            }
-        }
         let mut undone = true;
         for grant in self.grants.drain(..) {
             undone &= grant.revoke().is_ok();
@@ -137,73 +120,6 @@ impl Drop for Changes {
             if undone {
                 journal.complete();
             }
-        }
-    }
-}
-
-fn mark_read_only(
-    dir: &Path,
-    writable_dirs: &[PathBuf],
-    changed: &mut Vec<PathBuf>,
-) -> io::Result<()> {
-    let mut pending = vec![dir.to_path_buf()];
-    while let Some(current) = pending.pop() {
-        if writable_dirs.iter().any(|w| current.starts_with(w)) {
-            continue;
-        }
-        let Ok(meta) = fs::symlink_metadata(&current) else {
-            continue;
-        };
-        if meta.file_type().is_symlink() {
-            continue;
-        }
-        if meta.is_dir() {
-            if current
-                .file_name()
-                .is_some_and(|name| name == "node_modules")
-            {
-                continue;
-            }
-            if let Ok(entries) = fs::read_dir(&current) {
-                for entry in entries.flatten() {
-                    pending.push(entry.path());
-                }
-            }
-        } else if !meta.permissions().readonly() {
-            let mut perms = meta.permissions();
-            perms.set_readonly(true);
-            if fs::set_permissions(&current, perms).is_ok() {
-                changed.push(current);
-            }
-        }
-    }
-    Ok(())
-}
-
-fn lock_denied_paths(
-    denied_paths: &[PathBuf],
-    writable_dirs: &[PathBuf],
-    locked: &mut Vec<File>,
-) {
-    let mut pending: Vec<PathBuf> = denied_paths.to_vec();
-    while let Some(current) = pending.pop() {
-        if writable_dirs.iter().any(|w| current.starts_with(w)) {
-            continue;
-        }
-        let Ok(meta) = fs::symlink_metadata(&current) else {
-            continue;
-        };
-        if meta.file_type().is_symlink() {
-            continue;
-        }
-        if meta.is_dir() {
-            if let Ok(entries) = fs::read_dir(&current) {
-                for entry in entries.flatten() {
-                    pending.push(entry.path());
-                }
-            }
-        } else if let Ok(file) = OpenOptions::new().read(true).share_mode(0).open(&current) {
-            locked.push(file);
         }
     }
 }
@@ -367,46 +283,50 @@ pub fn spawn(config: &LaunchConfig) -> io::Result<Spawned> {
 
     // Recorded first: if anything below fails, or the Host dies, it is undone.
     let mut changes = Changes::default();
-    let app_container_sid = if config.use_app_container {
-        changes.journal = Some(JournalEntry::create(
-            &config.journal_dir,
-            &config.container_name,
-            &config.writable_dirs,
-        )?);
-        let container = changes
-            .container
-            .insert(Container::create(&config.container_name)?);
-        let sid = Arc::clone(container.sid());
-        for dir in &config.writable_dirs {
-            changes.grants.push(Grant::full_access(dir, &sid)?);
-        }
-        Some(sid)
-    } else {
-        for dir in &config.read_only_dirs {
-            mark_read_only(dir, &config.writable_dirs, &mut changes.read_only_files)?;
-        }
-        lock_denied_paths(
-            &config.denied_read_paths,
-            &config.writable_dirs,
-            &mut changes.locked_files,
-        );
-        None
-    };
-    let job = Arc::new(Job::create(&config.limits, config.use_app_container)?);
+    let changed_paths: Vec<_> = config
+        .writable_dirs
+        .iter()
+        .chain(&config.read_only_dirs)
+        .chain(&config.denied_read_paths)
+        .cloned()
+        .collect();
+    changes.journal = Some(JournalEntry::create(
+        &config.journal_dir,
+        &config.container_name,
+        &changed_paths,
+    )?);
+    let container = changes
+        .container
+        .insert(Container::create(&config.container_name)?);
+    let sid = Arc::clone(container.sid());
+    for dir in &config.writable_dirs {
+        let index = changes.grants.len();
+        changes.grants.push(Grant::prepare(dir, &sid)?);
+        changes.grants[index].full_access()?;
+    }
+    for dir in &config.read_only_dirs {
+        let index = changes.grants.len();
+        changes.grants.push(Grant::prepare(dir, &sid)?);
+        changes.grants[index].read_only()?;
+    }
+    for path in &config.denied_read_paths {
+        let index = changes.grants.len();
+        changes.grants.push(Grant::prepare(path, &sid)?);
+        changes.grants[index].deny_read()?;
+    }
+    let job = Arc::new(Job::create(&config.limits)?);
     let pipes = pipes()?;
 
     let inherited = pipes.child.each_ref().map(AsRawHandle::as_raw_handle);
-    let capabilities = app_container_sid.as_ref().map(|sid| SECURITY_CAPABILITIES {
+    let capabilities = SECURITY_CAPABILITIES {
         AppContainerSid: sid.as_ptr(),
         Capabilities: ptr::null_mut(),
         CapabilityCount: 0,
         Reserved: 0,
-    });
-    let mut attributes = AttributeList::new(if capabilities.is_some() { 2 } else { 1 })?;
-    if let Some(capabilities) = &capabilities {
-        // SAFETY: `capabilities` is a local SECURITY_CAPABILITIES that outlives `CreateProcessW`.
-        unsafe { attributes.set(PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES, capabilities)? };
-    }
+    };
+    let mut attributes = AttributeList::new(2)?;
+    // SAFETY: `capabilities` outlives CreateProcessW and refers to the live container SID.
+    unsafe { attributes.set(PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES, &capabilities)? };
     // SAFETY: `inherited` is a local array of the three live child handles that outlives
     // `CreateProcessW`; only these handles are inherited.
     unsafe { attributes.set(PROC_THREAD_ATTRIBUTE_HANDLE_LIST, &inherited)? };

@@ -16,17 +16,10 @@ use host_core::{GatedCapability, WorkspaceTrustGate};
 const HELPER_ENV: &str = "COLORIDE_LOT010_HOST_HELPER_DIR";
 
 #[cfg(unix)]
-fn is_alive(pid: u32) -> bool {
-    // `ps -p` exits 0 only while the pid exists (a zombie has `Z` state: treat as dead).
-    let output = Command::new("ps")
-        .args(["-o", "stat=", "-p", &pid.to_string()])
-        .output()
-        .expect("ps");
-    output.status.success()
-        && !String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .starts_with('Z')
-}
+#[path = "../../../test-support/process.rs"]
+mod process_checks;
+#[cfg(unix)]
+use process_checks::is_alive;
 
 #[cfg(windows)]
 fn is_alive(pid: u32) -> bool {

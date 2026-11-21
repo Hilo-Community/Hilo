@@ -17,6 +17,8 @@
 
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, ExitStatus};
 
+pub(crate) mod diagnostics;
+
 /// Why a child could not be put under supervision.
 #[derive(Debug, thiserror::Error)]
 pub enum SupervisionError {
@@ -94,8 +96,8 @@ impl OrphanWatchdog {
                 "missing process handle",
             ))
         })?;
-        let job =
-            sandbox_windows::SupervisedJob::assign_raw(handle).map_err(SupervisionError::Watchdog)?;
+        let job = sandbox_windows::SupervisedJob::assign_raw(handle)
+            .map_err(SupervisionError::Watchdog)?;
         Ok(Self { job })
     }
 

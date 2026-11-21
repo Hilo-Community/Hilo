@@ -12,9 +12,9 @@
 //!   before any permission changes, since the access granted would follow the link outside.
 //! * **Crash safety:** each run is recorded in a journal (`%LOCALAPPDATA%\Coloride\sandbox-runs`)
 //!   until it has undone its changes; the self-test first undoes the runs of a Host that died.
-//! * **Shared read-only directories** (`read_only_paths`) are refused: sharing one would mean
-//!   changing the permissions of the user's own files, and nothing here could restore them if
-//!   the Host died in between. This engine says so instead of weakening the isolation.
+//! * **Read-only worktrees and shares:** read/execute ACLs grant access to the unique run SID;
+//!   forbidden content has deny ACLs. All changed paths are journaled before mutation and the
+//!   SID's entries are revoked on cleanup or crash recovery. Host permissions are preserved.
 //! * **Network:** no capability is granted, so there is no network at all, loopback included.
 //!   `NetworkPolicy::LocalProxyOnly` is therefore refused (as on Linux): LOT-014 hands the
 //!   agent another channel.
@@ -128,50 +128,43 @@ impl AppContainerEngine {
     }
 
     fn launch_config(&self, spec: &ValidatedSpec) -> Result<LaunchConfig, SandboxError> {
-        if !spec.worktree_read_only && !spec.read_only_paths.is_empty() {
-            return Err(SandboxError::InvalidSpec(
-                "the Windows sandbox cannot share read-only directories: that would change the \
-                 permissions of files outside the worktree"
-                    .to_string(),
-            ));
-        }
-        let mut denied_read_paths: Vec<PathBuf> =
-            spec.denied_read_paths.iter().map(|p| plain(p)).collect();
+        let root = plain(&spec.worktree_root);
+        let mut denied_read_paths: Vec<_> = spec
+            .denied_read_paths
+            .iter()
+            .map(|path| plain(path))
+            .collect();
         if spec.mediate_worktree_reads {
-            if let Ok(entries) = fs::read_dir(&spec.worktree_root) {
-                let program = plain(&spec.program);
-                let tmp = plain(&spec.tmp_dir);
-                for entry in entries.flatten() {
-                    let path = plain(&entry.path());
-                    if path != program && !tmp.starts_with(&path) && !path.starts_with(&tmp) {
-                        denied_read_paths.push(path);
-                    }
+            for entry in fs::read_dir(&spec.worktree_root)? {
+                let path = plain(&entry?.path());
+                if path != plain(&spec.program) && !plain(&spec.tmp_dir).starts_with(&path) {
+                    denied_read_paths.push(path);
                 }
             }
         }
-        let (writable_dirs, read_only_dirs) = if spec.worktree_read_only {
-            (
-                std::iter::once(plain(&spec.tmp_dir))
-                    .chain(spec.writable_paths.iter().map(|path| plain(path)))
-                    .collect(),
-                std::iter::once(plain(&spec.worktree_root))
-                    .chain(spec.read_only_paths.iter().map(|path| plain(path)))
-                    .collect(),
-            )
+        let writable_dirs = std::iter::once(if spec.worktree_read_only {
+            plain(&spec.tmp_dir)
         } else {
-            (
-                std::iter::once(plain(&spec.worktree_root))
-                    .chain(spec.writable_paths.iter().map(|path| plain(path)))
-                    .collect(),
-                Vec::new(),
-            )
-        };
+            root.clone()
+        })
+        .chain(spec.writable_paths.iter().map(|path| plain(path)))
+        .collect();
+        let mut read_only_dirs: Vec<_> = spec
+            .read_only_paths
+            .iter()
+            .map(|path| plain(path))
+            .collect();
+        if spec.worktree_read_only {
+            read_only_dirs.insert(0, root);
+        }
         Ok(LaunchConfig {
             program: plain(&spec.program),
             args: spec.args.clone(),
             cwd: plain(&spec.cwd),
             env: environment_for(&spec.env, &plain(&spec.tmp_dir), !spec.worktree_read_only),
             writable_dirs,
+            read_only_dirs,
+            denied_read_paths,
             journal_dir: self.journal_dir.clone(),
             limits: JobLimits {
                 max_processes: spec.limits.max_processes,
@@ -180,9 +173,6 @@ impl AppContainerEngine {
             },
             container_name: format!("coloride-{}", spec.run_id),
             stdin_piped: false,
-            use_app_container: !spec.worktree_read_only,
-            read_only_dirs,
-            denied_read_paths,
         })
     }
 }
@@ -286,13 +276,12 @@ impl Probe {
             cwd: self.work.clone(),
             env: environment([], tmp.path()),
             writable_dirs: vec![self.work.clone()],
+            read_only_dirs: Vec::new(),
+            denied_read_paths: Vec::new(),
             journal_dir: self.journal_dir.clone(),
             limits: JobLimits::default(),
             container_name: format!("coloride-selftest-{}", new_run_id()),
             stdin_piped: false,
-            use_app_container: true,
-            read_only_dirs: Vec::new(),
-            denied_read_paths: Vec::new(),
         };
         let mut child = SandboxedChild::spawn_prepared(
             Launch::AppContainer(Box::new(config)),
@@ -425,5 +414,35 @@ mod tests {
             Path::new(r"\\?\UNC\server\share")
         );
         assert_eq!(plain(Path::new(r"C:\work")), Path::new(r"C:\work"));
+    }
+    #[test]
+    fn read_only_and_denied_paths_are_in_the_appcontainer_launch_plan() {
+        use super::{AppContainerEngine, Launch, OsSandboxEngine};
+        use crate::SandboxSpec;
+        let work = tempfile::tempdir().unwrap();
+        let file = work.path().join("source.txt");
+        std::fs::write(&file, "unchanged").unwrap();
+        let scratch = work.path().join("scratch");
+        std::fs::create_dir(&scratch).unwrap();
+        let engine = AppContainerEngine::with_journal_dir(work.path().join("journal"));
+        let mut spec = SandboxSpec::new(work.path(), std::env::current_exe().unwrap());
+        spec.worktree_read_only = true;
+        spec.denied_read_paths.push(file.clone());
+        let mut validated = spec.validate().unwrap();
+        validated.tmp_dir = scratch.clone();
+        let Launch::AppContainer(config) = engine.prepare(&validated).unwrap() else {
+            panic!("AppContainer required")
+        };
+        assert_eq!(config.writable_dirs, vec![super::plain(&scratch)]);
+        assert_eq!(
+            config.read_only_dirs,
+            vec![super::plain(&work.path().canonicalize().unwrap())]
+        );
+        assert_eq!(
+            config.denied_read_paths,
+            vec![super::plain(&file.canonicalize().unwrap())]
+        );
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "unchanged");
+        assert!(!work.path().join("journal").exists());
     }
 }

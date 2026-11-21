@@ -234,7 +234,7 @@ fn an_account_sign_in_waits_for_the_users_choice_of_method() {
     session.stop();
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "macos")]
 #[test]
 fn terminal_login_uses_a_real_private_pty_and_reconnects_the_acp_transport() {
     let f = Fixture::new();

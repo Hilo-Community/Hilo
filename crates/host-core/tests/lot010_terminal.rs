@@ -98,16 +98,10 @@ fn read_until(events: &Receiver<(Instant, TerminalEvent)>, needle: &str) -> Stri
 }
 
 #[cfg(unix)]
-fn is_alive(pid: u32) -> bool {
-    let output = Command::new("ps")
-        .args(["-o", "stat=", "-p", &pid.to_string()])
-        .output()
-        .unwrap();
-    output.status.success()
-        && !String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .starts_with('Z')
-}
+#[path = "../../../test-support/process.rs"]
+mod process_checks;
+#[cfg(unix)]
+use process_checks::is_alive;
 
 #[cfg(windows)]
 fn is_alive(pid: u32) -> bool {
@@ -191,7 +185,10 @@ fn keystrokes_reach_the_shell_in_the_workspace_and_its_output_comes_back() {
         .unwrap();
     session.write(b"mode con\r\n").unwrap();
     let resized = read_until(&events, "132");
-    assert!(resized.contains("41") && resized.contains("132"), "{resized}");
+    assert!(
+        resized.contains("41") && resized.contains("132"),
+        "{resized}"
+    );
 }
 
 #[test]
