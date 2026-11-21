@@ -239,6 +239,49 @@ fn check_config(config: &LaunchConfig) -> io::Result<()> {
     Ok(())
 }
 
+/// AppContainer access is grant-gated: a deny on the package SID cannot carve a hole
+/// in a recursive allow. Split shares around exclusions, granting their ancestors
+/// only on the directory itself. Every resulting ACL mutation is journaled.
+fn read_grants(config: &LaunchConfig) -> io::Result<Vec<(PathBuf, bool)>> {
+    let denied = config
+        .denied_read_paths
+        .iter()
+        .map(std::fs::canonicalize)
+        .collect::<io::Result<Vec<_>>>()?;
+    for writable in &config.writable_dirs {
+        let writable = std::fs::canonicalize(writable)?;
+        if denied
+            .iter()
+            .any(|path| path.starts_with(&writable) || writable.starts_with(path))
+        {
+            return Err(invalid_input(
+                "a writable share overlaps a forbidden read path",
+            ));
+        }
+    }
+    let mut pending = config
+        .read_only_dirs
+        .iter()
+        .map(std::fs::canonicalize)
+        .collect::<io::Result<Vec<_>>>()?;
+    let mut grants = Vec::new();
+    while let Some(path) = pending.pop() {
+        if denied.iter().any(|denied| path.starts_with(denied)) {
+            continue;
+        }
+        let shallow = denied.iter().any(|denied| denied.starts_with(&path));
+        if shallow {
+            // Check before walking: reparse points must never widen the share.
+            crate::acl::ensure_self_contained(&path)?;
+            for entry in std::fs::read_dir(&path)? {
+                pending.push(entry?.path());
+            }
+        }
+        grants.push((path, shallow));
+    }
+    Ok(grants)
+}
+
 /// The child's ends of its three standard streams, and the Host's ends.
 struct Pipes {
     child: [OwnedHandle; 3],
@@ -268,6 +311,7 @@ fn pipes() -> io::Result<Pipes> {
 /// job. It inherits nothing from the Host but its three pipes.
 pub fn spawn(config: &LaunchConfig) -> io::Result<Spawned> {
     check_config(config)?;
+    let read_grants = read_grants(config)?;
     let program = wide_nul(config.program.as_os_str())?;
     let cwd = wide_nul(config.cwd.as_os_str())?;
     let args: Vec<Vec<u16>> = config.args.iter().map(|arg| utf16(arg)).collect();
@@ -286,7 +330,7 @@ pub fn spawn(config: &LaunchConfig) -> io::Result<Spawned> {
     let changed_paths: Vec<_> = config
         .writable_dirs
         .iter()
-        .chain(&config.read_only_dirs)
+        .chain(read_grants.iter().map(|(path, _)| path))
         .chain(&config.denied_read_paths)
         .cloned()
         .collect();
@@ -304,10 +348,14 @@ pub fn spawn(config: &LaunchConfig) -> io::Result<Spawned> {
         changes.grants.push(Grant::prepare(dir, &sid)?);
         changes.grants[index].full_access()?;
     }
-    for dir in &config.read_only_dirs {
+    for (dir, shallow) in &read_grants {
         let index = changes.grants.len();
         changes.grants.push(Grant::prepare(dir, &sid)?);
-        changes.grants[index].read_only()?;
+        if *shallow {
+            changes.grants[index].read_only_shallow()?;
+        } else {
+            changes.grants[index].read_only()?;
+        }
     }
     for path in &config.denied_read_paths {
         let index = changes.grants.len();

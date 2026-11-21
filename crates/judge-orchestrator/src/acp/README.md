@@ -100,8 +100,10 @@ is still the user's decision. Real provider agents are not claimed operational i
 4. Files larger than 64 KiB (one journaled summary) cannot be read or proposed; they are refused,
    never cut.
 5. Windows offline ACP sessions use an AppContainer with run-scoped read/execute ACLs for the
-   task snapshot and package shares, write access only to private runtime directories, and deny
-   ACLs for forbidden content. Every ACL change is journaled for recovery after a Host crash.
+   task snapshot and package shares, and write access only to private runtime directories.
+   Read grants are split around forbidden content, which never inherits a share grant; a
+   writable share overlapping forbidden content is rejected. Every ACL change is journaled
+   for recovery after a Host crash.
    Windows provider-proxy access and interactive ACP login remain unavailable: the backend
    must enforce the exact proxy endpoint and attach ConPTY to the AppContainer before these
    capabilities can be enabled. There is no user-token fallback. Native behavior needs Windows CI.

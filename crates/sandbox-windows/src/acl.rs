@@ -42,7 +42,13 @@ impl Drop for LocalMemory {
 
 /// Adds (`GRANT_ACCESS`) or removes (`REVOKE_ACCESS`) the entry of `sid` in the DACL of the
 /// directory `path` (NUL-terminated), inherited by everything it contains.
-fn update_dacl(path: &mut [u16], sid: &Sid, mode: ACCESS_MODE, permissions: u32) -> io::Result<()> {
+fn update_dacl(
+    path: &mut [u16],
+    sid: &Sid,
+    mode: ACCESS_MODE,
+    permissions: u32,
+    inheritance: u32,
+) -> io::Result<()> {
     let mut current: *mut ACL = ptr::null_mut();
     let mut descriptor: *mut c_void = ptr::null_mut();
     // SAFETY: `path` is NUL-terminated; only the DACL is requested (owner, group and SACL are
@@ -66,7 +72,7 @@ fn update_dacl(path: &mut [u16], sid: &Sid, mode: ACCESS_MODE, permissions: u32)
     let entry = EXPLICIT_ACCESS_W {
         grfAccessPermissions: permissions,
         grfAccessMode: mode,
-        grfInheritance: SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+        grfInheritance: inheritance,
         Trustee: TRUSTEE_W {
             pMultipleTrustee: ptr::null_mut(),
             MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
@@ -171,7 +177,13 @@ impl Grant {
     }
 
     pub(crate) fn full_access(&mut self) -> io::Result<()> {
-        update_dacl(&mut self.path, &self.sid, GRANT_ACCESS, FILE_ALL_ACCESS)
+        update_dacl(
+            &mut self.path,
+            &self.sid,
+            GRANT_ACCESS,
+            FILE_ALL_ACCESS,
+            SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+        )
     }
 
     /// Read and execute without permission to create, delete, change attributes or change ACLs.
@@ -181,6 +193,18 @@ impl Grant {
             &self.sid,
             GRANT_ACCESS,
             FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
+            SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+        )
+    }
+
+    /// Grants the directory itself without granting its forbidden descendants.
+    pub(crate) fn read_only_shallow(&mut self) -> io::Result<()> {
+        update_dacl(
+            &mut self.path,
+            &self.sid,
+            GRANT_ACCESS,
+            FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
+            0,
         )
     }
 
@@ -191,12 +215,13 @@ impl Grant {
             &self.sid,
             DENY_ACCESS,
             FILE_READ_DATA | FILE_EXECUTE,
+            SUB_CONTAINERS_AND_OBJECTS_INHERIT,
         )
     }
 
     /// Removes the access again.
     pub(crate) fn revoke(mut self) -> io::Result<()> {
-        update_dacl(&mut self.path, &self.sid, REVOKE_ACCESS, 0)
+        update_dacl(&mut self.path, &self.sid, REVOKE_ACCESS, 0, 0)
     }
 }
 
@@ -204,7 +229,7 @@ impl Grant {
 /// not do it itself. A directory that no longer exists has nothing left to clean.
 pub(crate) fn revoke_access(dir: &Path, sid: &Sid) -> io::Result<()> {
     let mut path = wide_nul(dir.as_os_str())?;
-    match update_dacl(&mut path, sid, REVOKE_ACCESS, 0) {
+    match update_dacl(&mut path, sid, REVOKE_ACCESS, 0, 0) {
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         result => result,
     }

@@ -13,7 +13,8 @@
 //! * **Crash safety:** each run is recorded in a journal (`%LOCALAPPDATA%\Coloride\sandbox-runs`)
 //!   until it has undone its changes; the self-test first undoes the runs of a Host that died.
 //! * **Read-only worktrees and shares:** read/execute ACLs grant access to the unique run SID;
-//!   forbidden content has deny ACLs. All changed paths are journaled before mutation and the
+//!   shares are split around forbidden content so it receives no inherited grants. All changed
+//!   paths are journaled before mutation and the
 //!   SID's entries are revoked on cleanup or crash recovery. Host permissions are preserved.
 //! * **Network:** no capability is granted, so there is no network at all, loopback included.
 //!   `NetworkPolicy::LocalProxyOnly` is therefore refused (as on Linux): LOT-014 hands the
