@@ -23,7 +23,7 @@ ureq = { version = "=2.12.1", default-features = false, features = ["tls"] }
 # Read side only. Extraction is our own loop over entries (see `archive.rs`), never
 # `unpack`/`extract`.
 tar = { version = "=0.4.46", default-features = false }
-zip = { version = "=4.2.0", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "=9.0.5", default-features = false, features = ["deflate-flate2"] }
 
 [dev-dependencies]
 tempfile.workspace = true
