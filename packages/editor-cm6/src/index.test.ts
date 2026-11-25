@@ -138,6 +138,86 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     container.remove();
   });
 
+  it("maps untouched decorated ranges' visuals through an edit instead of rebuilding them, and rebuilds only the range the edit touches", () => {
+    const lines = Array.from(
+      { length: 30 },
+      (_, i) => `export const line_${i + 1} = ${i + 1};`,
+    ).join("\n");
+
+    const collectDecoratedLines = (state: EditorState) => {
+      const field = state.field(colorideStateField);
+      const found: { line: number; coloridState: unknown }[] = [];
+      field.lineDecorations.between(0, state.doc.length, (from, _to, deco) => {
+        found.push({
+          line: state.doc.lineAt(from).number,
+          coloridState: (deco.spec as { attributes?: Record<string, string> }).attributes?.[
+            "data-coloride-state"
+          ],
+        });
+      });
+      found.sort((a, b) => a.line - b.line);
+      return found;
+    };
+
+    const baseState = EditorState.create({
+      doc: lines,
+      extensions: [colorideStateDecorations()],
+    }).update({
+      effects: setColorideDecorationsEffect.of([
+        { fromLine: 10, toLine: 12, state: "ValidatedGreen", snapshotHash: "H1" },
+        { fromLine: 20, toLine: 22, state: "ReviewYellow", snapshotHash: "H1" },
+      ]),
+    }).state;
+
+    // Insert a line before both ranges: neither is "touched" by this edit, but their line
+    // numbers — and the lines carrying their visual decoration — must still shift down by one.
+    const line1 = baseState.doc.line(1);
+    const shifted = baseState.update({
+      changes: { from: line1.from, to: line1.from, insert: "// header\n" },
+    }).state;
+    const shiftedField = shifted.field(colorideStateField);
+    expect(shiftedField.ranges[0]).toMatchObject({
+      fromLine: 11,
+      toLine: 13,
+      state: "ValidatedGreen",
+    });
+    expect(shiftedField.ranges[1]).toMatchObject({
+      fromLine: 21,
+      toLine: 23,
+      state: "ReviewYellow",
+    });
+    expect(collectDecoratedLines(shifted)).toEqual([
+      { line: 11, coloridState: "ValidatedGreen" },
+      { line: 12, coloridState: "ValidatedGreen" },
+      { line: 13, coloridState: "ValidatedGreen" },
+      { line: 21, coloridState: "ReviewYellow" },
+      { line: 22, coloridState: "ReviewYellow" },
+      { line: 23, coloridState: "ReviewYellow" },
+    ]);
+
+    // Edit inside the ValidatedGreen range: only that range downgrades and its decoration
+    // content changes; the ReviewYellow range is untouched (mapped, not rebuilt).
+    const editLine = shifted.doc.line(11);
+    const edited = shifted.update({
+      changes: { from: editLine.from, to: editLine.from, insert: "x" },
+    }).state;
+    const editedField = edited.field(colorideStateField);
+    expect(editedField.ranges[0]?.state).toBe("StaleOrange");
+    expect(editedField.ranges[1]).toMatchObject({
+      fromLine: 21,
+      toLine: 23,
+      state: "ReviewYellow",
+    });
+    expect(collectDecoratedLines(edited)).toEqual([
+      { line: 11, coloridState: "StaleOrange" },
+      { line: 12, coloridState: "StaleOrange" },
+      { line: 13, coloridState: "StaleOrange" },
+      { line: 21, coloridState: "ReviewYellow" },
+      { line: 22, coloridState: "ReviewYellow" },
+      { line: 23, coloridState: "ReviewYellow" },
+    ]);
+  });
+
   it("defers save during IME composition and switches across 10 files in < 100 ms while dropping 50 ms delayed IPC events from file 1", async () => {
     const bridge = new InMemoryBinaryHostBridge();
     // Artificially delay IPC snapshots from file-1.ts by 50 ms

@@ -1,6 +1,7 @@
 import {
   type EditorState,
   type Extension,
+  type Range,
   RangeSet,
   RangeSetBuilder,
   StateEffect,
@@ -167,6 +168,27 @@ const STATIC_LINE_DECORATION_BY_STATE: Record<ColorideValidationState, Decoratio
   }),
 };
 
+/// Line-decoration ranges for a single `EditorRangeDecoration`, as a sorted array ready for
+/// `DecorationSet.update({ add })`. Used both for a full rebuild (`buildLineDecorationSet`) and,
+/// on its own, to patch just the one range an edit actually touched (see `colorideStateField`).
+function lineDecorationRangesFor(
+  doc: Text,
+  dec: EditorRangeDecoration,
+  afterLine = 0,
+): Range<Decoration>[] {
+  const startLine = Math.max(afterLine + 1, clampLine(doc, dec.fromLine));
+  const endLine = clampLine(doc, Math.max(dec.fromLine, dec.toLine));
+  if (startLine > endLine) {
+    return [];
+  }
+  const lineDec = STATIC_LINE_DECORATION_BY_STATE[dec.state];
+  const ranges: Range<Decoration>[] = [];
+  for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
+    ranges.push(lineDec.range(doc.line(lineNo).from));
+  }
+  return ranges;
+}
+
 function buildLineDecorationSet(
   doc: Text,
   ranges: readonly EditorRangeDecoration[],
@@ -184,17 +206,9 @@ function buildLineDecorationSet(
   let lastAddedLine = 0;
 
   for (const dec of sortedRanges) {
-    const startLine = Math.max(lastAddedLine + 1, clampLine(doc, dec.fromLine));
-    const endLine = clampLine(doc, Math.max(dec.fromLine, dec.toLine));
-    if (startLine > endLine) {
-      continue;
-    }
-    const lineDec = STATIC_LINE_DECORATION_BY_STATE[dec.state];
-
-    for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
-      const lineInfo = doc.line(lineNo);
-      builder.add(lineInfo.from, lineInfo.from, lineDec);
-      lastAddedLine = lineNo;
+    for (const { from, to, value } of lineDecorationRangesFor(doc, dec, lastAddedLine)) {
+      builder.add(from, to, value);
+      lastAddedLine = doc.lineAt(from).number;
     }
   }
   return builder.finish();
@@ -254,6 +268,11 @@ export const colorideStateField = StateField.define<ColorideDecorationFieldValue
       (e) => e.is(suppressLocalInvalidationAnnotation) && e.value,
     );
 
+    // Cheaply shift every existing line decoration through the edit (O(edit size), not O(total
+    // decorated lines)); only the range(s) this transaction actually touched get their line
+    // marks rebuilt below, since those are the only ones whose state or line count can change.
+    let lineDecorations = value.lineDecorations.map(tr.changes);
+
     const updatedRanges: EditorRangeDecoration[] = value.ranges.map((range) => {
       const oldStartLineNo = clampLine(tr.startState.doc, range.fromLine);
       const oldEndLineNo = clampLine(tr.startState.doc, Math.max(range.fromLine, range.toLine));
@@ -277,17 +296,30 @@ export const colorideStateField = StateField.define<ColorideDecorationFieldValue
           ? "StaleOrange"
           : range.state;
 
-      return {
+      const updated: EditorRangeDecoration = {
         fromLine: nextFromLine,
         toLine: Math.max(nextFromLine, nextToLine),
         state: nextState,
         snapshotHash: range.snapshotHash,
       };
+
+      if (touched) {
+        const spanFrom = tr.state.doc.line(clampLine(tr.state.doc, updated.fromLine)).from;
+        const spanTo = tr.state.doc.line(clampLine(tr.state.doc, updated.toLine)).to;
+        lineDecorations = lineDecorations.update({
+          filterFrom: spanFrom,
+          filterTo: spanTo,
+          filter: () => false,
+          add: lineDecorationRangesFor(tr.state.doc, updated),
+        });
+      }
+
+      return updated;
     });
 
     return {
       ranges: updatedRanges,
-      lineDecorations: buildLineDecorationSet(tr.state.doc, updatedRanges),
+      lineDecorations,
     };
   },
   provide: (field) => EditorView.decorations.from(field, (val) => val.lineDecorations),
