@@ -202,7 +202,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
       changes: { from: editLine.from, to: editLine.from, insert: "x" },
     }).state;
     const editedField = edited.field(colorideStateField);
-    expect(editedField.ranges[0].state).toBe("StaleOrange");
+    expect(editedField.ranges[0]?.state).toBe("StaleOrange");
     expect(editedField.ranges[1]).toMatchObject({
       fromLine: 21,
       toLine: 23,
