@@ -184,13 +184,48 @@
     border-style: dashed;
   }
   /* The agent's mark before a panel's title */
-  .coloride-chat-cell-title-icon {
+  .coloride-chat-cell-title-icon-wrap {
+    position: relative;
     display: inline-flex;
     vertical-align: -2px;
     margin-right: 6px;
   }
+  .coloride-chat-cell-title-icon {
+    display: inline-flex;
+  }
   .coloride-chat-cell-title-icon[hidden] {
     display: none;
+  }
+  /* Derived agent/terminal status: a pending permission, a finished turn, an error, or an exited shell. */
+  .coloride-chat-cell-status-dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--color-text-secondary);
+  }
+  .coloride-chat-cell-status-dot[data-status="waiting"] {
+    background: var(--agent-waiting);
+  }
+  .coloride-chat-cell-status-dot[data-status="done"] {
+    background: var(--agent-done);
+  }
+  .coloride-chat-cell-status-dot[data-status="error"] {
+    background: var(--agent-failed);
+  }
+  .coloride-chat-cell-status-dot[data-status="running"] {
+    top: -4px;
+    right: -4px;
+    width: 10px;
+    height: 10px;
+    background: transparent;
+    color: var(--color-text-secondary);
+  }
+  .coloride-chat-cell-status-dot[data-status="running"] svg {
+    width: 100%;
+    height: 100%;
   }
   .coloride-chat-cell-title {
     flex: 1;

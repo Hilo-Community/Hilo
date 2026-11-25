@@ -8,14 +8,26 @@ export interface TerminalHandle {
 }
 
 /**
+ * Whether a known agent CLI (Codex, Claude...) is the terminal's foreground job, and whether it
+ * looks busy. `agentId` is `null` when nothing recognized is in the foreground (a plain shell
+ * prompt, or an unrecognized program). Unix only — never reported on Windows.
+ */
+export interface TerminalAgentStatus {
+  readonly agentId: string | null;
+  readonly busy: boolean;
+}
+
+/**
  * How the cockpit starts shells. The host streams the shell's output in frames (at most one
- * every 16 ms) to `onOutput`, then calls `onExit` once.
+ * every 16 ms) to `onOutput`, then calls `onExit` once. `onAgentStatus`, when the host supports
+ * it, is told whenever a recognized agent CLI starts/stops being the foreground job.
  */
 export interface TerminalHost {
   open(
     size: { readonly cols: number; readonly rows: number },
     onOutput: (bytes: Uint8Array) => void,
     onExit: () => void,
+    onAgentStatus?: (status: TerminalAgentStatus) => void,
   ): Promise<TerminalHandle>;
 }
 
@@ -54,6 +66,10 @@ export class TerminalPane {
     doc: Document,
     private readonly host: TerminalHost,
     private readonly createView: TerminalViewFactory,
+    /** Told once the shell starts, and once more when it exits. */
+    private readonly onRunningChange?: (running: boolean) => void,
+    /** Told whenever a recognized agent CLI starts/stops being the terminal's foreground job. */
+    private readonly onAgentStatus?: (status: TerminalAgentStatus) => void,
   ) {
     this.element = doc.createElement("div");
     this.element.className = "coloride-terminal-pane";
@@ -104,6 +120,10 @@ export class TerminalPane {
           if (this.view !== view) return;
           this.handle = null;
           this.status.textContent = UI_STRINGS.terminal.exited;
+          this.onRunningChange?.(false);
+        },
+        (status) => {
+          if (this.view === view) this.onAgentStatus?.(status);
         },
       );
       if (this.destroyed || this.view !== view) {
@@ -111,6 +131,7 @@ export class TerminalPane {
         return;
       }
       this.handle = handle;
+      this.onRunningChange?.(true);
       view.onData((data) => this.handle?.write(data));
     } catch (error: unknown) {
       this.status.textContent =

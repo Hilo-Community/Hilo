@@ -37,6 +37,7 @@ export const UI_STRINGS = {
   },
   chat: {
     emptyGroup: "This group is empty. Agent and terminal panels will appear here.",
+    noProject: "No project is open. Open a project to start a session.",
     newSession: "New session",
     newSessionIn: "New session in",
     resizePanels: "Resize panels",
@@ -123,16 +124,6 @@ export const UI_STRINGS = {
     title: "Terminal",
     exited: "Process exited",
     failed: "Unable to start a terminal",
-  },
-  trust: {
-    restrictedTitle: "Restricted Mode",
-    dismiss: "Dismiss",
-    restrictedDetail:
-      "This folder is running in Restricted Mode. Code execution, language servers, extensions, tasks and debugging are disabled for your security.",
-    trustFolder: "Trust this folder",
-    learnMore: "Learn more",
-    learnMoreDetail:
-      "Closing this notice does not lift Restricted Mode. While the folder is restricted, Coloride will not start workspace language servers, run Git hooks or startup scripts, launch the debugger or activate extensions, and the terminal stays unavailable. Trusting the folder asks you to confirm first, and you can revoke it at any time.",
   },
   sidebar: {
     navigation: "Folder, groups and sessions",

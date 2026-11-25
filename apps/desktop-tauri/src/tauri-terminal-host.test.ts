@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { type RawChannel, createTauriTerminalHost } from "./tauri-terminal-host.js";
+import {
+  type AgentStatusChannel,
+  type RawChannel,
+  createTauriTerminalHost,
+} from "./tauri-terminal-host.js";
 
 describe("terminal over a Tauri channel", () => {
   it("opens with the size, streams raw frames, and reports an empty frame as the exit", async () => {
     const calls: Array<[string, Record<string, unknown> | undefined]> = [];
     let channel: RawChannel | null = null;
+    let agentStatusChannel: AgentStatusChannel | null = null;
     const host = createTauriTerminalHost(
       async <T>(command: string, args?: Record<string, unknown>) => {
         calls.push([command, args]);
@@ -14,17 +19,32 @@ describe("terminal over a Tauri channel", () => {
         channel = { onmessage: () => undefined };
         return channel;
       },
+      () => {
+        agentStatusChannel = { onmessage: () => undefined };
+        return agentStatusChannel;
+      },
     );
     const output: string[] = [];
     let exits = 0;
+    const agentStatuses: Array<{ agentId: string | null; busy: boolean }> = [];
     const handle = await host.open(
       { cols: 90, rows: 20 },
       (bytes) => output.push(new TextDecoder().decode(bytes)),
       () => {
         exits += 1;
       },
+      (status) => agentStatuses.push(status),
     );
-    expect(calls[0]).toEqual(["terminal_open_command", { cols: 90, rows: 20, output: channel }]);
+    expect(calls[0]).toEqual([
+      "terminal_open_command",
+      { cols: 90, rows: 20, output: channel, agentStatus: agentStatusChannel },
+    ]);
+
+    (agentStatusChannel as unknown as AgentStatusChannel).onmessage({
+      agentId: "codex",
+      busy: true,
+    });
+    expect(agentStatuses).toEqual([{ agentId: "codex", busy: true }]);
 
     const send = (text: string) =>
       (channel as unknown as RawChannel).onmessage(

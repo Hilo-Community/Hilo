@@ -40,28 +40,56 @@ fn gate(state: &DesktopAppState) -> Result<WorkspaceTrustGate, String> {
 
 type Agent = Arc<Mutex<AcpSessionSupervisor>>;
 
+/// The session `id`, if the gate of the workspace it was STARTED in still allows it. That is its
+/// own gate, not the active workspace's: after switching project, the old project's agent keeps
+/// being driven under its own trust decision (and is refused once that one is revoked).
 fn agent(state: &DesktopAppState, id: u32) -> Result<Agent, String> {
-    gate(state)?;
-    state
-        .agents
-        .lock()
-        .map_err(|_| "agents lock poisoned")?
-        .get(&id)
-        .cloned()
-        .ok_or_else(|| "Agent session is closed".into())
+    let (gate, session) = {
+        let agents = state.agents.lock().map_err(|_| "agents lock poisoned")?;
+        let entry = agents.get(&id).ok_or("Agent session is closed")?;
+        (entry.gate.clone(), Arc::clone(&entry.session))
+    };
+    gate.authorize(GatedCapability::WorkspaceLocalBinary)
+        .map_err(|e| e.to_string())?;
+    Ok(session)
 }
 
-pub(crate) fn close_all_agents(state: &DesktopAppState) {
-    let agents: Vec<_> = state
-        .agents
-        .lock()
-        .map(|mut s| s.drain().map(|(_, a)| a).collect())
-        .unwrap_or_default();
-    for agent in agents {
+fn stop_all(sessions: Vec<Agent>) {
+    for agent in sessions {
         if let Ok(mut agent) = agent.lock() {
             agent.stop();
         }
     }
+}
+
+/// Stops every agent, whatever its workspace (the app is exiting).
+pub(crate) fn close_all_agents(state: &DesktopAppState) {
+    let sessions = state
+        .agents
+        .lock()
+        .map(|mut agents| agents.drain().map(|(_, entry)| entry.session).collect())
+        .unwrap_or_default();
+    stop_all(sessions);
+}
+
+/// Stops the agents started in the workspace at `root`; the others keep running.
+pub(crate) fn close_agents_of(state: &DesktopAppState, root: &std::path::Path) {
+    let sessions = state
+        .agents
+        .lock()
+        .map(|mut agents| {
+            let ids: Vec<u32> = agents
+                .iter()
+                .filter(|(_, entry)| entry.gate.workspace_root() == root)
+                .map(|(id, _)| *id)
+                .collect();
+            ids.into_iter()
+                .filter_map(|id| agents.remove(&id))
+                .map(|entry| entry.session)
+                .collect()
+        })
+        .unwrap_or_default();
+    stop_all(sessions);
 }
 
 #[tauri::command]
@@ -113,8 +141,12 @@ pub async fn agent_stop_command(app: tauri::AppHandle, id: u32) -> Result<(), St
             .lock()
             .map_err(|_| "agents lock poisoned")?
             .remove(&id);
-        if let Some(agent) = agent {
-            agent.lock().map_err(|_| "agent lock poisoned")?.stop();
+        if let Some(entry) = agent {
+            entry
+                .session
+                .lock()
+                .map_err(|_| "agent lock poisoned")?
+                .stop();
         }
         Ok(())
     })

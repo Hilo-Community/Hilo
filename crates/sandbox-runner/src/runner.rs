@@ -106,10 +106,7 @@ impl<E: OsSandboxEngine> OsNativeSandbox<E> {
         if spec.limits.max_cpu_time.is_some() && !caps.enforces_cpu_limit {
             return Err(refuse_limit("CPU time"));
         }
-        if matches!(spec.network, NetworkPolicy::LocalProxyOnly(_))
-            && !caps.supports_local_proxy
-            && !(cfg!(windows) && spec.worktree_read_only)
-        {
+        if matches!(spec.network, NetworkPolicy::LocalProxyOnly(_)) && !caps.supports_local_proxy {
             return Err(SandboxError::NetworkPolicyNotEnforceable { engine: caps.name });
         }
         Ok(())
@@ -158,11 +155,8 @@ struct Prepared {
 
 impl<E: OsSandboxEngine> SandboxRunner for OsNativeSandbox<E> {
     fn supports_terminal(&self) -> bool {
-        (cfg!(target_os = "macos")
-            && self.engine.capabilities().kind == crate::OsSandboxKind::MacOsSeatbelt)
-            || (cfg!(windows)
-                && self.engine.capabilities().kind
-                    == crate::OsSandboxKind::WindowsAppContainerJobObject)
+        cfg!(target_os = "macos")
+            && self.engine.capabilities().kind == crate::OsSandboxKind::MacOsSeatbelt
     }
     fn spawn_terminal(
         &self,
@@ -186,20 +180,7 @@ impl<E: OsSandboxEngine> SandboxRunner for OsNativeSandbox<E> {
                 .map_err(|error| self.refuse(error))?;
             pty.spawn(launch, tmp, limits.wall_timeout, on_finish)
         }
-        #[cfg(windows)]
-        {
-            let pty = crate::supervisor::terminal::PreparedPty::open()?;
-            let Prepared {
-                launch,
-                tmp,
-                limits,
-                on_finish,
-            } = self
-                .prepare_with_terminal(spec, None)
-                .map_err(|error| self.refuse(error))?;
-            pty.spawn(launch, tmp, limits.wall_timeout, on_finish)
-        }
-        #[cfg(not(any(unix, windows)))]
+        #[cfg(not(unix))]
         {
             let _ = spec;
             Err(SandboxError::unavailable(
@@ -306,4 +287,59 @@ pub fn native_sandbox(audit: Arc<dyn AuditSink>) -> Result<Box<dyn SandboxRunner
         error.to_string(),
     ));
     Err(error)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{MemoryAuditSink, OsSandboxKind};
+
+    struct NoProxyEngine;
+    impl OsSandboxEngine for NoProxyEngine {
+        fn capabilities(&self) -> EngineCapabilities {
+            EngineCapabilities {
+                name: "no-proxy-test",
+                kind: OsSandboxKind::WindowsAppContainerJobObject,
+                enforces_memory_limit: true,
+                enforces_process_limit: true,
+                enforces_cpu_limit: true,
+                supports_local_proxy: false,
+            }
+        }
+        fn self_test(&self) -> Result<(), SandboxError> {
+            Ok(())
+        }
+        fn prepare(&self, _: &crate::spec::ValidatedSpec) -> Result<Launch, SandboxError> {
+            panic!("unsupported isolation must be refused before preparation")
+        }
+    }
+
+    #[test]
+    fn read_only_worktrees_do_not_bypass_proxy_capabilities() {
+        let runner =
+            OsNativeSandbox::new(NoProxyEngine, Arc::new(MemoryAuditSink::default())).unwrap();
+        let mut spec = SandboxSpec::new(".", "unused");
+        spec.network = NetworkPolicy::LocalProxyOnly("127.0.0.1:12345".parse().unwrap());
+        for read_only in [false, true] {
+            spec.worktree_read_only = read_only;
+            assert!(matches!(
+                runner.check_capabilities(&spec),
+                Err(SandboxError::NetworkPolicyNotEnforceable { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn windows_engine_never_offers_an_unisolated_login_terminal() {
+        let runner =
+            OsNativeSandbox::new(NoProxyEngine, Arc::new(MemoryAuditSink::default())).unwrap();
+        assert!(!runner.supports_terminal());
+        let root = tempfile::tempdir().unwrap();
+        let spec = SandboxSpec::new(root.path(), "unused");
+        assert!(matches!(
+            runner.spawn_terminal(&spec),
+            Err(SandboxError::SandboxUnavailable { .. })
+        ));
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    }
 }

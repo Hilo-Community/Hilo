@@ -1,3 +1,4 @@
+import { SPINNER_ICON } from "../../settings/agent-marks.js";
 import { reconcile } from "../../ui/dom-utils.js";
 import { attachHeaderScroll } from "./header-scroll.js";
 
@@ -20,6 +21,8 @@ export interface HeaderTabSpec {
   readonly icon?: HeaderTabIcon;
   readonly selected: boolean;
   readonly unsaved?: boolean;
+  /** A turn running, a pending permission, a finished turn, an error, or an exited shell. */
+  readonly statusDot?: "running" | "waiting" | "done" | "error" | "exited" | null;
   /** False disables the close button (the tab can still be selected). Default true. */
   readonly closable?: boolean;
   /** Extra `data-*` attributes, e.g. `{ validationState: "ReviewYellow" }`. */
@@ -46,6 +49,7 @@ interface TabNodes {
   readonly icon: HTMLElement;
   readonly label: HTMLElement;
   readonly dot: HTMLElement;
+  readonly statusDot: HTMLElement;
   readonly close: HTMLButtonElement;
   iconKey: string;
 }
@@ -120,6 +124,15 @@ export class HeaderTabs {
     tab.dot.hidden = !spec.unsaved;
     if (spec.unsaved) el.dataset.unsavedChanges = "true";
     else delete el.dataset.unsavedChanges;
+
+    tab.statusDot.hidden = !spec.statusDot;
+    if (spec.statusDot) {
+      tab.statusDot.dataset.status = spec.statusDot;
+      tab.statusDot.innerHTML = spec.statusDot === "running" ? SPINNER_ICON : "";
+    } else {
+      delete tab.statusDot.dataset.status;
+      tab.statusDot.innerHTML = "";
+    }
   }
 
   private createTab(key: string): TabNodes {
@@ -131,8 +144,15 @@ export class HeaderTabs {
     el.tabIndex = 0;
     el.dataset[dataKey] = key;
 
+    const iconWrap = doc.createElement("span");
+    iconWrap.className = "coloride-header-tab-icon-wrap";
     const icon = doc.createElement("span");
     icon.setAttribute("aria-hidden", "true");
+    const statusDot = doc.createElement("span");
+    statusDot.className = "coloride-header-tab-status-dot";
+    statusDot.setAttribute("aria-hidden", "true");
+    statusDot.hidden = true;
+    iconWrap.append(icon, statusDot);
     const label = doc.createElement("span");
     label.className = "coloride-header-tab-label";
     const dot = doc.createElement("span");
@@ -148,7 +168,7 @@ export class HeaderTabs {
       event.stopPropagation();
       if (!close.disabled) onClose(key);
     });
-    el.append(icon, label, dot, close);
+    el.append(iconWrap, label, dot, close);
 
     el.addEventListener("click", () => onSelect(key));
     el.addEventListener("keydown", (event: KeyboardEvent) => {
@@ -164,6 +184,6 @@ export class HeaderTabs {
       event.preventDefault();
       if (!close.disabled) onClose(key);
     });
-    return { el, icon, label, dot, close, iconKey: "\u0000" };
+    return { el, icon, label, dot, statusDot, close, iconKey: "\u0000" };
   }
 }

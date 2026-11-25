@@ -1,3 +1,4 @@
+import { SPINNER_ICON } from "../settings/agent-marks.js";
 import { attribute, button, label, visibility } from "../ui/dom-utils.js";
 import { UI_STRINGS } from "../ui/ui-strings.js";
 import { CHEVRON_ICON, MORE_ICON, PLUS_ICON } from "./icons.js";
@@ -111,6 +112,27 @@ export class SidebarRow {
       icon.dataset.svg = svg;
       icon.innerHTML = svg;
     }
+  }
+
+  /** The small status mark at the icon's corner: running, a pending permission, done, error, or exited. Call after `setIcon`. */
+  setStatusDot(status: "running" | "waiting" | "done" | "error" | "exited" | null): void {
+    const icon = this.select.querySelector<HTMLElement>(".sidebar-row-icon");
+    const dot = icon?.querySelector<HTMLElement>(".sidebar-row-status-dot");
+    if (!status || !icon) {
+      dot?.remove();
+      return;
+    }
+    const target =
+      dot ??
+      (() => {
+        const created = icon.ownerDocument.createElement("span");
+        created.className = "sidebar-row-status-dot";
+        created.setAttribute("aria-hidden", "true");
+        icon.append(created);
+        return created;
+      })();
+    target.dataset.status = status;
+    target.innerHTML = status === "running" ? SPINNER_ICON : "";
   }
 
   update(title: string, selected: boolean, expanded?: boolean): void {

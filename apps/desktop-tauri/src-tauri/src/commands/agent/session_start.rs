@@ -273,7 +273,9 @@ pub(super) fn start_task(
     Ok((Arc::new(repository), lease, signed, authority))
 }
 
-fn sandbox_runner(state: &DesktopAppState) -> Result<Arc<dyn sandbox_runner::SandboxRunner>, String> {
+fn sandbox_runner(
+    state: &DesktopAppState,
+) -> Result<Arc<dyn sandbox_runner::SandboxRunner>, String> {
     let mut cached = state
         .sandbox_runner
         .lock()
@@ -281,8 +283,9 @@ fn sandbox_runner(state: &DesktopAppState) -> Result<Arc<dyn sandbox_runner::San
     if let Some(runner) = cached.as_ref() {
         return Ok(Arc::clone(runner));
     }
-    let runner: Arc<dyn sandbox_runner::SandboxRunner> =
-        Arc::from(sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).map_err(|e| e.to_string())?);
+    let runner: Arc<dyn sandbox_runner::SandboxRunner> = Arc::from(
+        sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).map_err(|e| e.to_string())?,
+    );
     *cached = Some(Arc::clone(&runner));
     Ok(runner)
 }
@@ -394,12 +397,19 @@ pub(super) fn start_session(
     if !home_dir.is_dir() {
         return Err("Agent account was signed out while starting".into());
     }
-    // Workspace switches/revocations close this same gate. Recheck while holding the map,
-    // so cleanup either sees this session or this insertion observes the closed gate.
+    // Revocations (and a switch away from a workspace that has no session yet) close this same
+    // gate. Recheck while holding the map, so cleanup either sees this session or this insertion
+    // observes the closed gate.
     let mut agents = state.agents.lock().map_err(|_| "agents lock poisoned")?;
     gate.authorize(GatedCapability::WorkspaceLocalBinary)
         .map_err(|e| e.to_string())?;
-    agents.insert(id, Arc::new(Mutex::new(supervisor)));
+    agents.insert(
+        id,
+        crate::state::AgentEntry {
+            gate: gate.clone(),
+            session: Arc::new(Mutex::new(supervisor)),
+        },
+    );
     drop(agents);
     drop(_account_lock);
     if let Some(file) = open_url_file {

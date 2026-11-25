@@ -14,6 +14,7 @@ import {
 } from "./index.js";
 import "./shell.css";
 import type { AcpEvent } from "@coloride/web-ui";
+import { createAgentFinishedAlert } from "./agent-alert.js";
 import { createTauriAgentHost } from "./tauri-agent-host.js";
 import { createTauriAgentRegistryHost } from "./tauri-agent-registry-host.js";
 import { TauriBinaryHostBridge } from "./tauri-binary-host-bridge.js";
@@ -143,6 +144,10 @@ function ColorideDesktopApp() {
             void invoke("initialize_background_services_command");
             return mapWorkspaceNodes(nodes);
           },
+          // A sound whenever an agent finishes, plus a notification for a session not on screen.
+          onAgentFinished: createAgentFinishedAlert(invoke),
+          closeWorkspaceSessions: (path) =>
+            invoke<void>("close_workspace_sessions_command", { root: path }),
           readWorkspaceFile: (path) =>
             invoke<string>("read_workspace_file_command", { relativePath: path }),
           // Rust holds the window open while this is above zero (see commands/window.rs).
@@ -150,7 +155,11 @@ function ColorideDesktopApp() {
             void invoke("report_unsaved_buffers_command", { count });
           },
           // Ctrl+`: shells in the trusted workspace, streamed over a binary channel.
-          terminalHost: createTauriTerminalHost(invoke, () => new Channel<ArrayBuffer>()),
+          terminalHost: createTauriTerminalHost(
+            invoke,
+            () => new Channel<ArrayBuffer>(),
+            () => new Channel<{ agentId: string | null; busy: boolean }>(),
+          ),
           agentHost: createTauriAgentHost(invoke, () => new Channel<AcpEvent>()),
           agentRegistryHost: createTauriAgentRegistryHost(invoke),
           openSettingsWindow: () => invoke<void>("open_settings_window_command"),

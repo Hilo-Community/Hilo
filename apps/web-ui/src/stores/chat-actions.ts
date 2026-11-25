@@ -106,6 +106,16 @@ export function createChatActions(ctx: StoreContext): ChatActions {
     if (chatState.activeChatId !== chatId)
       zone3.setState((prev) => ({ ...prev, activeChatId: chatId }));
 
+    // Looking at the chat dismisses its pending-permission/done/error badge, or a terminal's
+    // finished-agent mark.
+    if (
+      targetChat.kind === "agent"
+        ? targetChat.statusBadge !== undefined
+        : targetChat.detectedAgentFinished === true
+    ) {
+      ctx.bundle().clearChatStatusBadge(chatId);
+    }
+
     // A shell has no document or validation state: the inspector keeps what it shows.
     if (targetChat.kind === "terminal") return Math.max(0, performance.now() - t0);
 

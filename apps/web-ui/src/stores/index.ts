@@ -7,6 +7,7 @@ import { createDocumentActions } from "./documents.js";
 import { createExplorerActions } from "./explorer-actions.js";
 import { createInitialStores } from "./initial-state.js";
 import { createSearchActions } from "./search.js";
+import { createSessionStatusActions } from "./session-status.js";
 import type { CockpitStoreBundle, CockpitStoreOptions } from "./types.js";
 
 export {
@@ -56,6 +57,7 @@ export function createCockpitStoreBundle(options?: CockpitStoreOptions): Cockpit
     ...createExplorerActions(ctx),
     ...createSearchActions(ctx),
     ...createAgentQueueActions(ctx),
+    ...createSessionStatusActions(ctx),
   };
   return bundle;
 }

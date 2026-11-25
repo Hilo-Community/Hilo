@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "license": "Apache-2.0",
   "private": true,
-  "packageManager": "pnpm@12.21.0+sha512.66fd8278ee28935ce951792d34367ff3af5c432a2756445823029533835b8da529bbe0be5130afd56ed0713fb8789e47bad82d93bd5ae2fe54b15562d6276ef0",
+  "packageManager": "pnpm@10.24.0",
   "engines": {
     "node": ">=22.0.0",
     "pnpm": ">=10.0.0"
@@ -28,9 +28,6 @@
     "vitest": "^4.1.12"
   },
   "pnpm": {
-    "onlyBuiltDependencies": [
-      "@biomejs/biome",
-      "esbuild"
-    ]
+    "onlyBuiltDependencies": ["@biomejs/biome", "@parcel/watcher", "esbuild"]
   }
 }

@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 
 use super::connection::{DapConnection, DapIncoming};
 use super::DebugError;
-use crate::process::SupervisedChild;
+use crate::process::{diagnostics::StderrCapture, SupervisedChild};
 use crate::trust::{GatedCapability, WorkspaceTrustGate};
 
 /// Events reach the UI in frames, at most one every 16 ms.
@@ -121,6 +121,7 @@ type Breakpoints = BTreeMap<PathBuf, Vec<u32>>;
 
 struct Shared {
     breakpoints: Mutex<Breakpoints>,
+    diagnostics: StderrCapture,
     debuggee: Mutex<Option<Arc<DapConnection>>>,
     events: mpsc::Sender<DebugEvent>,
 }
@@ -212,16 +213,23 @@ impl DebugSession {
             .current_dir(gate.workspace_root())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
         let mut adapter = command
             .spawn()
             .map_err(|error| DebugError::AdapterStart(error.to_string()))?;
-        let port = read_adapter_port(&mut adapter)?;
+        let stderr = adapter
+            .take_stderr()
+            .ok_or_else(|| DebugError::AdapterStart("adapter stderr is not piped".into()))?;
+        let diagnostics = StderrCapture::start(stderr);
+        let port = read_adapter_port(&mut adapter).map_err(|error| {
+            DebugError::AdapterStart(diagnostics.with_context(&error.to_string()))
+        })?;
 
         let (events, frames) = mpsc::channel();
         spawn_event_pump(frames, sink);
         let shared = Arc::new(Shared {
             breakpoints: Mutex::new(breakpoints),
+            diagnostics,
             debuggee: Mutex::new(None),
             events,
         });
@@ -239,8 +247,10 @@ impl DebugSession {
         let workspace = gate.workspace_root().to_path_buf();
         let program = launch.program.clone();
         let args = launch.args.clone();
+        let runtime = node.to_path_buf();
         let launch_connection = Arc::clone(&launcher);
         let launch_events = shared.events.clone();
+        let launch_diagnostics = shared.diagnostics.clone();
         std::thread::spawn(move || {
             let outcome = launch_connection.request(
                 "launch",
@@ -249,6 +259,7 @@ impl DebugSession {
                     "request": "launch",
                     "name": "Coloride",
                     "program": program,
+                    "runtimeExecutable": runtime,
                     "args": args,
                     "cwd": workspace,
                     "console": "internalConsole",
@@ -262,7 +273,7 @@ impl DebugSession {
                 let _ = launch_events.send(DebugEvent {
                     role: DebugSessionRole::Launcher,
                     event: "launchFailed".into(),
-                    body: json!({"message": error.to_string()}),
+                    body: json!({"message": launch_diagnostics.with_context(&error.to_string())}),
                 });
             }
         });
@@ -402,7 +413,7 @@ fn start_debuggee_session(shared: &Arc<Shared>, port: u16, arguments: &Value) {
         let _ = shared.events.send(DebugEvent {
             role: DebugSessionRole::Debuggee,
             event: "launchFailed".into(),
-            body: json!({"message": message}),
+            body: json!({"message": shared.diagnostics.with_context(&message)}),
         });
     };
     let request = match arguments.get("request").and_then(Value::as_str) {

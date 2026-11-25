@@ -68,23 +68,20 @@ fn extended_limits(limits: &JobLimits) -> JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
 }
 
 impl Job {
-    /// A job that kills its whole tree when its last handle closes, optionally forbids the UI
-    /// escapes (clipboard, desktop, ...) and applies `limits`.
-    pub(crate) fn create(limits: &JobLimits, restrict_ui: bool) -> io::Result<Self> {
+    /// A sandbox job that kills its whole tree on close, forbids UI escapes and applies limits.
+    pub(crate) fn create(limits: &JobLimits) -> io::Result<Self> {
         // SAFETY: default security and no name (both null); no other precondition.
         let raw = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
         let job = Self {
             handle: owned_handle(raw)?,
         };
         job.set(JobObjectExtendedLimitInformation, &extended_limits(limits))?;
-        if restrict_ui {
-            job.set(
-                JobObjectBasicUIRestrictions,
-                &JOBOBJECT_BASIC_UI_RESTRICTIONS {
-                    UIRestrictionsClass: UI_RESTRICTIONS,
-                },
-            )?;
-        }
+        job.set(
+            JobObjectBasicUIRestrictions,
+            &JOBOBJECT_BASIC_UI_RESTRICTIONS {
+                UIRestrictionsClass: UI_RESTRICTIONS,
+            },
+        )?;
         Ok(job)
     }
 

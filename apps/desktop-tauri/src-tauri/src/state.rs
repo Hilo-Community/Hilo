@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -11,11 +11,24 @@ use host_core::{
 
 use crate::bridge::DesktopBinaryEditorBridge;
 
+/// An ACP session and the trust gate of the workspace it was started in. Panel commands are
+/// authorized against this gate, not the active workspace's, so a session keeps working for its
+/// own project while another one is shown.
+pub(crate) struct AgentEntry {
+    pub(crate) gate: WorkspaceTrustGate,
+    pub(crate) session: Arc<Mutex<judge_orchestrator::acp::AcpSessionSupervisor>>,
+}
+
+/// A terminal and the root of the workspace it was opened in.
+pub(crate) struct TerminalEntry {
+    pub(crate) root: PathBuf,
+    pub(crate) session: Arc<host_core::TerminalSession>,
+}
+
 /// State shared by every Tauri command.
 pub(crate) struct DesktopAppState {
     pub(crate) bridge: Arc<Mutex<DesktopBinaryEditorBridge>>,
-    pub(crate) agents:
-        Mutex<HashMap<u32, Arc<Mutex<judge_orchestrator::acp::AcpSessionSupervisor>>>>,
+    pub(crate) agents: Mutex<HashMap<u32, AgentEntry>>,
     pub(crate) next_agent_id: AtomicU32,
     /// The sign-in page each agent's login printed, kept only when it is on a host reviewed for
     /// that agent. The webview never supplies the address that gets opened.
@@ -30,6 +43,10 @@ pub(crate) struct DesktopAppState {
     /// Trust gate of the open workspace. `None` (no workspace, or a root whose decision cannot
     /// be recorded) means untrusted: nothing may be launched.
     pub(crate) trust_gate: Mutex<Option<WorkspaceTrustGate>>,
+    /// Gates of workspaces that are not shown but still own an agent or a terminal, by canonical
+    /// root. They stay open so those sessions keep working; switching back to the root reuses
+    /// its gate (one gate, one trust state, per root), and a gate with no session left is closed.
+    pub(crate) retained_gates: Mutex<HashMap<PathBuf, WorkspaceTrustGate>>,
     /// Language servers of the open workspace. They exist only for a workspace with a gate and
     /// run only once it is trusted; replacing or dropping them kills their processes.
     pub(crate) language_services: Mutex<Option<Arc<LanguageServices>>>,
@@ -40,8 +57,11 @@ pub(crate) struct DesktopAppState {
     /// MCP server publishes (`LocalMcpServer::publish_document_diagnostics`).
     pub(crate) latest_diagnostics: Arc<LatestDiagnostics>,
     /// Open terminals by id. Dropping one kills its shell and jobs.
-    pub(crate) terminals: Mutex<HashMap<u32, Arc<host_core::TerminalSession>>>,
+    pub(crate) terminals: Mutex<HashMap<u32, TerminalEntry>>,
     pub(crate) next_terminal_id: AtomicU32,
+    /// The loopback listener Claude Code's own status hooks call into, shared by every terminal
+    /// session. Started lazily on first terminal open, not at app startup.
+    pub(crate) agent_hook_server: Mutex<Option<Arc<host_core::AgentHookServer>>>,
     /// The program being debugged, if any (one at a time).
     pub(crate) debug_session: Mutex<Option<Arc<host_core::DebugSession>>>,
     pub(crate) app_data_dir: PathBuf,
@@ -75,6 +95,7 @@ impl DesktopAppState {
             agent_account_lock: Mutex::new(()),
             workspace_root: Mutex::new(None),
             trust_gate: Mutex::new(None),
+            retained_gates: Mutex::new(HashMap::new()),
             language_services: Mutex::new(None),
             diagnostics_sink: {
                 let latest = Arc::clone(&latest_diagnostics);
@@ -86,6 +107,7 @@ impl DesktopAppState {
             latest_diagnostics,
             terminals: Mutex::new(HashMap::new()),
             next_terminal_id: AtomicU32::new(1),
+            agent_hook_server: Mutex::new(None),
             debug_session: Mutex::new(None),
             app_data_dir,
             context_engine: Mutex::new(None),
@@ -99,6 +121,42 @@ impl DesktopAppState {
     /// Where the user's trust decisions are kept (survives restarts).
     pub(crate) fn trust_store_path(&self) -> PathBuf {
         self.app_data_dir.join(WORKSPACE_TRUST_STORE_FILENAME)
+    }
+
+    /// The shared local listener Claude Code's own status hooks call into, started on first use.
+    /// `None` only if binding the loopback port itself failed — every terminal then just keeps
+    /// using screen-based busy/idle detection, as if hooks did not exist.
+    pub(crate) fn agent_hook_server(&self) -> Option<Arc<host_core::AgentHookServer>> {
+        let mut guard = self.agent_hook_server.lock().ok()?;
+        if guard.is_none() {
+            match host_core::AgentHookServer::start() {
+                Ok(server) => *guard = Some(Arc::new(server)),
+                Err(error) => {
+                    tracing::warn!(%error, "failed to start the agent hook listener");
+                    return None;
+                }
+            }
+        }
+        guard.clone()
+    }
+
+    /// Whether an agent or a terminal of the workspace at `root` is still registered.
+    pub(crate) fn owns_sessions(&self, root: &Path) -> bool {
+        let agents = self
+            .agents
+            .lock()
+            .map(|agents| {
+                agents
+                    .values()
+                    .any(|entry| entry.gate.workspace_root() == root)
+            })
+            .unwrap_or(false);
+        agents
+            || self
+                .terminals
+                .lock()
+                .map(|terminals| terminals.values().any(|entry| entry.root == root))
+                .unwrap_or(false)
     }
 
     pub(crate) fn language_services(&self) -> Option<Arc<LanguageServices>> {

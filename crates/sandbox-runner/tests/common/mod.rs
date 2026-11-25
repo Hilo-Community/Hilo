@@ -106,17 +106,10 @@ impl OsSandboxEngine for FullCapabilitiesEngine {
 }
 
 #[cfg(unix)]
-pub fn is_alive(pid: u32) -> bool {
-    // `ps -p` exits 0 only while the pid exists (a zombie has `Z` state: treat as dead).
-    let output = Command::new("ps")
-        .args(["-o", "stat=", "-p", &pid.to_string()])
-        .output()
-        .expect("ps");
-    output.status.success()
-        && !String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .starts_with('Z')
-}
+#[path = "../../../../test-support/process.rs"]
+mod process_checks;
+#[cfg(unix)]
+pub use process_checks::is_alive;
 
 #[cfg(unix)]
 pub fn wait_until_dead(pid: u32) -> bool {

@@ -114,11 +114,24 @@ export interface CockpitAgentSession extends SessionBase {
   readonly agentName?: string;
   readonly modelName: string;
   readonly agentExecutionStatus?: "Idle" | "Running" | "QueuedSequential";
+  /** Derived from the panel's `AgentStore`: a turn is running, a permission is pending, it errored, or it just finished. */
+  readonly statusBadge?: "running" | "waiting" | "done" | "error" | undefined;
 }
 export interface CockpitTerminalSession extends SessionBase {
   readonly kind: "terminal";
   readonly modelName?: never;
   readonly agentExecutionStatus?: never;
+  /** Whether the shell process is currently alive, mirroring `TerminalPane.isRunning()`. */
+  readonly running?: boolean;
+  /** A recognized agent CLI (e.g. "codex") typed by hand into this shell, or `undefined`. */
+  readonly detectedAgentId?: string | undefined;
+  /** Whether `detectedAgentId` looks busy right now. Meaningless while `detectedAgentId` is unset. */
+  readonly detectedAgentBusy?: boolean;
+  /**
+   * `detectedAgentId` finished a turn (busy → idle) and the session hasn't been selected since —
+   * the terminal counterpart of an agent session's "done" `statusBadge`.
+   */
+  readonly detectedAgentFinished?: boolean;
 }
 export type CockpitChatTab = CockpitAgentSession | CockpitTerminalSession;
 
@@ -227,6 +240,17 @@ export interface CockpitStoreBundle extends WorkspaceNavigationActions {
   refreshAstAndImpactedTests(filePath: string, content: string): void;
   startAgentTaskOnChat(chatId: string): "Running" | "QueuedSequential";
   completeAgentTaskOnChat(chatId: string): void;
+  /** Sets the sidebar/header/grid badge for an agent chat: a pending permission, done, or errored. */
+  setChatStatusBadge(
+    chatId: string,
+    badge: "running" | "waiting" | "done" | "error" | undefined,
+  ): void;
+  /** Clears an agent chat's status badge, e.g. once the user opens/focuses it. */
+  clearChatStatusBadge(chatId: string): void;
+  /** Mirrors `TerminalPane.isRunning()` onto the shared session so chrome can show it. */
+  setTerminalRunning(chatId: string, running: boolean): void;
+  /** Mirrors a terminal's `TerminalAgentStatus` (a recognized agent CLI typed into its shell). */
+  setTerminalAgentStatus(chatId: string, agentId: string | null, busy: boolean): void;
 }
 
 export interface CockpitStoreOptions {

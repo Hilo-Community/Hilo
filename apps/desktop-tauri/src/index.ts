@@ -78,6 +78,8 @@ export interface LazyBootDesktopOptions {
   readonly ipcChannel?: BinaryIpcChannel;
   readonly openWorkspace?: CockpitDomControllerOptions["openWorkspace"];
   readonly switchWorkspace?: CockpitDomControllerOptions["switchWorkspace"];
+  readonly closeWorkspaceSessions?: CockpitDomControllerOptions["closeWorkspaceSessions"];
+  readonly onAgentFinished?: CockpitDomControllerOptions["onAgentFinished"];
   readonly readWorkspaceFile?: CockpitDomControllerOptions["readWorkspaceFile"];
   readonly onUnsavedCountChange?: CockpitDomControllerOptions["onUnsavedCountChange"];
   readonly workspaceTrust?: CockpitDomControllerOptions["workspaceTrust"];
@@ -196,6 +198,10 @@ export function lazyBootDesktopCockpit(
       onboardingController,
       ...(options?.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
       ...(options?.switchWorkspace ? { switchWorkspace: options.switchWorkspace } : {}),
+      ...(options?.closeWorkspaceSessions
+        ? { closeWorkspaceSessions: options.closeWorkspaceSessions }
+        : {}),
+      ...(options?.onAgentFinished ? { onAgentFinished: options.onAgentFinished } : {}),
       ...(options?.readWorkspaceFile ? { readWorkspaceFile: options.readWorkspaceFile } : {}),
       ...(options?.onUnsavedCountChange
         ? { onUnsavedCountChange: options.onUnsavedCountChange }

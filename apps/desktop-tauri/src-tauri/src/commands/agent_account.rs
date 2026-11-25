@@ -163,8 +163,9 @@ pub async fn agent_account_sign_out_command(
         let mut agents = state.agents.lock().map_err(|_| "agents lock poisoned")?;
         let ids = agents
             .iter()
-            .filter_map(|(id, agent)| {
-                agent
+            .filter_map(|(id, entry)| {
+                entry
+                    .session
                     .lock()
                     .ok()
                     .filter(|agent| agent.identity() == launch.installation_id)
@@ -172,8 +173,12 @@ pub async fn agent_account_sign_out_command(
             })
             .collect::<Vec<_>>();
         for id in ids {
-            if let Some(agent) = agents.remove(&id) {
-                agent.lock().map_err(|_| "agent lock poisoned")?.stop();
+            if let Some(entry) = agents.remove(&id) {
+                entry
+                    .session
+                    .lock()
+                    .map_err(|_| "agent lock poisoned")?
+                    .stop();
             }
         }
         drop(agents);

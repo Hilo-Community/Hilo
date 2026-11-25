@@ -64,12 +64,10 @@ pub(crate) fn methods(value: &Value) -> Result<Vec<AuthMethod>, AcpError> {
             }
         }
         if method.args.is_empty() {
-            let meta_args = method.meta.get("args").or_else(|| {
-                method
-                    .meta
-                    .get("terminal-auth")
-                    .and_then(|v| v.get("args"))
-            });
+            let meta_args = method
+                .meta
+                .get("args")
+                .or_else(|| method.meta.get("terminal-auth").and_then(|v| v.get("args")));
             if let Some(args) = meta_args {
                 if let Ok(parsed) = serde_json::from_value::<Vec<String>>(args.clone()) {
                     method.args = parsed;
@@ -82,8 +80,7 @@ pub(crate) fn methods(value: &Value) -> Result<Vec<AuthMethod>, AcpError> {
                 .get("env")
                 .or_else(|| method.meta.get("terminal-auth").and_then(|v| v.get("env")));
             if let Some(env) = meta_env {
-                if let Ok(parsed) =
-                    serde_json::from_value::<BTreeMap<String, String>>(env.clone())
+                if let Ok(parsed) = serde_json::from_value::<BTreeMap<String, String>>(env.clone())
                 {
                     method.env = parsed;
                 }

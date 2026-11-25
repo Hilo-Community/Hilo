@@ -232,10 +232,17 @@ describe("terminal as a Zone 3 panel", () => {
     const exited = setup();
     exited.press();
     await settle();
+    const chatId = exited.terminals()[0]?.chatId ?? "";
+    const tab = () =>
+      document.querySelector<HTMLElement>(`.coloride-header-tab[data-chat-id="${chatId}"]`);
+    const dot = () => tab()?.querySelector<HTMLElement>(".coloride-header-tab-status-dot");
+    expect(dot()?.hidden).toBe(true);
     exited.opened[0]?.exit();
     expect(exited.panes()[0]?.querySelector(".coloride-terminal-status")?.textContent).toBe(
       "Process exited",
     );
+    expect(dot()?.hidden).toBe(false);
+    expect(dot()?.dataset.status).toBe("exited");
 
     const refused = setup("workspace is not trusted: Terminal is blocked");
     refused.press();
