@@ -31,7 +31,7 @@ describe("agent Markdown", () => {
   });
   it("turns the references an agent writes into inline text that opens a file, not links", () => {
     const ref = (path: string, line: number, label: string) =>
-      `<span role="link" tabindex="0" class="coloride-agent-ref" data-path="${path}" data-line="${line}" title="${path}:${line}">${label}</span>`;
+      `<span role="link" tabindex="0" class="hilo-agent-ref" data-path="${path}" data-line="${line}" title="${path}:${line}">${label}</span>`;
     expect(renderInline("see [App.jsx](<src/App.jsx:6>) now")).toBe(
       `see ${ref("src/App.jsx", 6, "App.jsx")} now`,
     );
@@ -44,7 +44,7 @@ describe("agent Markdown", () => {
     // Absolute paths into the agent's snapshot are made relative to it.
     expect(
       renderInline(
-        "[x](</Users/me/Library/Application Support/dev.coloride.desktop/agent-worktrees/58f/acp-17-3/src/x.ts:4>)",
+        "[x](</Users/me/Library/Application Support/dev.hilo.desktop/agent-worktrees/58f/acp-17-3/src/x.ts:4>)",
       ),
     ).toContain('data-path="src/x.ts" data-line="4"');
     // Code inside a label survives.
@@ -52,9 +52,7 @@ describe("agent Markdown", () => {
   });
   it("never makes a link that navigates, and drops what could run", () => {
     const web = renderInline("[docs](https://example.com/a?b=1)");
-    expect(web).toBe(
-      '<span class="coloride-agent-link" title="https://example.com/a?b=1">docs</span>',
-    );
+    expect(web).toBe('<span class="hilo-agent-link" title="https://example.com/a?b=1">docs</span>');
     expect(web).not.toContain("<a ");
     for (const bad of [
       "[x](javascript:alert(1))",
@@ -64,7 +62,7 @@ describe("agent Markdown", () => {
       "[x](C:\\Windows\\a)",
     ]) {
       const html = renderInline(bad);
-      expect(html).not.toContain("coloride-agent-ref");
+      expect(html).not.toContain("hilo-agent-ref");
       expect(html).not.toContain("<a ");
       expect(html).not.toContain("javascript:alert");
     }

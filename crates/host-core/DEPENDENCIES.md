@@ -48,8 +48,8 @@ How we use it: only from `src/checkpoint/`. libgit2 runs no hook, no `.gitattrib
 driver and no other program (checked by `checkpoints_run_no_git_hook`), which is why checkpoints
 are not behind `WorkspaceTrustGate`. Blobs are created with `git_blob_create_from_disk` /
 `from_buffer`, which apply no filter: restores are byte-exact. It never writes `.git/index`,
-`HEAD` or a branch; it writes objects, `refs/coloride/checkpoints/*` and
-`<git dir>/coloride_tmp_index`. Any version change needs another review.
+`HEAD` or a branch; it writes objects, `refs/hilo/checkpoints/*` and
+`<git dir>/hilo_tmp_index`. Any version change needs another review.
 
 ## `reflink-copy = 0.1.30` (Copy-on-Write task worktrees, LOT-011) — reviewed 2026-11-14
 
@@ -98,7 +98,7 @@ Not on npm; fetched by `pnpm fetch:js-debug` (`scripts/fetch-js-debug.mjs`) from
 release of `microsoft/vscode-js-debug` (published 2026-09-23). The archive is verified against a
 pinned SHA-256 (`27dab92937ec1ab35821ae955aac867544fe06a1b6307229049f2d789af10968`, the digest
 GitHub publishes for the asset) before it is extracted into the git-ignored `tools/` folder.
-The app never downloads it; it looks for it at `$COLORIDE_JS_DEBUG`, in its data folder, or (in
+The app never downloads it; it looks for it at `$HILO_JS_DEBUG`, in its data folder, or (in
 development builds) in `tools/`.
 
 Review: provenance only (publisher, release, digest). The 2.6 MB bundled, minified JavaScript

@@ -12,7 +12,7 @@ No new Cargo or JavaScript dependencies were introduced, so there are no new ver
 The existing workspace dependency versions were preserved. The official Rust SDK was reviewed
 through its [documentation](https://agentclientprotocol.com/libraries/rust) and
 [workspace manifest](https://github.com/agentclientprotocol/rust-sdk/blob/main/Cargo.toml):
-the current manifest uses edition 2024 / Rust 1.88, above Coloride's declared Rust 1.80, and
+the current manifest uses edition 2024 / Rust 1.88, above Hilo's declared Rust 1.80, and
 introduces a separate protocol schema/transport stack. Retaining the existing synchronous
 `SandboxedChild` pipes also makes the byte, request and lifetime boundaries explicit. This is
 a constrained client, not a claim of implementing every ACP capability.
@@ -78,11 +78,11 @@ is still the user's decision. Real provider agents are not claimed operational i
   commands are killed, pending requests answered as cancelled and `session/cancel` sent. The
   agent and the session stay. `stop` ends the session and kills every process.
 - `session/request_permission` only asks the Host; selecting an agent option grants no signed
-  Coloride authority. A subsequent fs/terminal request must still pass policy independently.
+  Hilo authority. A subsequent fs/terminal request must still pass policy independently.
   `RequiresApproval` retains the exact call. Only `HostAuthority` signs its bound, expiring
   approval, once. Native dialogs display the exact pending operation; the webview cannot approve
   a different operation by supplying an arbitrary digest or signing key.
-- `_coloride/query_local_mcp` runs `query_local_mcp`. The desktop adapter reuses LOT-009's
+- `_hilo/query_local_mcp` runs `query_local_mcp`. The desktop adapter reuses LOT-009's
   `LocalMcpServer`, ACL/secret scanner, `LocalOnly` export routing and live host-core overlays.
   No MCP result can sign a permission or change task policy.
 
@@ -94,7 +94,7 @@ is still the user's decision. Real provider agents are not claimed operational i
 2. `terminal/create` needs an absolute `command`: the sandbox never searches `PATH`, so an agent
    asking for `npm` is refused until the Host resolves programs itself.
 3. `session/new.mcpServers` is empty. A normal stdio MCP registration would let the agent spawn
-   a server outside the ToolBroker mediation path. The brokered Coloride extension is available;
+   a server outside the ToolBroker mediation path. The brokered Hilo extension is available;
    standard-agent MCP registration needs a separately supervised broker relay. It is not claimed
    interoperable with arbitrary unmodified agents.
 4. Files larger than 64 KiB (one journaled summary) cannot be read or proposed; they are refused,
@@ -138,7 +138,7 @@ restart; restored panels remain dormant until user interaction. Conversations st
 
 ## Tests and deliberate mutations
 
-`tests/lot014_acp.rs` launches the compiled `coloride-acp-test-agent` inside the real native
+`tests/lot014_acp.rs` launches the compiled `hilo-acp-test-agent` inside the real native
 sandbox. No provider agent/account is needed. It covers exact Rope diff bases, no writes,
 policy and Host rejection, path/case refusals, absolute ACP paths inside the worktree,
 malformed/oversized messages, unknown methods, pending overflow, real child environment

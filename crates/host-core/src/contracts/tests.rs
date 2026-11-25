@@ -54,7 +54,7 @@ fn export_bindings() {
         "ChangeSet",
         "Evidence",
         "Approval",
-        "ColorideValidationState",
+        "HiloValidationState",
         "TaskState",
         "Utf8ByteOffset",
         "Utf16CodeUnitOffset",
@@ -90,9 +90,9 @@ fn offset_newtypes_and_spans_enforce_explicit_units() {
 }
 
 #[test]
-fn all_five_coloride_states_and_eleven_task_states_roundtrip() {
-    assert_eq!(ColorideValidationState::ALL.len(), 5);
-    for state in ColorideValidationState::ALL {
+fn all_five_hilo_states_and_eleven_task_states_roundtrip() {
+    assert_eq!(HiloValidationState::ALL.len(), 5);
+    for state in HiloValidationState::ALL {
         assert_json_and_binary_roundtrip(&state);
         assert!(!state.icon().is_empty());
         assert!(!state.label_fr().is_empty());
@@ -101,12 +101,12 @@ fn all_five_coloride_states_and_eleven_task_states_roundtrip() {
     }
 
     assert_eq!(
-        ColorideValidationState::ValidatedGreen.on_local_edit(),
-        ColorideValidationState::StaleOrange
+        HiloValidationState::ValidatedGreen.on_local_edit(),
+        HiloValidationState::StaleOrange
     );
     assert_eq!(
-        ColorideValidationState::ReviewYellow.on_local_edit(),
-        ColorideValidationState::ReviewYellow
+        HiloValidationState::ReviewYellow.on_local_edit(),
+        HiloValidationState::ReviewYellow
     );
 
     assert_eq!(TaskState::ALL.len(), 11);
@@ -183,7 +183,7 @@ fn all_nine_canonical_contracts_roundtrip_json_and_binary_with_unicode() {
             schema_version: CONTRACT_SCHEMA_VERSION,
             task_id: "task-stripe-webhook".to_string(),
             objective: "Vérifier la signature HMAC du webhook Stripe".to_string(),
-            workspace_id: "ws-coloride-core".to_string(),
+            workspace_id: "ws-hilo-core".to_string(),
             base_snapshot_id: snapshot.content_blake3_hash.clone(),
             target_env: TargetEnvironment::LocalWorktree,
             policy: ExecutionPolicy {
@@ -231,7 +231,7 @@ fn all_nine_canonical_contracts_roundtrip_json_and_binary_with_unicode() {
         authorized_destination: AuthorizedDestination::ByokProvider {
             provider_id: "anthropic-claude".to_string(),
         },
-        cache_control_prefix: Some("coloride:ws-core:v1".to_string()),
+        cache_control_prefix: Some("hilo:ws-core:v1".to_string()),
     };
     assert_json_and_binary_roundtrip(&bundle);
 
@@ -333,7 +333,7 @@ fn all_nine_canonical_contracts_roundtrip_json_and_binary_with_unicode() {
         evidence_id: "ev-001".to_string(),
         task_id: "task-stripe-webhook".to_string(),
         tested_snapshot_hash: changeset_digest.clone(),
-        checkpoint_ref: "refs/coloride/checkpoints/task-stripe-webhook".to_string(),
+        checkpoint_ref: "refs/hilo/checkpoints/task-stripe-webhook".to_string(),
         commands: vec![ExecutedCommandRecord {
             command: "pnpm".to_string(),
             args: vec![
@@ -377,7 +377,7 @@ fn all_nine_canonical_contracts_roundtrip_json_and_binary_with_unicode() {
             digest_blake3: blake3::hash(b"<testsuites/>").to_hex().to_string(),
             byte_size: 512,
         }],
-        verdict: ColorideValidationState::ValidatedGreen,
+        verdict: HiloValidationState::ValidatedGreen,
     };
     assert!(evidence.satisfies_validated_green(&changeset_digest));
     assert!(!evidence.satisfies_validated_green("stale-or-different-hash"));
@@ -394,7 +394,7 @@ fn all_nine_canonical_contracts_roundtrip_json_and_binary_with_unicode() {
     let approval = Approval {
         schema_version: CONTRACT_SCHEMA_VERSION,
         approval_id: "appr-001".to_string(),
-        actor_identity: "founder@coloride.dev".to_string(),
+        actor_identity: "founder@hilo.dev".to_string(),
         target_env: TargetEnvironment::Staging,
         action_kind: ApprovalActionKind::ApplyChangeSet,
         approved_digest,
@@ -417,7 +417,7 @@ fn approval_invalidation_rejects_any_single_bit_or_target_or_expiry_mutation() {
     let approval = Approval {
         schema_version: CONTRACT_SCHEMA_VERSION,
         approval_id: "appr-sec-001".to_string(),
-        actor_identity: "security-reviewer@coloride.dev".to_string(),
+        actor_identity: "security-reviewer@hilo.dev".to_string(),
         target_env: TargetEnvironment::Staging,
         action_kind: ApprovalActionKind::ApplyChangeSet,
         approved_digest: approved_digest.clone(),

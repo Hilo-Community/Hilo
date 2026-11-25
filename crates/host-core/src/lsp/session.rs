@@ -131,7 +131,7 @@ impl LanguageServerSession {
             "initialize",
             json!({
                 "processId": std::process::id(),
-                "clientInfo": {"name": "Coloride", "version": env!("CARGO_PKG_VERSION")},
+                "clientInfo": {"name": "Hilo", "version": env!("CARGO_PKG_VERSION")},
                 "rootUri": root_uri,
                 "workspaceFolders": [{"uri": root_uri, "name": "workspace"}],
                 "initializationOptions": profile.initialization_options,

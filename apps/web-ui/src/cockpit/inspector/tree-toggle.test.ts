@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
 import { CockpitDomController, createCockpitStoreBundle } from "../../index.js";
 import { UI_PREFERENCES_KEY } from "../../state/ui-preferences.js";
@@ -13,7 +13,7 @@ afterEach(() => {
 function mount() {
   const root = document.createElement("div");
   document.body.appendChild(root);
-  const editorView = new ColorideEditorView({
+  const editorView = new HiloEditorView({
     initialDocumentId: "src/main.ts",
     initialContent: "",
     ipcChannel: new InMemoryBinaryHostBridge(),
@@ -28,11 +28,11 @@ function mount() {
     editorView.destroy();
     root.remove();
   });
-  const body = () => root.querySelector<HTMLElement>(".coloride-zone-4-body") as HTMLElement;
+  const body = () => root.querySelector<HTMLElement>(".hilo-zone-4-body") as HTMLElement;
   const action = () =>
-    root.querySelector<HTMLButtonElement>(".coloride-file-tree-action") as HTMLButtonElement;
+    root.querySelector<HTMLButtonElement>(".hilo-file-tree-action") as HTMLButtonElement;
   const edge = () =>
-    root.querySelector<HTMLButtonElement>(".coloride-zone-4-tree-edge") as HTMLButtonElement;
+    root.querySelector<HTMLButtonElement>(".hilo-zone-4-tree-edge") as HTMLButtonElement;
   return { body, action, edge };
 }
 

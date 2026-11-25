@@ -2,7 +2,7 @@ import { PANEL_DIMENSIONS, type PanelSide } from "../layout/panel-geometry.js";
 import { AtomicStore } from "./atomic-store.js";
 export type { PanelSide } from "../layout/panel-geometry.js";
 
-export const UI_PREFERENCES_KEY = "coloride.uiPreferences.v1";
+export const UI_PREFERENCES_KEY = "hilo.uiPreferences.v1";
 export interface UiPreferencesState {
   readonly sidebarWidthPx: number | null;
   readonly inspectorWidthPx: number | null;
@@ -15,9 +15,9 @@ const DEFAULTS: UiPreferencesState = {
   treeHidden: false,
 };
 const LEGACY_KEYS = {
-  sidebarWidthPx: "coloride.sidebarWidthPx",
-  inspectorWidthPx: "coloride.inspectorWidthPx",
-  treeHidden: "coloride.treeHidden",
+  sidebarWidthPx: "hilo.sidebarWidthPx",
+  inspectorWidthPx: "hilo.inspectorWidthPx",
+  treeHidden: "hilo.treeHidden",
 } as const;
 
 /** Storage can be denied even when accessing the localStorage property itself. */

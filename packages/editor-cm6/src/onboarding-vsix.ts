@@ -39,8 +39,8 @@ export interface DeclarativeVsixBundle {
   readonly executedJsEntrypoints: 0;
 }
 
-export const DEFAULT_COLORIDE_CM6_THEME: DeclarativeVsixTheme = {
-  label: "Coloride Dark (WCAG AAA)",
+export const DEFAULT_HILO_CM6_THEME: DeclarativeVsixTheme = {
+  label: "Hilo Dark (WCAG AAA)",
   uiTheme: "vs-dark",
   editorBackground: "#1e1e1e",
   editorForeground: "#d4d4d4",
@@ -226,11 +226,11 @@ export function createThemeExtension(theme: DeclarativeVsixTheme): Extension {
   return EditorView.theme(
     {
       "&": {
-        "--coloride-review-add-bg": "rgba(74, 222, 128, 0.10)",
-        "--coloride-review-mod-bg": "rgba(210, 153, 34, 0.10)",
-        "--coloride-review-del-bg": "rgba(248, 113, 113, 0.10)",
-        "--coloride-review-add-number": "#8ea995",
-        "--coloride-review-mod-number": "#b4a282",
+        "--hilo-review-add-bg": "rgba(74, 222, 128, 0.10)",
+        "--hilo-review-mod-bg": "rgba(210, 153, 34, 0.10)",
+        "--hilo-review-del-bg": "rgba(248, 113, 113, 0.10)",
+        "--hilo-review-add-number": "#8ea995",
+        "--hilo-review-mod-number": "#b4a282",
         backgroundColor: theme.editorBackground,
         color: theme.editorForeground,
         fontFamily,
@@ -347,7 +347,7 @@ export function createThemeExtension(theme: DeclarativeVsixTheme): Extension {
         userSelect: "none",
         position: "relative",
       },
-      ".cm-lineNumbers .cm-gutterElement.coloride-selected-line-gutter": {
+      ".cm-lineNumbers .cm-gutterElement.hilo-selected-line-gutter": {
         color: "#c8c8cc",
       },
       ".cm-foldGutter": {
@@ -362,7 +362,7 @@ export function createThemeExtension(theme: DeclarativeVsixTheme): Extension {
         alignItems: "center",
         justifyContent: "center",
       },
-      ".coloride-fold-btn": {
+      ".hilo-fold-btn": {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -374,19 +374,19 @@ export function createThemeExtension(theme: DeclarativeVsixTheme): Extension {
         lineHeight: "0",
         opacity: "0",
       },
-      ".cm-foldGutter:hover .coloride-fold-btn": {
+      ".cm-foldGutter:hover .hilo-fold-btn": {
         opacity: "1",
       },
-      ".coloride-fold-btn svg": {
+      ".hilo-fold-btn svg": {
         display: "block",
         width: "10px",
         height: "10px",
         transition: "transform 0.12s ease",
       },
-      ".coloride-fold-btn.is-closed svg": {
+      ".hilo-fold-btn.is-closed svg": {
         transform: "rotate(-90deg)",
       },
-      ".coloride-fold-btn:hover": {
+      ".hilo-fold-btn:hover": {
         backgroundColor: "rgba(255, 255, 255, 0.10)",
         color: "#a0a0a5",
       },

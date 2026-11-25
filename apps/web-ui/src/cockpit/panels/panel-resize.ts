@@ -60,7 +60,7 @@ export class PanelResizeHandle {
     // Dragging towards the panel's body makes it narrower: the sign depends on the edge.
     const direction = limits.edge === "right" ? 1 : -1;
     const bar = doc.createElement("div");
-    bar.className = "coloride-shell-handle";
+    bar.className = "hilo-shell-handle";
     bar.dataset.panel = panel;
     bar.setAttribute("role", "separator");
     bar.setAttribute("aria-orientation", "vertical");

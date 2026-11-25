@@ -1,16 +1,16 @@
 /* Settings screen: the ACP agent registry */
 @layer components {
-  .coloride-standalone-settings {
+  .hilo-standalone-settings {
     position: relative;
     width: 100%;
     height: 100%;
   }
-  .coloride-standalone-settings .coloride-settings-page {
+  .hilo-standalone-settings .hilo-settings-page {
     inset: 0;
     border: 0;
     border-radius: 0;
   }
-  .coloride-settings-page {
+  .hilo-settings-page {
     position: absolute;
     inset: 0 0 0 48px;
     z-index: 3;
@@ -24,21 +24,21 @@
     color: var(--color-text-primary);
     container-type: inline-size;
   }
-  .coloride-settings-page[hidden] {
+  .hilo-settings-page[hidden] {
     display: none !important;
   }
-  .coloride-cockpit-shell[data-settings-active="true"]
-    > :is(.coloride-zone-2-sidebar, .coloride-zone-3-multichat, .coloride-zone-4-inspector) {
+  .hilo-cockpit-shell[data-settings-active="true"]
+    > :is(.hilo-zone-2-sidebar, .hilo-zone-3-multichat, .hilo-zone-4-inspector) {
     visibility: hidden;
   }
-  .coloride-cockpit-shell[data-settings-active="true"] > [role="separator"] {
+  .hilo-cockpit-shell[data-settings-active="true"] > [role="separator"] {
     display: none;
   }
-  .coloride-macos-titlebar[data-settings-active="true"]
-    :is(.coloride-zone-4-header, .coloride-inspector-toggle, .coloride-sidebar-toggle) {
+  .hilo-macos-titlebar[data-settings-active="true"]
+    :is(.hilo-zone-4-header, .hilo-inspector-toggle, .hilo-sidebar-toggle) {
     visibility: hidden;
   }
-  .coloride-settings-navigation {
+  .hilo-settings-navigation {
     display: flex;
     flex-direction: column;
     width: 228px;
@@ -55,7 +55,7 @@
     --settings-icon-size: 20px;
     --settings-icon-hover: #414141;
   }
-  .coloride-settings-search {
+  .hilo-settings-search {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -67,14 +67,14 @@
     background: var(--color-selected);
     color: var(--color-text-secondary);
   }
-  .coloride-settings-search:hover,
-  .coloride-settings-search:focus-within {
+  .hilo-settings-search:hover,
+  .hilo-settings-search:focus-within {
     color: var(--color-text-primary);
   }
-  .coloride-settings-search svg {
+  .hilo-settings-search svg {
     flex-shrink: 0;
   }
-  .coloride-settings-search input {
+  .hilo-settings-search input {
     width: 100%;
     min-width: 0;
     border: 0;
@@ -83,21 +83,21 @@
     color: var(--color-text-primary);
     font-size: 12px;
   }
-  .coloride-settings-search input::placeholder {
+  .hilo-settings-search input::placeholder {
     color: var(--color-text-secondary);
   }
   /* Native scrollbars hidden: the app's thin overlay scrollbar is drawn on the viewport. */
-  .coloride-settings-viewport {
+  .hilo-settings-viewport {
     position: relative;
     flex: 1;
     min-width: 0;
     min-height: 0;
   }
-  .coloride-settings-viewport--nav {
+  .hilo-settings-viewport--nav {
     /* Reaches over the sidebar's right padding so the scrollbar sits on its edge. */
     margin-right: -10px;
   }
-  .coloride-settings-categories {
+  .hilo-settings-categories {
     position: absolute;
     inset: 0;
     /* Gives back the 10px the viewport reaches over: rows end where the search field ends. */
@@ -105,11 +105,11 @@
     overflow: auto;
     scrollbar-width: none;
   }
-  .coloride-settings-categories::-webkit-scrollbar,
-  .coloride-settings-main::-webkit-scrollbar {
+  .hilo-settings-categories::-webkit-scrollbar,
+  .hilo-settings-main::-webkit-scrollbar {
     display: none;
   }
-  .coloride-settings-categories button {
+  .hilo-settings-categories button {
     border: 0;
     background: transparent;
     color: var(--color-text-secondary);
@@ -118,7 +118,7 @@
     text-align: left;
     cursor: pointer;
   }
-  .coloride-settings-nav-row {
+  .hilo-settings-nav-row {
     display: flex;
     align-items: center;
     height: var(--settings-row-height);
@@ -126,19 +126,19 @@
     margin: 0 0 var(--settings-row-gap);
     border-radius: var(--settings-row-radius);
   }
-  .coloride-settings-nav-row:hover,
-  .coloride-settings-subnav button:hover,
-  .coloride-settings-nav-row[data-selected="true"],
-  .coloride-settings-subnav button[aria-current="page"] {
+  .hilo-settings-nav-row:hover,
+  .hilo-settings-subnav button:hover,
+  .hilo-settings-nav-row[data-selected="true"],
+  .hilo-settings-subnav button[aria-current="page"] {
     background: var(--color-selected);
   }
-  .coloride-settings-nav-label,
-  .coloride-settings-nav-row:hover .coloride-settings-nav-label,
-  .coloride-settings-subnav button:hover,
-  .coloride-settings-subnav button[aria-current="page"] {
+  .hilo-settings-nav-label,
+  .hilo-settings-nav-row:hover .hilo-settings-nav-label,
+  .hilo-settings-subnav button:hover,
+  .hilo-settings-subnav button[aria-current="page"] {
     color: var(--color-text-primary);
   }
-  .coloride-settings-nav-toggle {
+  .hilo-settings-nav-toggle {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -148,20 +148,20 @@
     padding: 2px;
     border-radius: var(--settings-row-radius);
   }
-  .coloride-settings-categories button.coloride-settings-nav-toggle:hover {
+  .hilo-settings-categories button.hilo-settings-nav-toggle:hover {
     background: var(--settings-icon-hover);
     color: var(--color-text-primary);
   }
-  .coloride-settings-nav-toggle[aria-expanded="true"] svg {
+  .hilo-settings-nav-toggle[aria-expanded="true"] svg {
     transform: rotate(90deg);
   }
-  .coloride-settings-nav-label {
+  .hilo-settings-nav-label {
     flex: 1;
     min-width: 0;
     height: 100%;
     padding: 0 0 0 6px;
   }
-  .coloride-settings-subnav {
+  .hilo-settings-subnav {
     position: relative;
     display: flex;
     flex-direction: column;
@@ -169,7 +169,7 @@
     margin: 0 0 var(--settings-row-gap);
   }
   /* One continuous guide line under the chevron, as in the chat sidebar (.sidebar-sessions) */
-  .coloride-settings-subnav::before {
+  .hilo-settings-subnav::before {
     content: "";
     position: absolute;
     top: 0;
@@ -180,14 +180,14 @@
     pointer-events: none;
     z-index: 1;
   }
-  .coloride-settings-subnav button {
+  .hilo-settings-subnav button {
     position: relative;
     width: 100%;
     height: var(--settings-row-height);
     padding: 0 3px 0 calc(var(--settings-leading-inset) + var(--settings-icon-size) + 6px);
     border-radius: var(--settings-row-radius);
   }
-  .coloride-settings-main {
+  .hilo-settings-main {
     position: absolute;
     inset: 0;
     overflow: auto;
@@ -196,40 +196,40 @@
     padding: 10px 32px 32px;
     user-select: text;
   }
-  .coloride-settings-page :focus-visible {
+  .hilo-settings-page :focus-visible {
     outline: 1px solid #858585;
     outline-offset: 2px;
   }
-  .coloride-settings-category {
+  .hilo-settings-category {
     max-width: 972px;
     margin: 0 auto;
   }
-  .coloride-settings-category.is-wide {
+  .hilo-settings-category.is-wide {
     max-width: none;
   }
-  .coloride-settings-group > .coloride-registry {
+  .hilo-settings-group > .hilo-registry {
     padding-top: 12px;
   }
-  .coloride-settings-result-title {
+  .hilo-settings-result-title {
     margin: 0;
     font-size: 16px;
     font-weight: 500;
   }
-  .coloride-settings-empty {
+  .hilo-settings-empty {
     max-width: 972px;
     margin: auto;
     padding: 50px 0;
   }
-  .coloride-settings-empty h2 {
+  .hilo-settings-empty h2 {
     font-size: 16px;
     font-weight: 500;
   }
-  .coloride-settings-empty p {
+  .hilo-settings-empty p {
     margin-top: 9px;
     color: var(--color-text-secondary);
     font-size: 12px;
   }
-  .coloride-settings-empty button {
+  .hilo-settings-empty button {
     margin-top: 18px;
     border: 0;
     border-radius: 4px;
@@ -239,50 +239,50 @@
     font-size: 12px;
     cursor: pointer;
   }
-  .coloride-settings-search input:focus-visible {
+  .hilo-settings-search input:focus-visible {
     outline: none;
   }
   @container (max-width: 760px) {
-    .coloride-settings-navigation {
+    .hilo-settings-navigation {
       width: 190px;
       flex-basis: 190px;
     }
-    .coloride-settings-main {
+    .hilo-settings-main {
       padding-inline: 24px;
     }
   }
   @container (max-width: 470px) {
-    .coloride-settings-navigation {
+    .hilo-settings-navigation {
       width: 150px;
       flex-basis: 150px;
     }
-    .coloride-settings-main {
+    .hilo-settings-main {
       padding-inline: 16px;
     }
-    .coloride-settings-categories button {
+    .hilo-settings-categories button {
       font-size: 12px;
     }
   }
 
-  .coloride-registry h2 {
+  .hilo-registry h2 {
     margin: 0;
     font-size: 16px;
     font-weight: 600;
     line-height: 28px;
   }
-  .coloride-registry-intro {
+  .hilo-registry-intro {
     margin: 4px 0 14px;
     color: var(--color-text-muted);
     font-size: 12px;
     line-height: 1.5;
   }
-  .coloride-registry-toolbar {
+  .hilo-registry-toolbar {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     margin-bottom: 10px;
   }
-  .coloride-registry-search {
+  .hilo-registry-search {
     display: flex;
     align-items: center;
     flex: 1 1 200px;
@@ -294,14 +294,14 @@
     background: var(--color-selected);
     color: var(--color-text-secondary);
   }
-  .coloride-registry-search:hover,
-  .coloride-registry-search:focus-within {
+  .hilo-registry-search:hover,
+  .hilo-registry-search:focus-within {
     color: var(--color-text-primary);
   }
-  .coloride-registry-search svg {
+  .hilo-registry-search svg {
     flex: none;
   }
-  .coloride-registry-search input {
+  .hilo-registry-search input {
     width: 100%;
     min-width: 0;
     border: 0;
@@ -310,19 +310,19 @@
     color: var(--color-text-primary);
     font-size: 12px;
   }
-  .coloride-registry-search input::placeholder {
+  .hilo-registry-search input::placeholder {
     color: var(--color-text-secondary);
   }
-  .coloride-registry-search input:focus-visible {
+  .hilo-registry-search input:focus-visible {
     outline: none;
   }
-  .coloride-registry-filters {
+  .hilo-registry-filters {
     display: inline-flex;
     padding: 1px;
     border-radius: 6px;
     background: var(--color-card);
   }
-  .coloride-registry-filters button {
+  .hilo-registry-filters button {
     height: 26px;
     padding: 0 10px;
     border: 0;
@@ -332,12 +332,12 @@
     font-size: 12px;
     cursor: pointer;
   }
-  .coloride-registry-filters button[aria-pressed="true"] {
+  .hilo-registry-filters button[aria-pressed="true"] {
     background: var(--color-selected);
     color: var(--color-text-primary);
   }
-  .coloride-registry-alert,
-  .coloride-registry-failure {
+  .hilo-registry-alert,
+  .hilo-registry-failure {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -347,10 +347,10 @@
     line-height: 1.4;
     overflow-wrap: anywhere;
   }
-  .coloride-registry-alert[hidden] {
+  .hilo-registry-alert[hidden] {
     display: none;
   }
-  .coloride-registry-alert button {
+  .hilo-registry-alert button {
     flex: none;
     height: 24px;
     padding: 0 10px;
@@ -361,11 +361,11 @@
     font-size: 12px;
     cursor: pointer;
   }
-  .coloride-registry-status:empty {
+  .hilo-registry-status:empty {
     display: none;
   }
   /* Results are announced, not drawn: visually hidden, still read by screen readers. */
-  .coloride-registry-status[data-kind="notice"] {
+  .hilo-registry-status[data-kind="notice"] {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -374,19 +374,19 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .coloride-registry-status {
+  .hilo-registry-status {
     min-height: 18px;
     margin-bottom: 6px;
     color: var(--color-text-secondary);
     font-size: 12px;
   }
   /* One card per agent, full width: identity on top, the description under it, actions aside. */
-  .coloride-registry-list {
+  .hilo-registry-list {
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
-  .coloride-registry-card {
+  .hilo-registry-card {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -396,7 +396,7 @@
     border-radius: 10px;
     background: var(--color-card);
   }
-  .coloride-registry-title {
+  .hilo-registry-title {
     grid-column: 1;
     grid-row: 1;
     display: flex;
@@ -404,7 +404,7 @@
     gap: 10px;
     min-width: 0;
   }
-  .coloride-registry-title h3 {
+  .hilo-registry-title h3 {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -413,7 +413,7 @@
     font-weight: 600;
   }
   /* Monochrome brand mark (or the agent's first letter in a small tile), as in the original. */
-  .coloride-registry-mark {
+  .hilo-registry-mark {
     flex: none;
     display: inline-flex;
     align-items: center;
@@ -422,11 +422,11 @@
     height: 22px;
     color: var(--color-text-secondary);
   }
-  .coloride-registry-mark svg {
+  .hilo-registry-mark svg {
     width: 20px;
     height: 20px;
   }
-  .coloride-registry-mark--letter {
+  .hilo-registry-mark--letter {
     width: 20px;
     height: 20px;
     border-radius: 4px;
@@ -435,15 +435,15 @@
     font-weight: 500;
   }
   /* Same size and weight as the name, so both read as one text; only the colour is quieter. */
-  .coloride-registry-version {
+  .hilo-registry-version {
     color: var(--color-text-secondary);
     font: inherit;
   }
   /* A newer version is on offer: it shows in green and the button becomes Update. */
-  .coloride-registry-version--update {
+  .hilo-registry-version--update {
     color: #4ade80;
   }
-  .coloride-registry-license {
+  .hilo-registry-license {
     flex: none;
     padding: 1px 7px;
     border-radius: 4px;
@@ -452,11 +452,11 @@
     font-size: 11px;
   }
   /* Text lines up under the name, past the mark (22px + 10px gap). */
-  .coloride-registry-card > p {
+  .hilo-registry-card > p {
     grid-column: 1;
     margin: 0 0 0 32px;
   }
-  .coloride-registry-description {
+  .hilo-registry-description {
     grid-row: 2;
     min-width: 0;
     display: -webkit-box;
@@ -467,28 +467,28 @@
     font-size: 12px;
     line-height: 1.5;
   }
-  .coloride-registry-card > .coloride-registry-actions {
+  .hilo-registry-card > .hilo-registry-actions {
     grid-column: 2;
     grid-row: 2;
     align-self: end;
     justify-content: flex-end;
     margin: 0;
   }
-  .coloride-registry-blocked {
+  .hilo-registry-blocked {
     color: #fdba74;
     font-size: 11px;
     line-height: 1.4;
   }
-  .coloride-registry-failure {
+  .hilo-registry-failure {
     margin: 0;
   }
-  .coloride-registry-actions {
+  .hilo-registry-actions {
     display: flex;
     gap: 6px;
     margin-top: 2px;
   }
   /* Install / Update: small, hairline outline, no fill, with the download glyph. Remove: quieter. */
-  .coloride-registry-actions button {
+  .hilo-registry-actions button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -505,35 +505,35 @@
     white-space: nowrap;
     cursor: pointer;
   }
-  .coloride-registry-actions button svg {
+  .hilo-registry-actions button svg {
     width: 13px;
     height: 13px;
   }
   /* The border stays as it is on hover; a faint tint is the only feedback. */
-  .coloride-registry-actions button:hover:not(:disabled) {
+  .hilo-registry-actions button:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.05);
   }
   /* Remove is a destructive action: red text and red outline. */
-  .coloride-registry-actions .coloride-registry-ghost {
+  .hilo-registry-actions .hilo-registry-ghost {
     border-color: rgba(248, 113, 113, 0.55);
     color: #f87171;
   }
-  .coloride-registry-actions .coloride-registry-ghost:hover:not(:disabled) {
+  .hilo-registry-actions .hilo-registry-ghost:hover:not(:disabled) {
     background: rgba(248, 113, 113, 0.08);
   }
-  .coloride-registry-actions button:disabled {
+  .hilo-registry-actions button:disabled {
     opacity: 0.5;
     cursor: default;
   }
   /* While it runs, the button stays fully visible with a turning ring. */
-  .coloride-registry-actions button[data-busy="true"]:disabled {
+  .hilo-registry-actions button[data-busy="true"]:disabled {
     opacity: 1;
     cursor: progress;
   }
-  .coloride-registry-spinner {
-    animation: coloride-registry-spin 0.8s linear infinite;
+  .hilo-registry-spinner {
+    animation: hilo-registry-spin 0.8s linear infinite;
   }
-  @keyframes coloride-registry-spin {
+  @keyframes hilo-registry-spin {
     to {
       transform: rotate(360deg);
     }
@@ -541,38 +541,38 @@
   /* Progress along the bottom of the card of the agent being installed or removed:
      gray and sweeping while the Host waits for the user's confirmation, then green and filling
      smoothly. It cannot know the real percentage, so it slows down as it nears the end. */
-  .coloride-registry-card {
+  .hilo-registry-card {
     position: relative;
     overflow: hidden;
   }
-  .coloride-registry-card[data-pending]::before,
-  .coloride-registry-card[data-pending]::after {
+  .hilo-registry-card[data-pending]::before,
+  .hilo-registry-card[data-pending]::after {
     content: "";
     position: absolute;
     left: 0;
     bottom: 0;
     height: 3px;
   }
-  .coloride-registry-card[data-pending]::before {
+  .hilo-registry-card[data-pending]::before {
     right: 0;
     background: rgba(255, 255, 255, 0.07);
   }
-  .coloride-registry-card[data-phase="waiting"]::after {
+  .hilo-registry-card[data-phase="waiting"]::after {
     width: 40%;
     border-radius: 3px;
     background: rgba(255, 255, 255, 0.35);
-    animation: coloride-registry-sweep 1.3s ease-in-out infinite;
+    animation: hilo-registry-sweep 1.3s ease-in-out infinite;
   }
-  .coloride-registry-card[data-phase="running"]::before {
+  .hilo-registry-card[data-phase="running"]::before {
     background: rgba(74, 222, 128, 0.15);
   }
-  .coloride-registry-card[data-phase="running"]::after {
+  .hilo-registry-card[data-phase="running"]::after {
     width: 0;
     border-radius: 0 3px 3px 0;
     background: #4ade80;
-    animation: coloride-registry-fill 24s cubic-bezier(0.1, 0.7, 0.2, 1) forwards;
+    animation: hilo-registry-fill 24s cubic-bezier(0.1, 0.7, 0.2, 1) forwards;
   }
-  @keyframes coloride-registry-sweep {
+  @keyframes hilo-registry-sweep {
     from {
       transform: translateX(-100%);
     }
@@ -580,18 +580,18 @@
       transform: translateX(250%);
     }
   }
-  @keyframes coloride-registry-fill {
+  @keyframes hilo-registry-fill {
     to {
       width: 92%;
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .coloride-registry-spinner,
-    .coloride-registry-card[data-pending]::after {
+    .hilo-registry-spinner,
+    .hilo-registry-card[data-pending]::after {
       animation-duration: 3s;
     }
   }
-  .coloride-registry-empty {
+  .hilo-registry-empty {
     grid-column: 1 / -1;
     padding: 24px 0;
     color: var(--color-text-muted);

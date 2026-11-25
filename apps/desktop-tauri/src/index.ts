@@ -1,10 +1,10 @@
 import {
   type BinaryIpcChannel,
-  ColorideEditorView,
   type EditorRangeDecoration,
+  HiloEditorView,
   InMemoryBinaryHostBridge,
-} from "@coloride/editor-cm6";
-import { CONTRACT_SCHEMA_VERSION } from "@coloride/protocol-types";
+} from "@hilo/editor-cm6";
+import { CONTRACT_SCHEMA_VERSION } from "@hilo/protocol-types";
 import {
   type ActivityBarSection,
   type CockpitChatTab,
@@ -22,7 +22,7 @@ import {
   createInitialCockpitShellState,
   createInitialOnboardingState,
   restoreCachedSession,
-} from "@coloride/web-ui";
+} from "@hilo/web-ui";
 
 export const WORKSPACE_SESSION_CACHE_FILENAME = "workspace_session_cache.bin";
 
@@ -93,12 +93,12 @@ export interface LazyBootDesktopOptions {
 }
 
 export interface LazyBootDesktopHandle<TChannel extends BinaryIpcChannel = BinaryIpcChannel> {
-  readonly appId: "dev.coloride.desktop";
+  readonly appId: "dev.hilo.desktop";
   readonly bootToInteractiveMs: number;
   readonly restoredSessionCache: WorkspaceSessionCacheSnapshot;
   readonly ipcChannel: TChannel;
   readonly stores: CockpitStoreBundle;
-  readonly editorView: ColorideEditorView;
+  readonly editorView: HiloEditorView;
   readonly onboardingController: OnboardingModalController;
   readonly streamRenderer: FrameBatchedStreamRenderer;
   readonly domController: CockpitDomController | null;
@@ -111,7 +111,7 @@ export interface LazyBootDesktopHandle<TChannel extends BinaryIpcChannel = Binar
 
 /**
  * Execute the `LOT-005` Lazy Boot sequence in `desktop-tauri`:
- * 1. Immediately decode `workspace_session_cache.bin` (if provided) and restore window layout + active `ColorideEditorView` buffer (`p95 ≤ 3 s`).
+ * 1. Immediately decode `workspace_session_cache.bin` (if provided) and restore window layout + active `HiloEditorView` buffer (`p95 ≤ 3 s`).
  * 2. Schedule low-priority background initialization of `vtsls`, `Biome`, `SQLite FTS5`, and `Sandbox warm pool` after interactive boot.
  */
 export function lazyBootDesktopCockpit(
@@ -126,7 +126,7 @@ export function lazyBootDesktopCockpit(
   const t0 = performance.now();
   const defaultCache: WorkspaceSessionCacheSnapshot = {
     schemaVersion: CONTRACT_SCHEMA_VERSION,
-    workspaceRoot: "/workspace/coloride",
+    workspaceRoot: "/workspace/hilo",
     activePersona: "Develop",
     activeActivityPanel: "sessions",
     activeInspectorTab: "code-diff",
@@ -161,7 +161,7 @@ export function lazyBootDesktopCockpit(
     stores.toggleSidebar(false);
   }
 
-  const editorView = new ColorideEditorView({
+  const editorView = new HiloEditorView({
     initialDocumentId: restoredSessionCache.activeDocumentId,
     initialContent: restoredSessionCache.activeDocumentContent,
     ipcChannel,
@@ -183,7 +183,7 @@ export function lazyBootDesktopCockpit(
     onboardingController.setNativeImportLoader(options.loadNativeMigrationReport);
   }
 
-  stores.setProjectPath(workspaceRoot === "/workspace/coloride" ? "" : workspaceRoot);
+  stores.setProjectPath(workspaceRoot === "/workspace/hilo" ? "" : workspaceRoot);
 
   const streamRenderer = new FrameBatchedStreamRenderer(stores.zone3);
 
@@ -229,7 +229,7 @@ export function lazyBootDesktopCockpit(
       Promise.resolve(bgState);
 
   return {
-    appId: "dev.coloride.desktop",
+    appId: "dev.hilo.desktop",
     bootToInteractiveMs,
     restoredSessionCache,
     ipcChannel,
@@ -281,15 +281,15 @@ export function lazyBootDesktopCockpit(
 export function bootstrapDesktopShell() {
   const ipcChannel = new InMemoryBinaryHostBridge();
   return {
-    appId: "dev.coloride.desktop",
+    appId: "dev.hilo.desktop",
     shell: createInitialCockpitShellState(),
     ipcChannel,
     createIsolatedEditor(
       initialDocumentId: string,
       initialContent: string,
       initialDecorations: readonly EditorRangeDecoration[] = [],
-    ): ColorideEditorView {
-      return new ColorideEditorView({
+    ): HiloEditorView {
+      return new HiloEditorView({
         initialDocumentId,
         initialContent,
         ipcChannel,

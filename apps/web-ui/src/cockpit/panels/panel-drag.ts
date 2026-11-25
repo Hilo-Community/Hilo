@@ -49,7 +49,7 @@ export class PanelDrag {
 
   constructor(private readonly host: PanelDragHost) {
     this.dropIndicator = host.grid.ownerDocument.createElement("div");
-    this.dropIndicator.className = "coloride-drop-indicator";
+    this.dropIndicator.className = "hilo-drop-indicator";
   }
 
   /**
@@ -87,7 +87,7 @@ export class PanelDrag {
     }
     const doc = this.host.grid.ownerDocument;
     const under = doc.elementFromPoint?.(event.clientX, event.clientY) ?? null;
-    const cellEl = under?.closest<HTMLElement>(".coloride-chat-cell") ?? null;
+    const cellEl = under?.closest<HTMLElement>(".hilo-chat-cell") ?? null;
     const targetId = cellEl?.dataset.chatId;
     if (!cellEl || !targetId || targetId === drag.chatId || !this.host.cell(targetId)) {
       drag.target = null;

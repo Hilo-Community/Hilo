@@ -43,11 +43,11 @@ export class ShellLayout {
   update(state: Zone1ActivityState): string {
     const { sidebarWidthPx, inspectorWidthPx } = this.preferences.getState();
     this.shell.style.setProperty(
-      "--coloride-sidebar-width",
+      "--hilo-sidebar-width",
       sidebarWidthPx === null ? DEFAULT_SIDEBAR_WIDTH : `${sidebarWidthPx}px`,
     );
     this.shell.style.setProperty(
-      "--coloride-inspector-width",
+      "--hilo-inspector-width",
       inspectorWidthPx === null ? DEFAULT_INSPECTOR_WIDTH : `${inspectorWidthPx}px`,
     );
     this.sidebarHandle.element.hidden = !state.sidebarOpen;

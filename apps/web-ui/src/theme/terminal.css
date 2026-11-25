@@ -1,7 +1,7 @@
 /* Terminal panels of Zone 3 and the menu of the + button */
 @layer components {
   /* A shell shown in a Zone 3 panel */
-  .coloride-terminal-pane {
+  .hilo-terminal-pane {
     position: relative;
     display: flex;
     flex: 1;
@@ -10,7 +10,7 @@
     /* Transparent: the hairline between panels is an inset shadow of the cell behind it. */
     background: transparent;
   }
-  .coloride-terminal-screen {
+  .hilo-terminal-screen {
     flex: 1;
     min-height: 0;
     overflow: hidden;
@@ -18,28 +18,28 @@
   /* The margin around the text goes here, on xterm's own element, never on the screen: the fit
      (addon and `xterm-view.ts`) subtracts this padding, so padding on the screen would push the
      last row out of view. */
-  .coloride-terminal-screen > .xterm {
+  .hilo-terminal-screen > .xterm {
     height: 100%;
     padding: 5px;
     background: var(--color-main);
   }
   /* xterm.css paints its scroll viewport black and it covers the padding: the panel's colour
      must show there (the text area itself is painted with the theme of `xterm-view.ts`). */
-  .coloride-terminal-screen .xterm-viewport {
+  .hilo-terminal-screen .xterm-viewport {
     background-color: transparent !important;
   }
-  .coloride-terminal-status {
+  .hilo-terminal-status {
     position: absolute;
     right: 12px;
     bottom: 8px;
     color: #ffb450;
     font-size: 11px;
   }
-  .coloride-terminal-status:empty {
+  .hilo-terminal-status:empty {
     display: none;
   }
   /* Menu of the + button of Zone 3: same look as a panel's ⋯ menu (no border, thin rows) */
-  .coloride-new-panel-menu {
+  .hilo-new-panel-menu {
     position: fixed;
     z-index: 100;
     min-width: 190px;
@@ -48,7 +48,7 @@
     border-radius: 8px;
     background: #262626;
   }
-  .coloride-new-panel-item {
+  .hilo-new-panel-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -65,76 +65,66 @@
     text-align: left;
     cursor: pointer;
   }
-  .coloride-new-panel-item:hover:not(:disabled),
-  .coloride-new-panel-item:focus-visible {
+  .hilo-new-panel-item:hover:not(:disabled),
+  .hilo-new-panel-item:focus-visible {
     background: rgba(255, 255, 255, 0.08);
     color: var(--color-text-primary);
     outline: none;
   }
-  .coloride-new-panel-item:disabled {
+  .hilo-new-panel-item:disabled {
     color: var(--color-text-muted);
     cursor: default;
   }
-  .coloride-new-panel-label {
+  .hilo-new-panel-label {
     display: inline-flex;
     align-items: center;
     gap: 8px;
   }
   /* Registry marks also fit the compact menu, tabs and session headings. */
-  :is(
-      .coloride-new-panel-label,
-      .coloride-header-tab-icon,
-      .coloride-chat-cell-title-icon,
-      .sidebar-row-icon
-    )
-    .coloride-registry-mark {
+  :is(.hilo-new-panel-label, .hilo-header-tab-icon, .hilo-chat-cell-title-icon, .sidebar-row-icon)
+    .hilo-registry-mark {
     width: 14px;
     height: 14px;
     font-size: 10px;
     color: inherit;
   }
-  :is(
-      .coloride-new-panel-label,
-      .coloride-header-tab-icon,
-      .coloride-chat-cell-title-icon,
-      .sidebar-row-icon
-    )
-    .coloride-registry-mark
+  :is(.hilo-new-panel-label, .hilo-header-tab-icon, .hilo-chat-cell-title-icon, .sidebar-row-icon)
+    .hilo-registry-mark
     svg {
     width: 14px;
     height: 14px;
   }
-  .coloride-new-panel-icon {
+  .hilo-new-panel-icon {
     display: inline-flex;
     color: inherit;
   }
-  .coloride-new-panel-icon svg {
+  .hilo-new-panel-icon svg {
     width: 12px;
     height: 12px;
   }
-  .coloride-new-panel-install .coloride-new-panel-icon svg {
+  .hilo-new-panel-install .hilo-new-panel-icon svg {
     transform: scale(1.2);
   }
   /* The Codex mark is denser than the terminal glyph: a little larger to read */
-  .coloride-new-panel-icon svg.coloride-codex-icon {
+  .hilo-new-panel-icon svg.hilo-codex-icon {
     width: 14px;
     height: 14px;
   }
-  .coloride-new-panel-hint {
+  .hilo-new-panel-hint {
     font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--color-text-muted);
   }
   /* "External Agents": a section title, not an entry */
-  .coloride-new-panel-heading {
+  .hilo-new-panel-heading {
     padding: 4px 8px 2px;
     font-size: 11px;
     color: var(--color-text-muted);
   }
-  .coloride-new-panel-heading[hidden] {
+  .hilo-new-panel-heading[hidden] {
     display: none;
   }
-  .coloride-new-panel-separator {
+  .hilo-new-panel-separator {
     height: 1px;
     margin: 3px 6px;
     background: rgba(255, 255, 255, 0.1);

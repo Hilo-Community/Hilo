@@ -1,5 +1,5 @@
 {
-  "name": "@coloride/editor-cm6",
+  "name": "@hilo/editor-cm6",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -23,7 +23,7 @@
     "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.36.3",
-    "@coloride/protocol-types": "workspace:*",
+    "@hilo/protocol-types": "workspace:*",
     "@lezer/highlight": "^1.2.1"
   },
   "devDependencies": {

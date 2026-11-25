@@ -3,9 +3,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { UI_PREFERENCES_KEY, UiPreferences, browserStorage } from "./ui-preferences.js";
 afterEach(() => localStorage.clear());
 it("migrates the three legacy keys into a validated single snapshot", () => {
-  localStorage.setItem("coloride.sidebarWidthPx", "320");
-  localStorage.setItem("coloride.inspectorWidthPx", "580");
-  localStorage.setItem("coloride.treeHidden", "true");
+  localStorage.setItem("hilo.sidebarWidthPx", "320");
+  localStorage.setItem("hilo.inspectorWidthPx", "580");
+  localStorage.setItem("hilo.treeHidden", "true");
   const prefs = new UiPreferences(localStorage);
   expect(prefs.getState()).toEqual({
     sidebarWidthPx: 320,
@@ -58,7 +58,7 @@ it("works with denied getters and retains legacy keys if persistence fails", () 
   };
   const removeItem = vi.fn();
   new UiPreferences({
-    getItem: (key) => (key === "coloride.sidebarWidthPx" ? "320" : null),
+    getItem: (key) => (key === "hilo.sidebarWidthPx" ? "320" : null),
     setItem: () => {
       throw Error("quota");
     },

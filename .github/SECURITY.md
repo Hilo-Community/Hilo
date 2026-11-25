@@ -3,15 +3,15 @@
 
 ## Overview
 
-Security is a core priority for Coloride.
+Security is a core priority for Hilo.
 
-Coloride is an open-source, local-first AI code editor built with Rust, Tauri, and TypeScript.
+Hilo is an open-source, local-first AI code editor built with Rust, Tauri, and TypeScript.
 
 We take security vulnerabilities seriously, particularly those involving code execution, sandbox isolation, filesystem access, and AI-assisted operations.
 
 ## Supported Versions
 
-Coloride is currently under active development.
+Hilo is currently under active development.
 
 Until the first stable release, security fixes are generally applied to the latest development version.
 
@@ -26,7 +26,7 @@ Please do not disclose security vulnerabilities through public GitHub Issues or 
 
 Instead, use GitHub's private vulnerability reporting feature:
 
-https://github.com/Color-IDE/Coloride/security/advisories/new
+https://github.com/Color-IDE/Hilo/security/advisories/new
 
 Please include:
 
@@ -38,7 +38,7 @@ Please include:
 
 ## Security Principles
 
-Coloride follows these principles:
+Hilo follows these principles:
 
 - Local-first architecture
 - Explicit authorization of AI-generated operations
@@ -57,6 +57,6 @@ Please allow the maintainers an opportunity to investigate before publicly discl
 
 ## Maintainers
 
-Security reports are handled by the Coloride maintainers.
+Security reports are handled by the Hilo maintainers.
 
-Project: https://github.com/Color-IDE/Coloride
+Project: https://github.com/Color-IDE/Hilo

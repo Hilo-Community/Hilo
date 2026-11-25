@@ -29,7 +29,7 @@ const violet = "#c678dd";
 /**
  * Exact `oneDarkHighlightStyle` palette used by `Rectury-Package/client/ide/src/features/editor/hosts/codemirror/theme.ts`.
  */
-export const colorideDarkHighlightStyle = HighlightStyle.define([
+export const hiloDarkHighlightStyle = HighlightStyle.define([
   { tag: tags.keyword, color: violet },
   {
     tag: [tags.name, tags.deleted, tags.character, tags.propertyName, tags.macroName],
@@ -79,7 +79,7 @@ const FOLD_CHEVRON_SVG =
 
 function createFoldMarker(open: boolean): HTMLElement {
   const btn = document.createElement("span");
-  btn.className = `coloride-fold-btn ${open ? "is-open" : "is-closed"}`;
+  btn.className = `hilo-fold-btn ${open ? "is-open" : "is-closed"}`;
   btn.innerHTML = FOLD_CHEVRON_SVG;
   return btn;
 }
@@ -160,7 +160,7 @@ export function createLezerHighlightingExtensions(filePathOrLang: string): Exten
     bracketMatching(),
     codeFolding({ placeholderText: "…" }),
     Prec.lowest(cmFoldGutter({ markerDOM: createFoldMarker })),
-    syntaxHighlighting(colorideDarkHighlightStyle, { fallback: true }),
+    syntaxHighlighting(hiloDarkHighlightStyle, { fallback: true }),
   ];
 }
 

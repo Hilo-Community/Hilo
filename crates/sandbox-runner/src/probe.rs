@@ -70,7 +70,7 @@ pub(crate) fn run<E: OsSandboxEngine>(
     let base = std::env::temp_dir()
         .canonicalize()
         .map_err(io)?
-        .join(format!("coloride-selftest-{}", new_run_id()));
+        .join(format!("hilo-selftest-{}", new_run_id()));
     let (worktree, outside, home) = (base.join("wt"), base.join("outside"), base.join("home"));
     fs::create_dir_all(home.join(".ssh")).map_err(io)?;
     fs::create_dir_all(&worktree).map_err(io)?;

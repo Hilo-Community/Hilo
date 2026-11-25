@@ -1,4 +1,4 @@
-import type { AcpEvent, AgentHost } from "@coloride/web-ui";
+import type { AcpEvent, AgentHost } from "@hilo/web-ui";
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 export interface AgentChannel {
   onmessage: (event: AcpEvent) => void;

@@ -12,7 +12,7 @@ pub enum ModelProviderKind {
     LocalLlamaCpp,
     LocalOllama,
     ByokCloud,
-    ManagedColorideCloud,
+    ManagedHiloCloud,
     PrivateVllm,
     AcpExternalAgent,
 }

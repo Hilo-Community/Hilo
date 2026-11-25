@@ -1,7 +1,7 @@
 /* Unsaved-changes dialog */
 @layer components {
   /* Confirmation shown when closing a tab that has unsaved changes */
-  .coloride-unsaved-overlay {
+  .hilo-unsaved-overlay {
     position: absolute;
     inset: 0;
     z-index: 20;
@@ -14,7 +14,7 @@
     backdrop-filter: blur(1px);
     -webkit-backdrop-filter: blur(1px);
   }
-  .coloride-unsaved-dialog {
+  .hilo-unsaved-dialog {
     width: min(300px, calc(100% - 32px));
     padding: 10px 12px;
     border: 0.5px solid rgba(255, 255, 255, 0.14);
@@ -22,24 +22,24 @@
     background: var(--color-card);
     color: var(--color-text-primary);
   }
-  .coloride-unsaved-dialog h3 {
+  .hilo-unsaved-dialog h3 {
     margin: 0 0 2px;
     font-size: 13px;
     font-weight: 600;
   }
-  .coloride-unsaved-dialog p {
+  .hilo-unsaved-dialog p {
     margin: 0 0 8px;
     color: var(--color-text-secondary);
     font-size: 12px;
     line-height: 1.4;
     overflow-wrap: anywhere;
   }
-  .coloride-unsaved-actions {
+  .hilo-unsaved-actions {
     display: flex;
     justify-content: flex-end;
     gap: 6px;
   }
-  .coloride-unsaved-actions button {
+  .hilo-unsaved-actions button {
     height: 26px;
     padding: 0 10px;
     border: 0;
@@ -49,18 +49,18 @@
     font-size: 12px;
     cursor: pointer;
   }
-  .coloride-unsaved-actions button:focus-visible {
+  .hilo-unsaved-actions button:focus-visible {
     outline: 2px solid rgba(255, 255, 255, 0.5);
     outline-offset: 2px;
   }
-  .coloride-unsaved-actions button:hover {
+  .hilo-unsaved-actions button:hover {
     background: rgba(255, 255, 255, 0.14);
   }
-  .coloride-unsaved-actions .coloride-unsaved-primary {
+  .hilo-unsaved-actions .hilo-unsaved-primary {
     background: #e8e8e8;
     color: #1a1a1a;
   }
-  .coloride-unsaved-actions .coloride-unsaved-primary:hover {
+  .hilo-unsaved-actions .hilo-unsaved-primary:hover {
     background: #fff;
   }
 }

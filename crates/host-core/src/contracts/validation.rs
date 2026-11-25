@@ -1,14 +1,14 @@
-//! The 5 Coloride validation states and the task lifecycle (`LOT-002`).
+//! The 5 Hilo validation states and the task lifecycle (`LOT-002`).
 
 use super::*;
 
 // ============================================================================
-// 2. Canonical Coloride Validation States (5 States) & Task Lifecycle (11 States)
+// 2. Canonical Hilo Validation States (5 States) & Task Lifecycle (11 States)
 // ============================================================================
 
-/// The 5 canonical Coloride validation states bound to the exact document revision hash.
+/// The 5 canonical Hilo validation states bound to the exact document revision hash.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
-pub enum ColorideValidationState {
+pub enum HiloValidationState {
     /// `🟢 ✓ Validated`: build OK, `vtsls`/Biome 0 errors, 100% impacted tests passed, Preview 0 crash/`console.error`.
     ValidatedGreen,
     /// `🟡 ! Needs Review`: agent patch awaiting human review, architectural decision, or non-blocking warning.
@@ -21,7 +21,7 @@ pub enum ColorideValidationState {
     UnchangedBlue,
 }
 
-impl ColorideValidationState {
+impl HiloValidationState {
     pub const ALL: [Self; 5] = [
         Self::ValidatedGreen,
         Self::ReviewYellow,

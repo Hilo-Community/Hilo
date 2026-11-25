@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { CONTRACT_SCHEMA_VERSION } from "@coloride/protocol-types";
-import { resolveGroupLayout, resolveGroupMaximized } from "@coloride/web-ui";
+import { CONTRACT_SCHEMA_VERSION } from "@hilo/protocol-types";
+import { resolveGroupLayout, resolveGroupMaximized } from "@hilo/web-ui";
 import { describe, expect, it } from "vitest";
 import {
   bootstrapDesktopShell,
@@ -9,7 +9,7 @@ import {
   lazyBootDesktopCockpit,
 } from "./index.js";
 
-describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () => {
+describe("@hilo/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () => {
   it("restores work groups and their selected header tab from the session cache", () => {
     const first = lazyBootDesktopCockpit();
     first.stores.createWorkGroup("Authentication");
@@ -101,7 +101,7 @@ describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () =>
         },
       ],
     });
-    first.setWorkspaceRoot("/projects/Coloride");
+    first.setWorkspaceRoot("/projects/Hilo");
     first.stores.renameWorkGroup("initial-group", "Authentication");
     first.stores.selectChat("b");
     first.stores.renameChat("b", "Security review");
@@ -112,7 +112,7 @@ describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () =>
     first.destroy();
     const restored = lazyBootDesktopCockpit({ cachedSessionBytes: bytes });
     const navigation = restored.stores.navigation.getState();
-    expect(navigation.projectPath).toBe("/projects/Coloride");
+    expect(navigation.projectPath).toBe("/projects/Hilo");
     expect(navigation.expanded).toBe(false);
     expect(navigation.groups[0]).toMatchObject({
       title: "Authentication",
@@ -130,9 +130,9 @@ describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () =>
     restored.destroy();
   });
 
-  it("bootstraps the desktop shell with dev.coloride.desktop identifier and isolated CM6 bridge", () => {
+  it("bootstraps the desktop shell with dev.hilo.desktop identifier and isolated CM6 bridge", () => {
     const boot = bootstrapDesktopShell();
-    expect(boot.appId).toBe("dev.coloride.desktop");
+    expect(boot.appId).toBe("dev.hilo.desktop");
     expect(boot.shell.activePersona).toBe("Develop");
 
     const editor = boot.createIsolatedEditor("src/main.ts", "export const ready = true;\n", [
@@ -157,7 +157,7 @@ describe("@coloride/desktop-tauri — LOT-005 Lazy Boot & Inspector Sync", () =>
 
     const cachedBytes = encodeWorkspaceSessionCacheBinary({
       schemaVersion: CONTRACT_SCHEMA_VERSION,
-      workspaceRoot: "/workspace/coloride",
+      workspaceRoot: "/workspace/hilo",
       activePersona: "Develop",
       activeActivityPanel: "search",
       activeInspectorTab: "code-diff",

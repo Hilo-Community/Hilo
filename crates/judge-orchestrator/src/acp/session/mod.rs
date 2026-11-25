@@ -581,7 +581,7 @@ impl Session {
         }
     }
     fn initialize(&mut self) -> Result<(), AcpError> {
-        self.request("initialize", json!({"protocolVersion":1,"clientInfo":{"name":"Coloride","version":"0.1.0"},"clientCapabilities":{"auth":{"terminal":self.host.runner.supports_terminal(),"_meta":{"gateway":true}},"elicitation":{"url":{}},"fs":{"readTextFile":true,"writeTextFile":true},"terminal":true,"_meta":{"writesAreProposals":true}}}))
+        self.request("initialize", json!({"protocolVersion":1,"clientInfo":{"name":"Hilo","version":"0.1.0"},"clientCapabilities":{"auth":{"terminal":self.host.runner.supports_terminal(),"_meta":{"gateway":true}},"elicitation":{"url":{}},"fs":{"readTextFile":true,"writeTextFile":true},"terminal":true,"_meta":{"writesAreProposals":true}}}))
     }
     fn publish_options(&self) {
         (self.host.events)(AcpEvent::Options {

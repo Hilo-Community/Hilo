@@ -92,11 +92,11 @@ export class DebugPanel {
     private readonly context: DebugPanelContext,
   ) {
     this.element = doc.createElement("section");
-    this.element.className = "coloride-debug-panel";
+    this.element.className = "hilo-debug-panel";
     this.element.setAttribute("aria-label", UI_STRINGS.debugger.panel);
 
     const toolbar = doc.createElement("div");
-    toolbar.className = "coloride-debug-toolbar";
+    toolbar.className = "hilo-debug-toolbar";
     const button = (label: string, action: () => void) => {
       const element = doc.createElement("button");
       element.type = "button";
@@ -115,7 +115,7 @@ export class DebugPanel {
     };
 
     this.status = doc.createElement("div");
-    this.status.className = "coloride-debug-status";
+    this.status.className = "hilo-debug-status";
     this.status.setAttribute("role", "status");
     const heading = (text: string) => {
       const element = doc.createElement("h4");
@@ -123,13 +123,13 @@ export class DebugPanel {
       return element;
     };
     this.stack = doc.createElement("div");
-    this.stack.className = "coloride-debug-stack";
+    this.stack.className = "hilo-debug-stack";
     this.stack.setAttribute("role", "list");
     this.variables = doc.createElement("div");
-    this.variables.className = "coloride-debug-variables";
+    this.variables.className = "hilo-debug-variables";
     this.variables.setAttribute("role", "list");
     this.output = doc.createElement("pre");
-    this.output.className = "coloride-debug-output";
+    this.output.className = "hilo-debug-output";
     this.element.append(
       toolbar,
       this.status,

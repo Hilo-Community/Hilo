@@ -1,4 +1,4 @@
-import type { ColorideEditorView } from "@coloride/editor-cm6";
+import type { HiloEditorView } from "@hilo/editor-cm6";
 import { UiPreferences, browserStorage } from "../../state/ui-preferences.js";
 import type { CockpitFileTreeNode, CockpitStoreBundle } from "../../stores/index.js";
 import { fileTreeIconColor, fileTreeIconSvg } from "../../theme/file-tree-icons.js";
@@ -12,7 +12,7 @@ import { FileTreePanel } from "./file-tree-panel.js";
 export interface InspectorOptions {
   readonly stores: CockpitStoreBundle;
   readonly preferences?: UiPreferences;
-  readonly editorView: ColorideEditorView;
+  readonly editorView: HiloEditorView;
   readonly header: HTMLElement;
   readonly readWorkspaceFile?: (path: string) => Promise<string>;
   /** Asks the user for a project folder; shown in the file tree while no project is open. */
@@ -78,7 +78,7 @@ export class Inspector {
 
     this.element = doc.createElement("section");
     this.element.className =
-      "coloride-zone-4-inspector bg-main border border-white/8 rounded-tr-[16px] rounded-br-[16px] flex flex-col h-full overflow-hidden";
+      "hilo-zone-4-inspector bg-main border border-white/8 rounded-tr-[16px] rounded-br-[16px] flex flex-col h-full overflow-hidden";
     this.element.setAttribute("aria-label", UI_STRINGS.shell.inspector);
     this.element.style.minWidth = "0";
     this.element.style.overflow = "hidden";
@@ -86,22 +86,22 @@ export class Inspector {
 
     this.previewHost = doc.createElement("div");
     this.previewHost.className =
-      "coloride-zone-4-preview-host flex-1 w-full h-full overflow-auto p-0 bg-main select-text";
+      "hilo-zone-4-preview-host flex-1 w-full h-full overflow-auto p-0 bg-main select-text";
     this.editorHost = doc.createElement("div");
     this.editorHost.className =
-      "coloride-zone-4-editor-host flex-1 w-full h-full overflow-hidden p-0 bg-main select-text";
+      "hilo-zone-4-editor-host flex-1 w-full h-full overflow-hidden p-0 bg-main select-text";
     this.editorHost.dataset.isolatedCm6Container = "true";
     this.empty = doc.createElement("p");
-    this.empty.className = "coloride-zone-4-empty";
+    this.empty.className = "hilo-zone-4-empty";
     this.empty.textContent = UI_STRINGS.editor.noFile;
     this.empty.hidden = true;
 
     const editorColumn = doc.createElement("div");
-    editorColumn.className = "coloride-zone-4-editor-column";
+    editorColumn.className = "hilo-zone-4-editor-column";
     editorColumn.append(this.previewHost, this.editorHost, this.empty);
 
     this.tree = new FileTreePanel(doc, {
-      className: "coloride-zone-4-tree-column",
+      className: "hilo-zone-4-tree-column",
       withFilter: true,
       ...(options.openWorkspace
         ? {
@@ -124,14 +124,14 @@ export class Inspector {
     // it keeps the tree visible.
     this.treeEdge = doc.createElement("button");
     this.treeEdge.type = "button";
-    this.treeEdge.className = "coloride-zone-4-tree-edge";
+    this.treeEdge.className = "hilo-zone-4-tree-edge";
     this.treeEdge.innerHTML = TREE_SHOW_ICON;
     this.treeEdge.setAttribute("aria-label", UI_STRINGS.files.showTree);
     this.treeEdge.title = UI_STRINGS.files.showTree;
     this.treeEdge.addEventListener("click", () => this.setTreeHidden(false));
 
     this.body = doc.createElement("div");
-    this.body.className = "coloride-zone-4-body";
+    this.body.className = "hilo-zone-4-body";
     this.body.append(editorColumn, this.treeEdge, this.tree.element);
     this.element.append(this.body);
     this.preferences = options.preferences ?? new UiPreferences(browserStorage(doc));

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
 import { CockpitDomController, createCockpitStoreBundle } from "../../index.js";
 import { UI_PREFERENCES_KEY } from "../../state/ui-preferences.js";
@@ -15,7 +15,7 @@ function mount() {
   const root = document.createElement("div");
   document.body.appendChild(root);
   const stores = createCockpitStoreBundle();
-  const editorView = new ColorideEditorView({
+  const editorView = new HiloEditorView({
     initialDocumentId: "src/main.ts",
     initialContent: "",
     ipcChannel: new InMemoryBinaryHostBridge(),
@@ -28,11 +28,11 @@ function mount() {
     editorView.destroy();
     root.remove();
   });
-  const shell = root.querySelector<HTMLElement>(".coloride-cockpit-shell") as HTMLElement;
-  const sidebar = root.querySelector<HTMLElement>(".coloride-zone-2-sidebar") as HTMLElement;
-  const inspector = root.querySelector<HTMLElement>(".coloride-zone-4-inspector") as HTMLElement;
+  const shell = root.querySelector<HTMLElement>(".hilo-cockpit-shell") as HTMLElement;
+  const sidebar = root.querySelector<HTMLElement>(".hilo-zone-2-sidebar") as HTMLElement;
+  const inspector = root.querySelector<HTMLElement>(".hilo-zone-4-inspector") as HTMLElement;
   const handle = (panel: string) =>
-    root.querySelector<HTMLElement>(`.coloride-shell-handle[data-panel="${panel}"]`) as HTMLElement;
+    root.querySelector<HTMLElement>(`.hilo-shell-handle[data-panel="${panel}"]`) as HTMLElement;
   // happy-dom lays nothing out: the sidebar is 240px wide and the inspector 480px.
   sidebar.getBoundingClientRect = () => ({ width: 240 }) as DOMRect;
   inspector.getBoundingClientRect = () => ({ width: 480 }) as DOMRect;

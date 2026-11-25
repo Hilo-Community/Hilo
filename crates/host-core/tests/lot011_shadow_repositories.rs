@@ -156,7 +156,7 @@ fn a_real_repository_is_used_when_there_is_one() {
     let shadow = tempfile::tempdir().unwrap();
     let manager = CheckpointManager::open_or_shadow(root, shadow.path()).unwrap();
     manager.create_checkpoint("task-real", BEFORE, &[]).unwrap();
-    assert_ne!(git(root, &["for-each-ref", "refs/coloride"]), "");
+    assert_ne!(git(root, &["for-each-ref", "refs/hilo"]), "");
     assert_eq!(fs::read_dir(shadow.path()).unwrap().count(), 0);
 }
 

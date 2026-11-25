@@ -1,4 +1,4 @@
-import type { ColorideValidationState } from "@coloride/protocol-types";
+import type { HiloValidationState } from "@hilo/protocol-types";
 import {
   extractSymbolsHeuristically,
   inferImpactedTestsHeuristically,
@@ -9,7 +9,7 @@ import type { CockpitStoreBundle } from "./types.js";
 export interface DocumentBuffer {
   content: string;
   unsaved: boolean;
-  validationState: ColorideValidationState;
+  validationState: HiloValidationState;
 }
 
 /** In-memory text of the documents shown so far, by relative path. */
@@ -85,7 +85,7 @@ export function createDocumentActions(ctx: StoreContext): DocumentActions {
       const existing = documents.get(filePath);
       const prevValidation = existing?.validationState ?? zone4.getState().activeValidationState;
       // Editing a ValidatedGreen range downgrades it synchronously (AGENTS.md rule 4).
-      const nextValidation: ColorideValidationState =
+      const nextValidation: HiloValidationState =
         hasUnsavedChanges && prevValidation === "ValidatedGreen" ? "StaleOrange" : prevValidation;
 
       documents.set(filePath, {

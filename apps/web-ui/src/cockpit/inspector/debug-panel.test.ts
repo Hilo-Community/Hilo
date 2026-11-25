@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CockpitDomController,
@@ -58,7 +58,7 @@ function setup() {
       stops += 1;
     },
   };
-  const editorView = new ColorideEditorView({
+  const editorView = new HiloEditorView({
     initialDocumentId: "src/app.js",
     initialContent: "",
     ipcChannel: new InMemoryBinaryHostBridge(),
@@ -81,7 +81,7 @@ function setup() {
   const inspector = (controller as unknown as { inspector: Inspector }).inspector;
   const key = (key: string, shiftKey = false) =>
     document.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true }));
-  const panel = () => root.querySelector<HTMLElement>(".coloride-debug-panel");
+  const panel = () => root.querySelector<HTMLElement>(".hilo-debug-panel");
   return {
     controller,
     editorView,
@@ -132,15 +132,15 @@ describe("JavaScript debugger panel", () => {
     await settle();
     await settle();
     expect(t.panel()?.dataset.debugState).toBe("paused");
-    expect(t.panel()?.querySelector(".coloride-debug-stack")?.textContent).toContain(
+    expect(t.panel()?.querySelector(".hilo-debug-stack")?.textContent).toContain(
       "add  src/app.js:3",
     );
-    expect(t.panel()?.querySelector(".coloride-debug-variables")?.textContent).toBe("a = 40b = 2");
+    expect(t.panel()?.querySelector(".hilo-debug-variables")?.textContent).toBe("a = 40b = 2");
 
     t.key("F10");
     expect(t.requests.at(-1)).toEqual({ Next: { thread_id: 4 } });
     t.emit([{ role: "Debuggee", event: "continued", body: { threadId: 4 } }]);
-    expect(t.panel()?.querySelector(".coloride-debug-variables")?.textContent).toBe("");
+    expect(t.panel()?.querySelector(".hilo-debug-variables")?.textContent).toBe("");
     t.emit([
       { role: "Debuggee", event: "output", body: { category: "stdout", output: "héllo 𝄞 42\n" } },
     ]);
@@ -151,7 +151,7 @@ describe("JavaScript debugger panel", () => {
         body: { category: "telemetry", output: "js-debug/launch" },
       },
     ]);
-    expect(t.panel()?.querySelector(".coloride-debug-output")?.textContent).toBe("héllo 𝄞 42");
+    expect(t.panel()?.querySelector(".hilo-debug-output")?.textContent).toBe("héllo 𝄞 42");
 
     t.key("F5", true);
     await settle();
@@ -175,7 +175,7 @@ describe("JavaScript debugger panel", () => {
     t.emit([
       { role: "Launcher", event: "launchFailed", body: { message: "workspace is not trusted" } },
     ]);
-    expect(t.panel()?.querySelector(".coloride-debug-status")?.textContent).toBe(
+    expect(t.panel()?.querySelector(".hilo-debug-status")?.textContent).toBe(
       "workspace is not trusted",
     );
   });

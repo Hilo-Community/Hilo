@@ -65,7 +65,7 @@ export class HeaderTabs {
     private readonly options: HeaderTabsOptions,
   ) {
     this.track = doc.createElement("div");
-    this.track.className = "coloride-header-tab-track";
+    this.track.className = "hilo-header-tab-track";
     this.track.setAttribute("role", "tablist");
     // The strip can fill the whole header; Tauri drags the window only from an element that carries
     // the attribute itself, so the empty part of the strip must. Tabs and buttons are children and
@@ -112,7 +112,7 @@ export class HeaderTabs {
     const iconKey = `${spec.icon?.className ?? ""}|${spec.icon?.svg ?? ""}|${spec.icon?.text ?? ""}`;
     if (tab.iconKey !== iconKey) {
       tab.iconKey = iconKey;
-      tab.icon.className = `coloride-header-tab-icon ${spec.icon?.className ?? ""}`.trim();
+      tab.icon.className = `hilo-header-tab-icon ${spec.icon?.className ?? ""}`.trim();
       if (spec.icon?.svg) tab.icon.innerHTML = spec.icon.svg;
       else tab.icon.textContent = spec.icon?.text ?? "";
     }
@@ -126,7 +126,7 @@ export class HeaderTabs {
     const doc = this.track.ownerDocument;
     const { onSelect, onClose, dataKey, unsavedLabel } = this.options;
     const el = doc.createElement("div");
-    el.className = "coloride-header-tab";
+    el.className = "hilo-header-tab";
     el.setAttribute("role", "tab");
     el.tabIndex = 0;
     el.dataset[dataKey] = key;
@@ -134,15 +134,15 @@ export class HeaderTabs {
     const icon = doc.createElement("span");
     icon.setAttribute("aria-hidden", "true");
     const label = doc.createElement("span");
-    label.className = "coloride-header-tab-label";
+    label.className = "hilo-header-tab-label";
     const dot = doc.createElement("span");
-    dot.className = "coloride-header-tab-dot";
+    dot.className = "hilo-header-tab-dot";
     dot.setAttribute("role", "img");
     dot.setAttribute("aria-label", unsavedLabel);
     dot.hidden = true;
     const close = doc.createElement("button");
     close.type = "button";
-    close.className = "coloride-header-tab-close";
+    close.className = "hilo-header-tab-close";
     close.innerHTML = CLOSE_TAB_ICON;
     close.addEventListener("click", (event) => {
       event.stopPropagation();

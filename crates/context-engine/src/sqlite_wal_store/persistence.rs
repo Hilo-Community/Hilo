@@ -2,6 +2,8 @@
 
 use super::*;
 
+// Kept as the original on-disk tag (not renamed with the product): this is a persisted file
+// magic number read back by old snapshot files, and it must stay exactly 16 bytes.
 const SQLITE_SNAPSHOT_MAGIC: &[u8; 16] = b"COLORIDE_SQL8_01";
 const SQLITE_WAL_FRAME_MAGIC: &[u8; 8] = b"CLRWAL08";
 

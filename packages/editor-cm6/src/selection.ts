@@ -11,7 +11,7 @@ import { rowVertical } from "./line-geometry.js";
 /** Selection visuals: highlighted gutter rows for selected lines and the rounded text-only selection. */
 
 const selectedGutterMarker = new (class extends GutterMarker {
-  override elementClass = "coloride-selected-line-gutter";
+  override elementClass = "hilo-selected-line-gutter";
 })();
 
 export function highlightSelectedLineGutter(): Extension {

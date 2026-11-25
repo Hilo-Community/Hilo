@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { describe, expect, it } from "vitest";
 import { CockpitDomController, createCockpitStoreBundle } from "../index.js";
 
-describe("@coloride/web-ui — LOT-003..LOT-008 integration", () => {
+describe("@hilo/web-ui — LOT-003..LOT-008 integration", () => {
   it("integrates LOT-003..LOT-008 in CockpitDomController: file tree click, Cmd+S atomic save, FTS5 unsaved search + secret redaction, AST symbols/impacted tests, and MCP onboarding modal", async () => {
     const rootContainer = document.createElement("div");
     document.body.appendChild(rootContainer);
@@ -47,7 +47,7 @@ describe("@coloride/web-ui — LOT-003..LOT-008 integration", () => {
     });
 
     const ipcChannel = new InMemoryBinaryHostBridge();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/auth.ts",
       initialContent: "export function verifySessionToken() {\n  return true;\n}\n",
       ipcChannel,
@@ -68,7 +68,7 @@ describe("@coloride/web-ui — LOT-003..LOT-008 integration", () => {
       false,
     );
     const billingRow = zone4.querySelector<HTMLElement>(
-      '.cm-coloride-virtual-tree-row[data-path="src/billing.ts"]',
+      '.cm-hilo-virtual-tree-row[data-path="src/billing.ts"]',
     );
     expect(billingRow).not.toBeNull();
     billingRow?.click();
@@ -92,7 +92,7 @@ describe("@coloride/web-ui — LOT-003..LOT-008 integration", () => {
     expect(hits[0]?.freshness).toBe("LiveUnsavedBuffer");
     expect(hits[0]?.snippet).toContain("[REDACTED_SECRET]");
     expect(hits[0]?.snippet).not.toContain("sk-live1234567890abcdef");
-    expect(zone2.querySelectorAll(".coloride-search-result-item").length).toBe(1);
+    expect(zone2.querySelectorAll(".hilo-search-result-item").length).toBe(1);
 
     // Save with Ctrl+S and verify unsaved indicator clears
     await controller.saveActiveDocument();
@@ -100,8 +100,8 @@ describe("@coloride/web-ui — LOT-003..LOT-008 integration", () => {
 
     // 4. LOT-007: Switching to Debug (Cmd/Ctrl+3) renders AST symbols and impacted test files
     stores.setActivitySection("debug");
-    const symbolItems = zone2.querySelectorAll(".coloride-ast-symbol-item");
-    const impactedItems = zone2.querySelectorAll(".coloride-impacted-test-item");
+    const symbolItems = zone2.querySelectorAll(".hilo-ast-symbol-item");
+    const impactedItems = zone2.querySelectorAll(".hilo-impacted-test-item");
     expect(symbolItems.length).toBeGreaterThanOrEqual(1);
     expect(symbolItems[0]?.textContent).toContain("chargeInvoice");
     expect(impactedItems.length).toBeGreaterThanOrEqual(1);
@@ -109,11 +109,11 @@ describe("@coloride/web-ui — LOT-003..LOT-008 integration", () => {
 
     // 5. LOT-006: Switching to MCP (Cmd/Ctrl+5) renders the onboarding toggle and opens modal
     stores.setActivitySection("mcp");
-    const openBtn = zone2.querySelector<HTMLButtonElement>(".coloride-open-onboarding-btn");
+    const openBtn = zone2.querySelector<HTMLButtonElement>(".hilo-open-onboarding-btn");
     expect(openBtn).not.toBeNull();
     openBtn?.click();
     expect(controller.getOnboardingController().store.getState().modalOpen).toBe(true);
-    expect(shell.querySelector(".coloride-onboarding-modal")).not.toBeNull();
+    expect(shell.querySelector(".hilo-onboarding-modal")).not.toBeNull();
     expect(editorView.getStoreSnapshot().mountCount).toBe(1);
 
     controller.destroy();

@@ -10,7 +10,7 @@ use crate::error::SandboxError;
 use crate::path_guard::PathGuard;
 
 /// Name of the private temporary directory created inside the worktree for each run.
-pub const TMP_DIR_NAME: &str = ".coloride-tmp";
+pub const TMP_DIR_NAME: &str = ".hilo-tmp";
 
 /// Outbound network access of the sandboxed process.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

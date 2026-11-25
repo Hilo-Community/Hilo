@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Coloride Isolated Sandbox Runner: Native OS Sandbox (Seatbelt/Landlock/AppContainer <5ms), Warm OCI Pool, Fargate & Firecracker (Fail-Closed)"
+description = "Hilo Isolated Sandbox Runner: Native OS Sandbox (Seatbelt/Landlock/AppContainer <5ms), Warm OCI Pool, Fargate & Firecracker (Fail-Closed)"
 
 [lints]
 workspace = true

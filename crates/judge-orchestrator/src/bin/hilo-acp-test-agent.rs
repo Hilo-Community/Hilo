@@ -274,7 +274,7 @@ fn authentication_fixture(mode: &str) {
     if mode == "auth-gateway" {
         assert_eq!(authenticate["params"]["methodId"], "fixture-gateway");
         assert_eq!(
-            authenticate["params"]["_meta"]["gateway"]["headers"]["x-coloride-session"],
+            authenticate["params"]["_meta"]["gateway"]["headers"]["x-hilo-session"],
             "session-token-only"
         );
         assert!(std::env::var_os("PROVIDER_REAL_KEY").is_none());

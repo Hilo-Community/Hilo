@@ -21,10 +21,10 @@ export function attachThinScrollbar(
   const doc = host.ownerDocument;
   const vertical = axis === "y";
   const track = doc.createElement("div");
-  track.className = `coloride-thin-scrollbar coloride-thin-scrollbar--${axis}`;
+  track.className = `hilo-thin-scrollbar hilo-thin-scrollbar--${axis}`;
   track.setAttribute("aria-hidden", "true");
   const thumb = doc.createElement("div");
-  thumb.className = "coloride-thin-scrollbar-thumb";
+  thumb.className = "hilo-thin-scrollbar-thumb";
   track.append(thumb);
   host.append(track);
 

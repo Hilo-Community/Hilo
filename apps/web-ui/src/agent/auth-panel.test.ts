@@ -65,14 +65,12 @@ describe("agent sign-in", () => {
     await settle();
     expect(f.handle.elicit).toHaveBeenCalledTimes(1);
     expect(f.handle.elicit).toHaveBeenCalledWith("7", "accept");
-    const card = f.panel.element.querySelector(".coloride-agent-authentication");
-    expect(card?.querySelector(".coloride-agent-authentication-code")?.textContent).toBe(
-      "ABCD-1234",
-    );
+    const card = f.panel.element.querySelector(".hilo-agent-authentication");
+    expect(card?.querySelector(".hilo-agent-authentication-code")?.textContent).toBe("ABCD-1234");
     expect(card?.textContent).toContain("auth.openai.com");
     // A normal step, not a warning: it must not wear the permission card's yellow border.
-    expect(card?.classList.contains("coloride-agent-permission")).toBe(false);
-    expect(card?.querySelector(".coloride-agent-authentication-status svg")).not.toBeNull();
+    expect(card?.classList.contains("hilo-agent-permission")).toBe(false);
+    expect(card?.querySelector(".hilo-agent-authentication-status svg")).not.toBeNull();
     expect(card?.textContent).toContain("Waiting for you to finish");
     // More renders never open the page again.
     f.store.setState((s) => ({ ...s }));
@@ -84,7 +82,7 @@ describe("agent sign-in", () => {
     expect(f.handle.elicit).toHaveBeenLastCalledWith("7", "open");
     f.emit({ type: "elicitationComplete", id: "7" });
     f.store.flush();
-    expect(f.panel.element.querySelector(".coloride-agent-authentication")).toBeNull();
+    expect(f.panel.element.querySelector(".hilo-agent-authentication")).toBeNull();
   });
 
   it("keeps a button to open the page when opening it automatically failed", async () => {
@@ -115,9 +113,7 @@ describe("agent sign-in", () => {
       f.store.flush();
       await settle();
       expect(button(f.panel.element, "Copy code")).toBeUndefined();
-      const code = f.panel.element.querySelector<HTMLElement>(
-        ".coloride-agent-authentication-code",
-      );
+      const code = f.panel.element.querySelector<HTMLElement>(".hilo-agent-authentication-code");
       expect(code?.textContent).toBe("ABCD-1234");
       expect(code?.dataset.copied).toBeUndefined();
       code?.click();
@@ -141,7 +137,7 @@ describe("agent sign-in", () => {
     f.emit(request);
     f.store.flush();
     await settle();
-    const code = f.panel.element.querySelector<HTMLElement>(".coloride-agent-authentication-code");
+    const code = f.panel.element.querySelector<HTMLElement>(".hilo-agent-authentication-code");
     expect(code?.getAttribute("role")).toBe("button");
     expect(code?.tabIndex).toBe(0);
     code?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
@@ -157,7 +153,7 @@ describe("agent sign-in", () => {
     f.emit(request);
     f.store.flush();
     await settle();
-    const code = f.panel.element.querySelector<HTMLElement>(".coloride-agent-authentication-code");
+    const code = f.panel.element.querySelector<HTMLElement>(".hilo-agent-authentication-code");
     code?.click();
     await settle();
     expect(code?.dataset.copied).toBeUndefined();

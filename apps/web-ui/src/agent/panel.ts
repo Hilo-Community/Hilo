@@ -1,4 +1,4 @@
-import { type PromptInput, createPromptInput } from "@coloride/editor-cm6";
+import { type PromptInput, createPromptInput } from "@hilo/editor-cm6";
 import { SPINNER_ICON, agentMark } from "../settings/agent-marks.js";
 import { UI_STRINGS } from "../ui/ui-strings.js";
 import { authChoiceCard, authenticationCards } from "./auth-panel.js";
@@ -68,15 +68,15 @@ export class AgentPanel {
       (action) => this.run(action),
     );
     this.element = doc.createElement("section");
-    this.element.className = "coloride-agent-panel";
+    this.element.className = "hilo-agent-panel";
     this.element.setAttribute("aria-label", identity.name);
     this.start = this.button(UI_STRINGS.agent.connect, () => void this.begin());
-    this.start.className = "coloride-agent-connect";
+    this.start.className = "hilo-agent-connect";
     this.output = doc.createElement("div");
-    this.output.className = "coloride-agent-output";
+    this.output.className = "hilo-agent-output";
     // A file the agent mentions (`[App.jsx](<src/App.jsx:6>)`) opens in the editor at that line.
     const openReference = (event: Event) => {
-      const ref = (event.target as Element | null)?.closest<HTMLElement>(".coloride-agent-ref");
+      const ref = (event.target as Element | null)?.closest<HTMLElement>(".hilo-agent-ref");
       const path = ref?.dataset.path;
       const line = Number(ref?.dataset.line);
       if (path && isWorktreePath(path) && Number.isSafeInteger(line) && line > 0) {
@@ -92,11 +92,11 @@ export class AgentPanel {
     this.error = doc.createElement("p");
     this.error.setAttribute("role", "status");
     this.status = doc.createElement("div");
-    this.status.className = "coloride-agent-status";
+    this.status.className = "hilo-agent-status";
     this.status.append(this.error, this.start);
     const form = doc.createElement("form");
     this.form = form;
-    form.className = "coloride-agent-composer";
+    form.className = "hilo-agent-composer";
     // Drawn by CodeMirror, not a native textarea: a thin caret like the editor's.
     // Enter sends, Shift+Enter makes a new line; never while an input method is composing.
     this.prompt = createPromptInput(form, {
@@ -110,15 +110,11 @@ export class AgentPanel {
       onMultilineChange: (multiline) => form.classList.toggle("is-multiline", multiline),
     });
     // Icon-only round buttons; their names stay "Send prompt" and "Cancel" for assistive tech.
-    this.submit = this.button("", () => undefined, "coloride-agent-send");
+    this.submit = this.button("", () => undefined, "hilo-agent-send");
     this.submit.type = "submit";
     this.submit.innerHTML = SEND_ICON;
     this.submit.setAttribute("aria-label", UI_STRINGS.agent.send);
-    this.cancel = this.button(
-      "",
-      () => this.run(() => this.handle?.cancel()),
-      "coloride-agent-stop",
-    );
+    this.cancel = this.button("", () => this.run(() => this.handle?.cancel()), "hilo-agent-stop");
     this.cancel.innerHTML = STOP_ICON;
     this.cancel.setAttribute("aria-label", UI_STRINGS.agent.cancel);
     form.addEventListener("submit", (event) => {
@@ -134,37 +130,37 @@ export class AgentPanel {
     });
     // Who answers, and the send / stop button, on the line under the text.
     const bar = doc.createElement("div");
-    bar.className = "coloride-agent-bar";
+    bar.className = "hilo-agent-bar";
     const who = doc.createElement("span");
-    who.className = "coloride-agent-who";
+    who.className = "hilo-agent-who";
     who.append(agentMark(doc, identity.agentId, identity.name), identity.name);
     bar.append(who, this.submit, this.cancel);
     form.append(bar);
     // The sandbox the agent runs in, and a spinner while it connects or works.
     const meta = doc.createElement("div");
-    meta.className = "coloride-agent-meta";
+    meta.className = "hilo-agent-meta";
     const sandbox = doc.createElement("span");
-    sandbox.className = "coloride-agent-sandbox";
+    sandbox.className = "hilo-agent-sandbox";
     sandbox.title = UI_STRINGS.agent.sandboxHint;
     sandbox.insertAdjacentHTML("afterbegin", SANDBOX_ICON);
     sandbox.append(UI_STRINGS.agent.sandbox);
     this.busyMark = doc.createElement("span");
-    this.busyMark.className = "coloride-agent-busy";
+    this.busyMark.className = "hilo-agent-busy";
     this.busyMark.setAttribute("aria-hidden", "true");
     this.busyMark.innerHTML = SPINNER_ICON;
     this.busyTime = doc.createElement("span");
-    this.busyTime.className = "coloride-agent-busy-time";
+    this.busyTime.className = "hilo-agent-busy-time";
     this.options = new OptionBar(doc, this.element, (optionId, value) =>
       this.run(async () => {
         await this.handle?.setOption?.(optionId, value);
       }),
     );
     const end = doc.createElement("span");
-    end.className = "coloride-agent-meta-end";
+    end.className = "hilo-agent-meta-end";
     end.append(this.options.element, this.busyTime, this.busyMark);
     meta.append(sandbox, end);
     this.signInBar = doc.createElement("div");
-    this.signInBar.className = "coloride-agent-auth-bar";
+    this.signInBar.className = "hilo-agent-auth-bar";
     this.signInBar.hidden = true;
     this.element.append(this.output, this.signInBar, this.status, form, meta);
     this.unsubscribe = store.subscribe(() => {

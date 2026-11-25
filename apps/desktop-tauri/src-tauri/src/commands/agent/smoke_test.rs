@@ -11,12 +11,11 @@ use std::path::PathBuf;
 #[test]
 #[ignore = "requires installed ACP packages and provider network; uses a synthetic invalid key"]
 fn installed_gateway_transport_smoke() {
-    let registry_path =
-        std::env::var_os("COLORIDE_SMOKE_REGISTRY").expect("set COLORIDE_SMOKE_REGISTRY");
-    let agent_id = std::env::var("COLORIDE_SMOKE_AGENT").expect("set COLORIDE_SMOKE_AGENT");
+    let registry_path = std::env::var_os("HILO_SMOKE_REGISTRY").expect("set HILO_SMOKE_REGISTRY");
+    let agent_id = std::env::var("HILO_SMOKE_AGENT").expect("set HILO_SMOKE_AGENT");
     // `account`: the agent's own login through the CONNECT allowlist; the test stops at the
     // verification request and never completes a sign-in.
-    let account_mode = std::env::var("COLORIDE_SMOKE_MODE").as_deref() == Ok("account");
+    let account_mode = std::env::var("HILO_SMOKE_MODE").as_deref() == Ok("account");
     let registry = agent_registry::AgentRegistry::open(registry_path).unwrap();
     let mut launch = registry.launch_command(&agent_id).unwrap();
     let data = tempfile::tempdir().unwrap();
@@ -37,22 +36,22 @@ fn installed_gateway_transport_smoke() {
             } else {
                 agent_registry::accounts::AccountMode::ApiKey
             },
-            // `COLORIDE_SMOKE_METHOD=chat-gpt`: the browser sign-in, which reports its page
+            // `HILO_SMOKE_METHOD=chat-gpt`: the browser sign-in, which reports its page
             // through the agent's `open` shim instead of an elicitation.
-            method_id: std::env::var("COLORIDE_SMOKE_METHOD").ok(),
+            method_id: std::env::var("HILO_SMOKE_METHOD").ok(),
             ..Default::default()
         },
         false,
         |_| {
             Ok(Some(zeroize::Zeroizing::new(
-                "coloride-synthetic-invalid-key".into(),
+                "hilo-synthetic-invalid-key".into(),
             )))
         },
     )
     .unwrap();
     if let (Ok(variable), Some(path)) = (
-        std::env::var("COLORIDE_SMOKE_OVERRIDE_NAME"),
-        std::env::var_os("COLORIDE_SMOKE_OVERRIDE_PATH"),
+        std::env::var("HILO_SMOKE_OVERRIDE_NAME"),
+        std::env::var_os("HILO_SMOKE_OVERRIDE_PATH"),
     ) {
         let path = PathBuf::from(path).canonicalize().unwrap();
         runtime

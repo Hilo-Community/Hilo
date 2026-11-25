@@ -1,7 +1,7 @@
 //! Keys never cross the Host boundary. No file, environment or in-memory fallback keystore.
 use zeroize::Zeroizing;
 
-const SERVICE: &str = "dev.coloride.desktop.provider-api-key";
+const SERVICE: &str = "dev.hilo.desktop.provider-api-key";
 
 fn entry(provider: &str) -> Result<keyring::Entry, String> {
     if agent_registry::profiles::provider_profile(provider).is_none() {

@@ -92,7 +92,7 @@ pub struct EvidenceArtifact {
     pub byte_size: u32,
 }
 
-/// Contract #8: Cryptographically bound verification proof determining the Coloride state (`🟢/🟡/🔴`).
+/// Contract #8: Cryptographically bound verification proof determining the Hilo state (`🟢/🟡/🔴`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct Evidence {
     pub schema_version: u16,
@@ -104,7 +104,7 @@ pub struct Evidence {
     pub diagnostics: QualityDiagnosticsSummary,
     pub preview_report: PreviewRuntimeReport,
     pub artifacts: Vec<EvidenceArtifact>,
-    pub verdict: ColorideValidationState,
+    pub verdict: HiloValidationState,
 }
 
 impl Evidence {
@@ -122,6 +122,6 @@ impl Evidence {
             && !self.preview_report.crashed
             && self.preview_report.console_error_count == 0
             && self.preview_report.uncaught_exception_count == 0
-            && self.verdict == ColorideValidationState::ValidatedGreen
+            && self.verdict == HiloValidationState::ValidatedGreen
     }
 }

@@ -1,14 +1,14 @@
 @layer components {
   /* Zone 4: file tab in the header, editor on the left, project file tree on the right */
   /* The thin scrollbar stops where the panel toggle starts. */
-  .coloride-zone-4-header .coloride-thin-scrollbar--x {
+  .hilo-zone-4-header .hilo-thin-scrollbar--x {
     right: 46px;
   }
   /* Tabs end right before the panel toggle pinned to the corner. */
-  .coloride-zone-4-header .coloride-header-tab-track {
+  .hilo-zone-4-header .hilo-header-tab-track {
     margin-right: 38px;
   }
-  .coloride-zone-4-empty {
+  .hilo-zone-4-empty {
     margin: 0;
     padding: 32px 12px;
     text-align: center;
@@ -16,7 +16,7 @@
     font-size: 12px;
   }
 
-  .coloride-zone-4-body {
+  .hilo-zone-4-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr) clamp(170px, 34%, 280px);
     flex: 1;
@@ -24,14 +24,14 @@
   }
   /* Hidden file tree: the editor takes the whole panel; the tree waits behind its right edge
      and slides in over the editor while the pointer is on the edge strip or on the tree. */
-  .coloride-zone-4-body {
+  .hilo-zone-4-body {
     position: relative;
     overflow: hidden;
   }
-  .coloride-zone-4-body[data-tree-hidden="true"] {
+  .hilo-zone-4-body[data-tree-hidden="true"] {
     grid-template-columns: minmax(0, 1fr);
   }
-  .coloride-zone-4-tree-edge {
+  .hilo-zone-4-tree-edge {
     position: absolute;
     z-index: 9;
     top: 0;
@@ -48,16 +48,16 @@
     cursor: pointer;
     transition: color 120ms ease, background 120ms ease;
   }
-  .coloride-zone-4-tree-edge[hidden] {
+  .hilo-zone-4-tree-edge[hidden] {
     display: none;
   }
-  .coloride-zone-4-tree-edge:hover,
-  .coloride-zone-4-tree-edge:focus-visible {
+  .hilo-zone-4-tree-edge:hover,
+  .hilo-zone-4-tree-edge:focus-visible {
     color: var(--color-text-primary);
     background: var(--color-selected);
     outline: none;
   }
-  .coloride-zone-4-body[data-tree-hidden="true"] .coloride-zone-4-tree-column {
+  .hilo-zone-4-body[data-tree-hidden="true"] .hilo-zone-4-tree-column {
     position: absolute;
     z-index: 10;
     top: 0;
@@ -69,22 +69,22 @@
     visibility: hidden;
     transition: transform 140ms ease, visibility 0s linear 140ms;
   }
-  .coloride-zone-4-body[data-tree-hidden="true"]
-    .coloride-zone-4-tree-edge:hover
-    + .coloride-zone-4-tree-column,
-  .coloride-zone-4-body[data-tree-hidden="true"] .coloride-zone-4-tree-column:hover,
-  .coloride-zone-4-body[data-tree-hidden="true"] .coloride-zone-4-tree-column:focus-within {
+  .hilo-zone-4-body[data-tree-hidden="true"]
+    .hilo-zone-4-tree-edge:hover
+    + .hilo-zone-4-tree-column,
+  .hilo-zone-4-body[data-tree-hidden="true"] .hilo-zone-4-tree-column:hover,
+  .hilo-zone-4-body[data-tree-hidden="true"] .hilo-zone-4-tree-column:focus-within {
     transform: none;
     visibility: visible;
     transition: transform 140ms ease;
   }
-  .coloride-zone-4-editor-column {
+  .hilo-zone-4-editor-column {
     display: flex;
     flex-direction: column;
     min-width: 0;
     min-height: 0;
   }
-  .coloride-zone-4-tree-column {
+  .hilo-zone-4-tree-column {
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -93,19 +93,19 @@
     border-left: 1px solid rgba(255, 255, 255, 0.08);
   }
   /* Filter and the button that hides the tree */
-  .coloride-file-tree-header {
+  .hilo-file-tree-header {
     display: flex;
     flex: none;
     align-items: center;
     gap: 4px;
     margin: 0 8px 8px 4px; /* same right spacing as before the scrollbar moved */
   }
-  .coloride-file-tree-header .coloride-file-tree-filter {
+  .hilo-file-tree-header .hilo-file-tree-filter {
     flex: 1;
     min-width: 0;
     margin: 0;
   }
-  .coloride-file-tree-action {
+  .hilo-file-tree-action {
     display: inline-flex;
     flex: none;
     align-items: center;
@@ -120,16 +120,16 @@
     cursor: pointer;
   }
   /* Same size as the header's panel icons */
-  .coloride-file-tree-action svg,
-  .coloride-zone-4-tree-edge svg {
+  .hilo-file-tree-action svg,
+  .hilo-zone-4-tree-edge svg {
     width: 16px;
     height: 16px;
   }
-  .coloride-file-tree-action:hover {
+  .hilo-file-tree-action:hover {
     background: var(--color-selected);
     color: var(--color-text-primary);
   }
-  .coloride-file-tree-filter {
+  .hilo-file-tree-filter {
     flex: none;
     margin: 0 8px 8px 4px; /* same right spacing as before the scrollbar moved */
     height: 24px;
@@ -141,27 +141,27 @@
     font-size: 12px;
     outline: none;
   }
-  .coloride-file-tree-filter:focus,
-  .coloride-file-tree-filter:focus-visible {
+  .hilo-file-tree-filter:focus,
+  .hilo-file-tree-filter:focus-visible {
     outline: none;
     box-shadow: none;
   }
-  .coloride-file-tree-viewport {
+  .hilo-file-tree-viewport {
     position: relative;
     flex: 1;
     min-height: 0;
   }
-  .coloride-file-tree-scroll {
+  .hilo-file-tree-scroll {
     height: 100%;
     padding-right: 4px; /* keeps the rows clear of the scrollbar */
     overflow: auto;
     scrollbar-width: none;
   }
-  .coloride-file-tree-scroll::-webkit-scrollbar {
+  .hilo-file-tree-scroll::-webkit-scrollbar {
     display: none;
   }
   /* Folders pinned over the top of the tree while scrolling (sticky scroll) */
-  .coloride-file-tree-sticky {
+  .hilo-file-tree-sticky {
     position: absolute;
     top: 0;
     left: 0;
@@ -169,21 +169,21 @@
     z-index: 5;
     background: var(--color-main);
   }
-  .coloride-file-tree-sticky[hidden] {
+  .hilo-file-tree-sticky[hidden] {
     display: none;
   }
   /* Two classes on purpose: `.explorer-row` (absolute, for virtualization) is declared below and
      would otherwise win, stacking every pinned row on top of each other. */
-  .coloride-file-tree-sticky .explorer-row--sticky {
+  .hilo-file-tree-sticky .explorer-row--sticky {
     position: relative;
   }
-  .coloride-zone-4-editor-host {
+  .hilo-zone-4-editor-host {
     position: relative;
   }
-  .coloride-file-tree {
+  .hilo-file-tree {
     position: relative;
   }
-  .coloride-file-tree-empty {
+  .hilo-file-tree-empty {
     margin: 0;
     padding: 16px 8px;
     color: var(--color-text-muted);
@@ -295,26 +295,26 @@
     color: #8a8a8a;
   }
   /* JavaScript debugger, in the sidebar's Debug section */
-  .coloride-debug-panel {
+  .hilo-debug-panel {
     display: flex;
     flex-direction: column;
     gap: 6px;
     font-size: 12px;
     color: var(--color-text-secondary);
   }
-  .coloride-debug-panel h4 {
+  .hilo-debug-panel h4 {
     margin: 6px 0 0;
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
-  .coloride-debug-toolbar {
+  .hilo-debug-toolbar {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
   }
-  .coloride-debug-toolbar button {
+  .hilo-debug-toolbar button {
     height: 24px;
     padding: 0 8px;
     border: 0;
@@ -324,22 +324,22 @@
     font-size: 11px;
     cursor: pointer;
   }
-  .coloride-debug-toolbar button:disabled {
+  .hilo-debug-toolbar button:disabled {
     opacity: 0.45;
     cursor: default;
   }
-  .coloride-debug-status {
+  .hilo-debug-status {
     min-height: 16px;
     color: #ffb450;
     overflow-wrap: anywhere;
   }
-  .coloride-debug-stack,
-  .coloride-debug-variables {
+  .hilo-debug-stack,
+  .hilo-debug-variables {
     font-family: Menlo, "SF Mono", Consolas, monospace;
     font-size: 11px;
     overflow-wrap: anywhere;
   }
-  .coloride-debug-output {
+  .hilo-debug-output {
     max-height: 200px;
     margin: 0;
     overflow: auto;

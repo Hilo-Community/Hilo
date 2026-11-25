@@ -43,15 +43,15 @@ export function authenticationCards(
 ): HTMLElement[] {
   return store.getState().elicitations.map((request) => {
     const card = doc.createElement("section");
-    card.className = "coloride-agent-authentication";
+    card.className = "hilo-agent-authentication";
     card.setAttribute("aria-label", "Agent account sign-in");
 
     const head = doc.createElement("div");
-    head.className = "coloride-agent-authentication-head";
+    head.className = "hilo-agent-authentication-head";
     const title = doc.createElement("strong");
     title.textContent = UI_STRINGS.agent.signInTitle;
     const host = doc.createElement("span");
-    host.className = "coloride-agent-authentication-host";
+    host.className = "hilo-agent-authentication-host";
     host.textContent = hostOf(request.url) || "Invalid authentication URL";
     head.append(title, host);
     card.append(head);
@@ -66,7 +66,7 @@ export function authenticationCards(
       // Only the code is shown; clicking it (or Enter / Space on it) copies it. Not a <button>, so
       // the panel's small button style does not apply to it.
       const value = doc.createElement("div");
-      value.className = "coloride-agent-authentication-code";
+      value.className = "hilo-agent-authentication-code";
       value.textContent = code;
       value.tabIndex = 0;
       value.setAttribute("role", "button");
@@ -92,11 +92,11 @@ export function authenticationCards(
     }
 
     const status = doc.createElement("p");
-    status.className = "coloride-agent-authentication-status";
+    status.className = "hilo-agent-authentication-status";
     if (request.accepted) {
       // The spinner is a constant of this app (agent-marks.ts), never agent-supplied markup.
       const spinner = doc.createElement("span");
-      spinner.className = "coloride-agent-busy";
+      spinner.className = "hilo-agent-busy";
       spinner.setAttribute("aria-hidden", "true");
       spinner.innerHTML = SPINNER_ICON;
       status.append(spinner, UI_STRINGS.agent.signInWaiting);
@@ -104,7 +104,7 @@ export function authenticationCards(
     card.append(status);
 
     const actions = doc.createElement("div");
-    actions.className = "coloride-agent-authentication-actions";
+    actions.className = "hilo-agent-authentication-actions";
     const act = (label: string, action: "accept" | "cancel" | "open", answers: boolean) => {
       const button = doc.createElement("button");
       button.type = "button";
@@ -146,14 +146,14 @@ export function authChoiceCard(
   );
   if (offered.length === 0) return null;
   const card = doc.createElement("section");
-  card.className = "coloride-agent-auth-choice";
+  card.className = "hilo-agent-auth-choice";
   card.setAttribute("aria-label", "Agent account sign-in");
   const title = doc.createElement("strong");
   title.textContent = uiText.authenticateTo(agentName);
   const intro = doc.createElement("p");
   intro.textContent = UI_STRINGS.agent.chooseAuth;
   const actions = doc.createElement("div");
-  actions.className = "coloride-agent-auth-choice-actions";
+  actions.className = "hilo-agent-auth-choice-actions";
   for (const method of offered) {
     const button = doc.createElement("button");
     button.type = "button";

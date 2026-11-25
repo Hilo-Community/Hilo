@@ -1,4 +1,4 @@
-//! Coloride desktop shell: wires the Rust host crates to the Tauri v2 window.
+//! Hilo desktop shell: wires the Rust host crates to the Tauri v2 window.
 
 mod bridge;
 mod commands;
@@ -17,7 +17,7 @@ pub use bridge::DesktopBinaryEditorBridge;
 use state::DesktopAppState;
 
 /// Event carrying a `DocumentDiagnostics` batch to the UI.
-pub(crate) const DOCUMENT_DIAGNOSTICS_EVENT: &str = "coloride-document-diagnostics";
+pub(crate) const DOCUMENT_DIAGNOSTICS_EVENT: &str = "hilo-document-diagnostics";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -120,7 +120,7 @@ pub fn run() {
             commands::window::confirm_exit_command
         ])
         .build(tauri::generate_context!())
-        .expect("error while building Coloride");
+        .expect("error while building Hilo");
 
     app.run(|handle, event| {
         if matches!(event, tauri::RunEvent::Exit) {

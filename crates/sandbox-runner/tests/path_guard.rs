@@ -127,7 +127,7 @@ mod symlinks {
     #[test]
     fn a_link_pointing_nowhere_is_refused_because_writing_through_it_would_create_its_target() {
         let (_dir, root) = worktree();
-        symlink("/tmp/coloride-never-created", root.join("dangling")).unwrap();
+        symlink("/tmp/hilo-never-created", root.join("dangling")).unwrap();
         symlink("missing-inside", root.join("dangling-inside")).unwrap();
         for bad in ["dangling", "dangling/file", "dangling-inside"] {
             assert!(

@@ -13,7 +13,7 @@ import type {
   LanguageFileEdits,
   LanguageLocation,
   LanguageTextEdit,
-} from "@coloride/protocol-types";
+} from "@hilo/protocol-types";
 
 /** Asks the host's language servers (`vtsls`, Biome) about one revision of the document. */
 export type LanguageFeatureProvider = (

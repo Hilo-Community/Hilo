@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Coloride Context Engine: SQLite WAL/mmap, FTS5 BM25, Tree-sitter AST graph, secret filtering & local MCP server (<20ms)"
+description = "Hilo Context Engine: SQLite WAL/mmap, FTS5 BM25, Tree-sitter AST graph, secret filtering & local MCP server (<20ms)"
 
 [lints]
 workspace = true

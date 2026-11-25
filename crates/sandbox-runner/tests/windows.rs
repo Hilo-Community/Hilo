@@ -266,7 +266,7 @@ fn the_private_temporary_directory_is_purged() {
         .run(&cmd(&l.work, "echo scratch>%TEMP%\\scratch.txt"))
         .unwrap();
     assert!(out.termination.success(), "{out:?}");
-    assert!(!l.work.join(".coloride-tmp").exists());
+    assert!(!l.work.join(".hilo-tmp").exists());
 }
 
 /// The security descriptor of `path` in SDDL, where every SID that has no alias is written out
@@ -331,7 +331,7 @@ fn a_worktree_holding_a_junction_is_refused_before_any_permission_changes() {
     assert!(!acl_sddl(&l.outside.join("secret.txt")).contains(APP_CONTAINER_SID));
 }
 
-const HELPER_ENV: &str = "COLORIDE_WINDOWS_HOST_HELPER";
+const HELPER_ENV: &str = "HILO_WINDOWS_HOST_HELPER";
 const HELPER_TEST: &str = "a_run_whose_host_died_is_undone_at_the_next_start";
 
 fn journal_entries(journal: &Path) -> usize {

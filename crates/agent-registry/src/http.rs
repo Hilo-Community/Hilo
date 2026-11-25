@@ -29,7 +29,7 @@ impl Default for HttpFetch {
     fn default() -> Self {
         let build = |redirects: u32| {
             ureq::AgentBuilder::new()
-                .user_agent("Coloride")
+                .user_agent("Hilo")
                 .redirects(redirects)
                 .timeout_connect(Duration::from_secs(15))
                 // Between two reads, not for the whole download.

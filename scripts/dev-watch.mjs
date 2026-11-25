@@ -1,6 +1,6 @@
 // Development server for the desktop app: Vite plus the two build steps its inputs go through.
 //
-// The app imports `@coloride/web-ui` and `@coloride/editor-cm6` from their built `dist/` folders
+// The app imports `@hilo/web-ui` and `@hilo/editor-cm6` from their built `dist/` folders
 // (compiled TypeScript and the Tailwind stylesheet), so without watchers an edit to either shows
 // nothing until someone rebuilds by hand. This starts, side by side:
 //   - `tsc -b --watch`: recompiles the TypeScript packages,

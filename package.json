@@ -1,5 +1,5 @@
 {
-  "name": "coloride-monorepo",
+  "name": "hilo-monorepo",
   "version": "0.1.0",
   "license": "Apache-2.0",
   "private": true,
@@ -9,14 +9,14 @@
     "pnpm": ">=10.0.0"
   },
   "scripts": {
-    "dev": "pnpm --filter @coloride/desktop-tauri tauri dev",
-    "dev:web": "pnpm --filter @coloride/desktop-tauri dev",
+    "dev": "pnpm --filter @hilo/desktop-tauri tauri dev",
+    "dev:web": "pnpm --filter @hilo/desktop-tauri dev",
     "lint": "biome check .",
     "format": "biome format --write .",
     "typecheck": "tsc -b",
     "test": "pnpm -r test",
     "fetch:js-debug": "node scripts/fetch-js-debug.mjs",
-    "build": "tsc -b && pnpm --filter @coloride/web-ui build && pnpm --filter @coloride/desktop-tauri build",
+    "build": "tsc -b && pnpm --filter @hilo/web-ui build && pnpm --filter @hilo/desktop-tauri build",
     "test:performance": "vitest run --config vitest.performance.config.ts"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-//! The Node.js of this computer, which npm agents run with. Coloride neither downloads nor
+//! The Node.js of this computer, which npm agents run with. Hilo neither downloads nor
 //! bundles one.
 
 use std::env;
@@ -219,7 +219,7 @@ impl NodeLocator for SystemNode {
     fn locate(&self) -> Result<NodeToolchain, String> {
         let mut candidates: Vec<PathBuf> = Vec::new();
         // An explicit choice wins, and is never replaced by another Node when it is wrong.
-        if let Some(forced) = env::var_os("COLORIDE_NODE").filter(|value| !value.is_empty()) {
+        if let Some(forced) = env::var_os("HILO_NODE").filter(|value| !value.is_empty()) {
             candidates.push(PathBuf::from(forced));
         } else {
             candidates.extend(

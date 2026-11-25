@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { describe, expect, it } from "vitest";
 import {
   type CockpitChatTab,
@@ -20,7 +20,7 @@ function percentile95(samples: readonly number[]): number {
   return sorted[idx] ?? 0;
 }
 
-describe("@coloride/web-ui — LOT-005 virtualization and typing under load", () => {
+describe("@hilo/web-ui — LOT-005 virtualization and typing under load", () => {
   it("virtualizes > 50,000 file tree entries in O(1) DOM nodes and caches stabilized Markdown blocks", () => {
     const tree55k = generateSyntheticFileTree(55_000);
     const slice = computeVirtualWindowSlice(tree55k, 240_000, 600, {
@@ -67,7 +67,7 @@ describe("@coloride/web-ui — LOT-005 virtualization and typing under load", ()
     });
 
     const ipcChannel = new InMemoryBinaryHostBridge();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/module-1.ts",
       initialContent: "export const value = 0;\n",
       ipcChannel,
@@ -145,7 +145,7 @@ describe("@coloride/web-ui — LOT-005 virtualization and typing under load", ()
 
     const p95KeystrokeMs = percentile95(keystrokeLatenciesMs);
     console.info(
-      "COLORIDE_PERFORMANCE",
+      "HILO_PERFORMANCE",
       JSON.stringify({
         scenario: "lot005-cockpit",
         sampleCount: keystrokeLatenciesMs.length,
@@ -167,7 +167,7 @@ describe("@coloride/web-ui — LOT-005 virtualization and typing under load", ()
     // Verify 30,000-node virtualized file tree only mounted the visible window slice in DOM
     const renderedTreeRows = controller
       .getZoneElements()
-      .zone4.querySelectorAll(".cm-coloride-virtual-tree-row");
+      .zone4.querySelectorAll(".cm-hilo-virtual-tree-row");
     expect(renderedTreeRows.length).toBeGreaterThan(0);
     expect(renderedTreeRows.length).toBeLessThanOrEqual(40);
 

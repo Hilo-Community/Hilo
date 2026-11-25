@@ -4,10 +4,10 @@ use std::time::Instant;
 
 use host_core::{
     compute_rope_blake3_hex, line_col_to_utf16, recover_workspace_from_journal, utf16_span_to_utf8,
-    utf16_to_line_col, utf16_to_utf8, utf8_span_to_utf16, utf8_to_utf16, ColorideValidationState,
-    DocumentError, DocumentService, EditorSelection, EditorTransaction, OffsetConversionError,
-    TextChange, TransactionOrigin, Utf16CodeUnitOffset, Utf16Span, Utf8ByteOffset,
-    CONTRACT_SCHEMA_VERSION,
+    utf16_to_line_col, utf16_to_utf8, utf8_span_to_utf16, utf8_to_utf16, DocumentError,
+    DocumentService, EditorSelection, EditorTransaction, HiloValidationState,
+    OffsetConversionError, TextChange, TransactionOrigin, Utf16CodeUnitOffset, Utf16Span,
+    Utf8ByteOffset, CONTRACT_SCHEMA_VERSION,
 };
 use proptest::prelude::*;
 use ropey::Rope;
@@ -378,7 +378,7 @@ fn load_1mb_file_into_rope_under_50ms_p95() {
     let dir = tempdir().expect("create tempdir");
     let file_path = dir.path().join("one_megabyte.ts");
 
-    let line = "export const item_👩‍💻_東京 = { id: 12345, label: \"Coloride Fast Rope Buffer\" };\n";
+    let line = "export const item_👩‍💻_東京 = { id: 12345, label: \"Hilo Fast Rope Buffer\" };\n";
     let target_bytes = 1_048_576usize; // 1 MiB
     let mut content = String::with_capacity(target_bytes + line.len());
     while content.len() < target_bytes {
@@ -494,7 +494,7 @@ fn detects_external_disk_conflict_and_blocks_overwrite() {
     };
     service.apply_transaction(tx).unwrap();
 
-    // Another external process modifies the file on disk behind Coloride's back
+    // Another external process modifies the file on disk behind Hilo's back
     std::fs::write(&file_path, "const a = 999; // external edit\n").unwrap();
 
     let conflict = service
@@ -528,7 +528,7 @@ fn local_user_edit_synchronously_downgrades_validated_green_to_stale_orange() {
         session
             .set_validation_ranges(vec![(
                 Utf16Span::new(Utf16CodeUnitOffset::ZERO, Utf16CodeUnitOffset::new(len_cu)),
-                ColorideValidationState::ValidatedGreen,
+                HiloValidationState::ValidatedGreen,
             )])
             .unwrap();
     }
@@ -558,7 +558,7 @@ fn local_user_edit_synchronously_downgrades_validated_green_to_stale_orange() {
     let session = service.session("math.ts", 1).unwrap();
     assert_eq!(
         session.validation_ranges()[0].state,
-        ColorideValidationState::StaleOrange
+        HiloValidationState::StaleOrange
     );
 }
 

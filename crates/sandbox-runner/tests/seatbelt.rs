@@ -24,7 +24,7 @@ mod common;
 use common::world::{lines, sh, World, TRY};
 
 fn world() -> World {
-    common::world::world("Library/Caches/Coloride/worktrees/task")
+    common::world::world("Library/Caches/Hilo/worktrees/task")
 }
 
 fn runner(world: &World, sink: &Arc<MemoryAuditSink>) -> OsNativeSandbox<SeatbeltEngine> {
@@ -80,7 +80,7 @@ try other-project /bin/cat "$O/other/other.txt"
 try parent-write /bin/sh -c 'echo x > ../outside.txt'
 try absolute-write /bin/sh -c "echo x > $O/new.txt"
 try home-write /bin/sh -c "echo x > $H/evil.txt"
-try tmp-write /bin/sh -c 'echo x > /tmp/coloride-evil-test'
+try tmp-write /bin/sh -c 'echo x > /tmp/hilo-evil-test'
 try link-to-ssh /bin/cat escape-ssh
 try link-to-passwd /bin/cat escape-passwd
 try list-home /bin/ls "$H"
@@ -130,7 +130,7 @@ try list-ssh-dir /bin/ls "$H/.ssh"
         world.worktree.parent().unwrap().join("outside.txt"),
         world.outside.join("new.txt"),
         world.home.join("evil.txt"),
-        PathBuf::from("/tmp/coloride-evil-test"),
+        PathBuf::from("/tmp/hilo-evil-test"),
     ] {
         assert!(!path.exists(), "{path:?} was written");
     }
@@ -366,9 +366,9 @@ fn the_private_tmpdir_is_writable_in_the_sandbox_and_purged_afterwards() {
     assert!(output.termination.success(), "{output:?}");
     let lines = lines(&output);
     assert_eq!(lines[0], "x");
-    assert!(Path::new(&lines[1]).starts_with(world.worktree.join(".coloride-tmp")));
+    assert!(Path::new(&lines[1]).starts_with(world.worktree.join(".hilo-tmp")));
     assert!(!Path::new(&lines[1]).exists());
-    assert!(!world.worktree.join(".coloride-tmp").exists());
+    assert!(!world.worktree.join(".hilo-tmp").exists());
 }
 
 /// A program the profile would not let the process read is refused up front, with the fix.

@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   clearScreen: false,
   optimizeDeps: {
-    exclude: ["@coloride/web-ui", "@coloride/editor-cm6", "@coloride/protocol-types"],
+    exclude: ["@hilo/web-ui", "@hilo/editor-cm6", "@hilo/protocol-types"],
   },
   server: {
     host: "127.0.0.1",

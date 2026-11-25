@@ -1,7 +1,7 @@
-import { COLORIDE_STATE_META, type ColorideValidationState } from "@coloride/protocol-types";
+import { HILO_STATE_META, type HiloValidationState } from "@hilo/protocol-types";
 
 export interface DesignStateTokens {
-  readonly state: ColorideValidationState;
+  readonly state: HiloValidationState;
   readonly icon: "✓" | "!" | "✕" | "⟳" | "•";
   readonly labelFr: string;
   readonly labelEn: string;
@@ -13,12 +13,12 @@ export interface DesignStateTokens {
   readonly lightText: string;
 }
 
-export const COLORIDE_DESIGN_TOKENS: Record<ColorideValidationState, DesignStateTokens> = {
+export const HILO_DESIGN_TOKENS: Record<HiloValidationState, DesignStateTokens> = {
   ValidatedGreen: {
     state: "ValidatedGreen",
-    icon: COLORIDE_STATE_META.ValidatedGreen.icon,
-    labelFr: COLORIDE_STATE_META.ValidatedGreen.labelFr,
-    labelEn: COLORIDE_STATE_META.ValidatedGreen.labelEn,
+    icon: HILO_STATE_META.ValidatedGreen.icon,
+    labelFr: HILO_STATE_META.ValidatedGreen.labelFr,
+    labelEn: HILO_STATE_META.ValidatedGreen.labelEn,
     darkBg: "#052e16",
     darkBorder: "#22c55e",
     darkText: "#86efac",
@@ -28,9 +28,9 @@ export const COLORIDE_DESIGN_TOKENS: Record<ColorideValidationState, DesignState
   },
   ReviewYellow: {
     state: "ReviewYellow",
-    icon: COLORIDE_STATE_META.ReviewYellow.icon,
-    labelFr: COLORIDE_STATE_META.ReviewYellow.labelFr,
-    labelEn: COLORIDE_STATE_META.ReviewYellow.labelEn,
+    icon: HILO_STATE_META.ReviewYellow.icon,
+    labelFr: HILO_STATE_META.ReviewYellow.labelFr,
+    labelEn: HILO_STATE_META.ReviewYellow.labelEn,
     darkBg: "#422006",
     darkBorder: "#eab308",
     darkText: "#fde047",
@@ -40,9 +40,9 @@ export const COLORIDE_DESIGN_TOKENS: Record<ColorideValidationState, DesignState
   },
   FailedRed: {
     state: "FailedRed",
-    icon: COLORIDE_STATE_META.FailedRed.icon,
-    labelFr: COLORIDE_STATE_META.FailedRed.labelFr,
-    labelEn: COLORIDE_STATE_META.FailedRed.labelEn,
+    icon: HILO_STATE_META.FailedRed.icon,
+    labelFr: HILO_STATE_META.FailedRed.labelFr,
+    labelEn: HILO_STATE_META.FailedRed.labelEn,
     darkBg: "#450a0a",
     darkBorder: "#ef4444",
     darkText: "#fca5a5",
@@ -52,9 +52,9 @@ export const COLORIDE_DESIGN_TOKENS: Record<ColorideValidationState, DesignState
   },
   StaleOrange: {
     state: "StaleOrange",
-    icon: COLORIDE_STATE_META.StaleOrange.icon,
-    labelFr: COLORIDE_STATE_META.StaleOrange.labelFr,
-    labelEn: COLORIDE_STATE_META.StaleOrange.labelEn,
+    icon: HILO_STATE_META.StaleOrange.icon,
+    labelFr: HILO_STATE_META.StaleOrange.labelFr,
+    labelEn: HILO_STATE_META.StaleOrange.labelEn,
     darkBg: "#431407",
     darkBorder: "#f97316",
     darkText: "#fdba74",
@@ -64,9 +64,9 @@ export const COLORIDE_DESIGN_TOKENS: Record<ColorideValidationState, DesignState
   },
   UnchangedBlue: {
     state: "UnchangedBlue",
-    icon: COLORIDE_STATE_META.UnchangedBlue.icon,
-    labelFr: COLORIDE_STATE_META.UnchangedBlue.labelFr,
-    labelEn: COLORIDE_STATE_META.UnchangedBlue.labelEn,
+    icon: HILO_STATE_META.UnchangedBlue.icon,
+    labelFr: HILO_STATE_META.UnchangedBlue.labelFr,
+    labelEn: HILO_STATE_META.UnchangedBlue.labelEn,
     darkBg: "#0f172a",
     darkBorder: "#3b82f6",
     darkText: "#93c5fd",

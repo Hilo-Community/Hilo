@@ -1,3 +1,3 @@
 fn main() {
-    coloride_desktop_lib::run();
+    hilo_desktop_lib::run();
 }

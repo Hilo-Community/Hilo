@@ -5,15 +5,15 @@ import type {
   LanguageFeatureResponse,
   LanguageFeatureResult,
   LanguageLocation,
-} from "@coloride/protocol-types";
+} from "@hilo/protocol-types";
 import { describe, expect, it } from "vitest";
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "./index.js";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "./index.js";
 
 const TEXT = 'const   clef = "𝄞";\nconst counter = clef;\n';
 
 /** A host whose answers are released by the test, to put edits in between. */
 function setup() {
-  const editor = new ColorideEditorView({
+  const editor = new HiloEditorView({
     initialDocumentId: "src/main.ts",
     initialContent: TEXT,
     ipcChannel: new InMemoryBinaryHostBridge(),

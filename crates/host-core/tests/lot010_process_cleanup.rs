@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use host_core::{GatedCapability, WorkspaceTrustGate};
 
-const HELPER_ENV: &str = "COLORIDE_LOT010_HOST_HELPER_DIR";
+const HELPER_ENV: &str = "HILO_LOT010_HOST_HELPER_DIR";
 
 #[cfg(unix)]
 #[path = "../../../test-support/process.rs"]
