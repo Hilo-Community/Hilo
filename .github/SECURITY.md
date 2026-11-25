@@ -26,7 +26,7 @@ Please do not disclose security vulnerabilities through public GitHub Issues or 
 
 Instead, use GitHub's private vulnerability reporting feature:
 
-https://github.com/Color-IDE/Hilo/security/advisories/new
+https://github.com/Hilo-Community/hilo/security/advisories/new
 
 Please include:
 
@@ -59,4 +59,4 @@ Please allow the maintainers an opportunity to investigate before publicly discl
 
 Security reports are handled by the Hilo maintainers.
 
-Project: https://github.com/Color-IDE/Hilo
+Project: https://github.com/Hilo-Community/hilo
