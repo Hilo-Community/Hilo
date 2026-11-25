@@ -41,7 +41,7 @@ impl Approval {
         action_kind: &ApprovalActionKind,
     ) -> String {
         let mut hasher = blake3::Hasher::new();
-        hasher.update(b"coloride.approval.v1\0");
+        hasher.update(b"hilo.approval.v1\0");
         hasher.update(changeset_digest.as_bytes());
         hasher.update(b"\0");
         hasher.update(plan_digest.as_bytes());

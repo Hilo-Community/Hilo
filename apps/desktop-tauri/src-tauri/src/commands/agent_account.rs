@@ -209,10 +209,10 @@ struct BrowserLogin {
 }
 
 /// Name of the page file in the agent's private home.
-const OPEN_URL_FILE: &str = ".coloride-open-url";
+const OPEN_URL_FILE: &str = ".hilo-open-url";
 
 /// macOS and Windows: a browser-open shim in the agent's private home that writes the page the
-/// agent wants shown to `.coloride-open-url`, which the Host opens (after checking its host).
+/// agent wants shown to `.hilo-open-url`, which the Host opens (after checking its host).
 /// The sandbox allows the agent to listen on its sign-in port, on loopback only. Elsewhere, or
 /// for an agent without a sign-in port, `None`: the agent is told not to use a browser.
 fn browser_login_support(
@@ -230,7 +230,7 @@ fn browser_login_support(
         return Ok(None);
     }
     if cfg!(target_os = "windows") {
-        let ps_module_dir = home.join(".coloride-ps");
+        let ps_module_dir = home.join(".hilo-ps");
         let mgmt_dir = ps_module_dir.join("Microsoft.PowerShell.Management");
         std::fs::create_dir_all(&mgmt_dir).map_err(|e| e.to_string())?;
         let script = format!(
@@ -248,7 +248,7 @@ fn browser_login_support(
             url_file: quoted,
         }));
     }
-    let shim_dir = home.join(".coloride-bin");
+    let shim_dir = home.join(".hilo-bin");
     std::fs::create_dir_all(&shim_dir).map_err(|e| e.to_string())?;
     let script = format!(
         "#!/bin/sh\n# The sandbox cannot open a browser: the Host opens the page reported here.\nfor url do :; done\nprintf '%s\\n' \"$url\" > '{text}'\n"
@@ -393,7 +393,7 @@ pub(super) fn runtime_with_key_reader(
             let credentials = AgentCredentials::Gateway {
                 protocol: provider.protocol.clone(),
                 base_url: endpoint.base_url(),
-                headers: BTreeMap::from([("x-coloride-session".into(), endpoint.token.clone())]),
+                headers: BTreeMap::from([("x-hilo-session".into(), endpoint.token.clone())]),
                 provider_name: provider.name.clone(),
                 environment_fallback: fallback,
             };

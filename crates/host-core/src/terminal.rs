@@ -133,7 +133,7 @@ impl TerminalSession {
         command.cwd(plain_cwd(gate.workspace_root()));
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
-        command.env("TERM_PROGRAM", "Coloride");
+        command.env("TERM_PROGRAM", "Hilo");
         // Trust may have been revoked while the pty was being opened.
         gate.authorize(GatedCapability::Terminal)?;
         let mut child = pair.slave.spawn_command(command).map_err(pty_error)?;

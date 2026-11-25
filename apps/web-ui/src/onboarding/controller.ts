@@ -1,10 +1,10 @@
 import {
   type Cm6TranslatedKeybinding,
-  type ColorideEditorView,
-  DEFAULT_COLORIDE_CM6_THEME,
+  DEFAULT_HILO_CM6_THEME,
   type DeclarativeVsixBundle,
+  type HiloEditorView,
   type KeymapPresetId,
-} from "@coloride/editor-cm6";
+} from "@hilo/editor-cm6";
 import { AtomicStore } from "../state/atomic-store.js";
 import { UI_STRINGS } from "../ui/ui-strings.js";
 import {
@@ -71,12 +71,12 @@ function importOrDegrade<T>(
  */
 export class OnboardingModalController {
   readonly store: AtomicStore<OnboardingState>;
-  private readonly editorView: ColorideEditorView;
+  private readonly editorView: HiloEditorView;
   private modalEl: HTMLElement | null = null;
   private unsubscribe: (() => void) | null = null;
   private nativeImportLoader: (() => Promise<NativeMigrationReport>) | null = null;
 
-  constructor(editorView: ColorideEditorView, initialState?: OnboardingState) {
+  constructor(editorView: HiloEditorView, initialState?: OnboardingState) {
     this.editorView = editorView;
     this.store = new AtomicStore<OnboardingState>(initialState ?? createInitialOnboardingState());
   }
@@ -139,7 +139,7 @@ export class OnboardingModalController {
   mountModal(hostContainer: HTMLElement): HTMLElement {
     if (!this.modalEl) {
       this.modalEl = hostContainer.ownerDocument.createElement("aside");
-      this.modalEl.className = "coloride-onboarding-modal";
+      this.modalEl.className = "hilo-onboarding-modal";
       this.modalEl.setAttribute("role", "dialog");
       this.modalEl.setAttribute("aria-modal", "true");
       this.modalEl.setAttribute("aria-label", UI_STRINGS.onboarding.title);
@@ -254,10 +254,10 @@ export class OnboardingModalController {
   }
 
   /**
-   * 1-click reset to clean Coloride defaults.
+   * 1-click reset to clean Hilo defaults.
    */
-  resetToColorideDefaults(): OnboardingState {
-    this.editorView.resetToColorideDefaults();
+  resetToHiloDefaults(): OnboardingState {
+    this.editorView.resetToHiloDefaults();
     return this.store.setState(createInitialOnboardingState());
   }
 
@@ -285,8 +285,8 @@ export class OnboardingModalController {
     this.editorView.setTheme({
       label,
       uiTheme: "vs-dark",
-      editorBackground: DEFAULT_COLORIDE_CM6_THEME.editorBackground,
-      editorForeground: DEFAULT_COLORIDE_CM6_THEME.editorForeground,
+      editorBackground: DEFAULT_HILO_CM6_THEME.editorBackground,
+      editorForeground: DEFAULT_HILO_CM6_THEME.editorForeground,
       fontFamily,
       fontSizePx,
     });
@@ -301,7 +301,7 @@ export class OnboardingModalController {
       selectKeymapPreset: (preset) => this.selectKeymapPreset(preset),
       approveServer: (name) => this.approveQuarantinedMcpServer(name),
       rejectServer: (name) => this.rejectQuarantinedMcpServer(name),
-      resetToDefaults: () => this.resetToColorideDefaults(),
+      resetToDefaults: () => this.resetToHiloDefaults(),
       nativeImport: loader
         ? { load: loader, apply: (report) => this.applyNativeMigrationReport(report) }
         : null,

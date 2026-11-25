@@ -11,7 +11,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 use crate::state::DesktopAppState;
 
 /// Event sent to the UI when a close or quit was held back because of unsaved changes.
-pub(crate) const CLOSE_REQUESTED_EVENT: &str = "coloride-close-requested";
+pub(crate) const CLOSE_REQUESTED_EVENT: &str = "hilo-close-requested";
 
 #[tauri::command]
 pub fn report_unsaved_buffers_command(state: State<'_, DesktopAppState>, count: usize) {
@@ -40,7 +40,7 @@ pub async fn open_settings_window_command(app: AppHandle) -> Result<(), String> 
         "settings",
         WebviewUrl::App("index.html?view=settings".into()),
     )
-    .title("Settings — Coloride")
+    .title("Settings — Hilo")
     .inner_size(1060.0, 760.0)
     .min_inner_size(640.0, 480.0)
     .resizable(true)

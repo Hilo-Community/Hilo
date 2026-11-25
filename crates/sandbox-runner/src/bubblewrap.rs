@@ -364,7 +364,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let base = dir.path().canonicalize().unwrap();
         let home = base.join("home");
-        let worktree = home.join(".cache/coloride/wt");
+        let worktree = home.join(".cache/hilo/wt");
         fs::create_dir_all(home.join(".ssh")).unwrap();
         fs::write(home.join(".ssh/id_rsa"), "secret").unwrap();
         fs::write(home.join(".netrc"), "secret").unwrap();
@@ -385,7 +385,7 @@ mod tests {
             loopback_listen_ports: Vec::new(),
             network: NetworkPolicy::Denied,
             limits: ResourceLimits::default(),
-            tmp_dir: worktree.join(".coloride-tmp/x"),
+            tmp_dir: worktree.join(".hilo-tmp/x"),
             run_id: "1-1-a".into(),
         };
         Fixture {
@@ -458,7 +458,7 @@ mod tests {
         );
         // A worktree in a cache directory gets one.
         let mut elsewhere = fixture();
-        elsewhere.spec.worktree_root = "/home/u/.cache/coloride/wt".into();
+        elsewhere.spec.worktree_root = "/home/u/.cache/hilo/wt".into();
         elsewhere.spec.cwd = elsewhere.spec.worktree_root.clone();
         elsewhere.spec.read_only_paths = vec!["/home/u/project/node_modules".into()];
         assert!(with_tmp(

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Coloride: the only crate with `unsafe` code. Launches a process inside a Windows AppContainer, in a Job Object, behind a safe API."
+description = "Hilo: the only crate with `unsafe` code. Launches a process inside a Windows AppContainer, in a Job Object, behind a safe API."
 
 # Deliberately NOT `[lints] workspace = true`: the workspace forbids `unsafe_code` and a `forbid`
 # cannot be lowered from inside a crate. Every other crate keeps the workspace table. Here the

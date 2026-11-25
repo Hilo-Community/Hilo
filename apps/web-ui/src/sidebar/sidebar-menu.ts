@@ -21,7 +21,7 @@ export interface SidebarMenuAction {
 /** Room the menu may use: the visible part of the sidebar, within the window. */
 function visibleBounds(host: HTMLElement): MenuBounds {
   const doc = host.ownerDocument;
-  const view = host.closest<HTMLElement>(".coloride-zone-2-viewport") ?? host;
+  const view = host.closest<HTMLElement>(".hilo-zone-2-viewport") ?? host;
   const rect = view.getBoundingClientRect();
   const windowHeight = doc.defaultView?.innerHeight ?? doc.documentElement.clientHeight;
   const top = Math.max(0, rect.top);

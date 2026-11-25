@@ -107,7 +107,7 @@ impl Container {
     /// its SID. Fails if a profile of that name already exists.
     pub(crate) fn create(name: &str) -> io::Result<Self> {
         let wide = profile_name(name)?;
-        let label = wide_nul(OsStr::new("Coloride sandbox"))?;
+        let label = wide_nul(OsStr::new("Hilo sandbox"))?;
         let mut sid: *mut c_void = ptr::null_mut();
         // SAFETY: the name and the label (used as display name and description) are
         // NUL-terminated and outlive the call; no capability is requested (null list, count 0);
@@ -143,7 +143,7 @@ mod tests {
 
     #[test]
     fn profile_names_are_restricted() {
-        assert!(is_valid_name("coloride-123-4-abc"));
+        assert!(is_valid_name("hilo-123-4-abc"));
         assert!(!is_valid_name(""));
         assert!(!is_valid_name("has space"));
         assert!(!is_valid_name(r"..\\escape"));

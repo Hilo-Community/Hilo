@@ -104,20 +104,20 @@ describe("an edit made by the agent", () => {
     store.enqueue(edit("e", [diff("src/01.cpp", "a\nb\nc", "a\nB\nc\nd")]));
     const [card] = show(store);
     // The card keeps its verb and names the file.
-    expect(card?.querySelector(".coloride-agent-card-verb")?.textContent).toBe("Edited");
-    expect(card?.querySelector(".coloride-agent-card-target")?.textContent).toBe("01.cpp");
-    expect(card?.querySelector(".coloride-agent-card-extra")?.textContent).toBe("+2−1");
-    expect(card?.querySelector(".coloride-agent-card-icon svg")).not.toBeNull();
-    const rows = [...(card?.querySelectorAll(".coloride-agent-diff-text") ?? [])].map(
+    expect(card?.querySelector(".hilo-agent-card-verb")?.textContent).toBe("Edited");
+    expect(card?.querySelector(".hilo-agent-card-target")?.textContent).toBe("01.cpp");
+    expect(card?.querySelector(".hilo-agent-card-extra")?.textContent).toBe("+2−1");
+    expect(card?.querySelector(".hilo-agent-card-icon svg")).not.toBeNull();
+    const rows = [...(card?.querySelectorAll(".hilo-agent-diff-text") ?? [])].map(
       (row) => row.textContent,
     );
     expect(rows).toEqual(["a", "b", "B", "c", "d"]);
-    const marks = [...(card?.querySelectorAll(".coloride-agent-diff-prefix") ?? [])].map(
+    const marks = [...(card?.querySelectorAll(".hilo-agent-diff-prefix") ?? [])].map(
       (mark) => mark.textContent,
     );
     expect(marks).toEqual([" ", "-", "+", " ", "+"]);
     // One number per row, the new one except on removed rows.
-    const numbers = [...(card?.querySelectorAll(".coloride-agent-line-number") ?? [])].map(
+    const numbers = [...(card?.querySelectorAll(".hilo-agent-line-number") ?? [])].map(
       (n) => n.textContent,
     );
     expect(numbers).toEqual(["1", "2", "2", "3", "4"]);
@@ -126,12 +126,12 @@ describe("an edit made by the agent", () => {
     const store = new AgentStore((callback) => callback());
     store.enqueue(edit("e", [diff("a.ts", null, "x\ny"), diff("src/b.ts", "old", "new")]));
     const [card] = show(store);
-    expect(card?.querySelector(".coloride-agent-card-verb")?.textContent).toContain("2 files");
-    expect(card?.querySelectorAll(".coloride-agent-file-head")).toHaveLength(2);
-    expect(card?.querySelector(".coloride-agent-diff-line[data-kind='-']")?.textContent).toContain(
+    expect(card?.querySelector(".hilo-agent-card-verb")?.textContent).toContain("2 files");
+    expect(card?.querySelectorAll(".hilo-agent-file-head")).toHaveLength(2);
+    expect(card?.querySelector(".hilo-agent-diff-line[data-kind='-']")?.textContent).toContain(
       "old",
     );
-    expect(card?.querySelectorAll(".coloride-agent-diff-line[data-kind='-']")).toHaveLength(1);
+    expect(card?.querySelectorAll(".hilo-agent-diff-line[data-kind='-']")).toHaveLength(1);
   });
   it("keeps a long diff short until it is opened, and remembers that it was", () => {
     const store = new AgentStore((callback) => callback());
@@ -143,16 +143,14 @@ describe("an edit made by the agent", () => {
     const actions = { openLocation: () => {}, answer: () => {} };
     const make = () => document.createElement("button");
     const [card] = view.elements(document, store.getState(), make, actions);
-    const pre = card?.querySelector(".coloride-agent-diff") as HTMLElement;
-    const more = card?.querySelector(".coloride-agent-diff-more") as HTMLButtonElement;
+    const pre = card?.querySelector(".hilo-agent-diff") as HTMLElement;
+    const more = card?.querySelector(".hilo-agent-diff-more") as HTMLButtonElement;
     expect(pre.dataset.expanded).toBe("false");
     more.click();
     expect(pre.dataset.expanded).toBe("true");
     store.enqueue(edit("e", [], { status: "completed", title: "Edit again" }));
     const [again] = view.elements(document, store.getState(), make, actions);
-    expect((again?.querySelector(".coloride-agent-diff") as HTMLElement).dataset.expanded).toBe(
-      "true",
-    );
+    expect((again?.querySelector(".hilo-agent-diff") as HTMLElement).dataset.expanded).toBe("true");
   });
   it("ignores paths that leave the worktree and cuts what is too large", () => {
     const store = new AgentStore((callback) => callback());

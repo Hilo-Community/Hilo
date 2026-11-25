@@ -24,7 +24,7 @@ export class OptionBar {
     private readonly pick: (optionId: string, value: string) => void,
   ) {
     this.element = doc.createElement("span");
-    this.element.className = "coloride-agent-options";
+    this.element.className = "hilo-agent-options";
     this.element.hidden = true;
     this.menu = new SidebarMenu(menuHost);
   }
@@ -53,7 +53,7 @@ export class OptionBar {
   private chip(option: AgentOption): HTMLButtonElement {
     const chip = this.doc.createElement("button");
     chip.type = "button";
-    chip.className = "coloride-agent-option";
+    chip.className = "hilo-agent-option";
     chip.dataset.option = option.id;
     const current = option.choices.find((choice) => choice.value === option.current);
     chip.textContent = current?.name ?? option.current;

@@ -25,8 +25,8 @@ function setup(axis: "x" | "y", size: number, view: number, scroll = 0) {
     bar.destroy();
     host.remove();
   });
-  const track = host.querySelector<HTMLElement>(".coloride-thin-scrollbar");
-  const thumb = host.querySelector<HTMLElement>(".coloride-thin-scrollbar-thumb");
+  const track = host.querySelector<HTMLElement>(".hilo-thin-scrollbar");
+  const thumb = host.querySelector<HTMLElement>(".hilo-thin-scrollbar-thumb");
   if (!track || !thumb) throw new Error("Missing scrollbar nodes");
   return { host, scroller, bar, track, thumb };
 }
@@ -34,7 +34,7 @@ function setup(axis: "x" | "y", size: number, view: number, scroll = 0) {
 describe("thin scrollbar", () => {
   it("sizes and positions the thumb on the vertical axis", () => {
     const { track, thumb, scroller, bar } = setup("y", 1000, 250, 0);
-    expect(track.className).toContain("coloride-thin-scrollbar--y");
+    expect(track.className).toContain("hilo-thin-scrollbar--y");
     expect(track.dataset.scrollable).toBe("true");
     expect(thumb.style.height).toBe("25.00%");
     expect(thumb.style.top).toBe("0.00%");
@@ -45,7 +45,7 @@ describe("thin scrollbar", () => {
 
   it("uses width/left on the horizontal axis and keeps a minimum thumb size", () => {
     const { track, thumb } = setup("x", 100000, 100, 0);
-    expect(track.className).toContain("coloride-thin-scrollbar--x");
+    expect(track.className).toContain("hilo-thin-scrollbar--x");
     expect(thumb.style.width).toBe("15.00%");
   });
 
@@ -54,6 +54,6 @@ describe("thin scrollbar", () => {
     expect(track.dataset.scrollable).toBe("false");
     expect(thumb.style.height).toBe("0%");
     bar.destroy();
-    expect(host.querySelector(".coloride-thin-scrollbar")).toBeNull();
+    expect(host.querySelector(".hilo-thin-scrollbar")).toBeNull();
   });
 });

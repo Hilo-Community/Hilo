@@ -220,7 +220,7 @@ pub(crate) fn terminal_spec(
         .retain(|arg| arg != "--acp" && arg != "--experimental-acp");
     spec.args.extend(method.args.iter().map(Into::into));
     spec.env.insert("TERM".into(), "xterm-256color".into());
-    spec.env.insert("TERM_PROGRAM".into(), "Coloride".into());
+    spec.env.insert("TERM_PROGRAM".into(), "Hilo".into());
     Ok(spec)
 }
 
@@ -237,7 +237,7 @@ mod tests {
         let credentials = AgentCredentials::Gateway {
             protocol: "openai".into(),
             base_url: "http://127.0.0.1:123/openai".into(),
-            headers: BTreeMap::from([("x-coloride-session".into(), "session-only".into())]),
+            headers: BTreeMap::from([("x-hilo-session".into(), "session-only".into())]),
             provider_name: "Provider".into(),
             environment_fallback: false,
         };
@@ -247,7 +247,7 @@ mod tests {
         };
         assert_eq!(request["methodId"], "custom-name");
         assert_eq!(
-            request["_meta"]["gateway"]["headers"]["x-coloride-session"],
+            request["_meta"]["gateway"]["headers"]["x-hilo-session"],
             "session-only"
         );
         assert!(authentication(&credentials, &[]).is_err());

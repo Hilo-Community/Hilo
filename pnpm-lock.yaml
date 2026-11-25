@@ -29,13 +29,13 @@ importers:
 
   apps/desktop-tauri:
     dependencies:
-      '@coloride/editor-cm6':
+      '@hilo/editor-cm6':
         specifier: workspace:*
         version: link:../../packages/editor-cm6
-      '@coloride/protocol-types':
+      '@hilo/protocol-types':
         specifier: workspace:*
         version: link:../../packages/protocol-types
-      '@coloride/web-ui':
+      '@hilo/web-ui':
         specifier: workspace:*
         version: link:../web-ui
       '@tauri-apps/api':
@@ -66,10 +66,10 @@ importers:
 
   apps/web-ui:
     dependencies:
-      '@coloride/editor-cm6':
+      '@hilo/editor-cm6':
         specifier: workspace:*
         version: link:../../packages/editor-cm6
-      '@coloride/protocol-types':
+      '@hilo/protocol-types':
         specifier: workspace:*
         version: link:../../packages/protocol-types
       '@lezer/cpp':
@@ -127,7 +127,7 @@ importers:
       '@codemirror/view':
         specifier: ^6.36.3
         version: 6.43.15
-      '@coloride/protocol-types':
+      '@hilo/protocol-types':
         specifier: workspace:*
         version: link:../protocol-types
       '@lezer/highlight':

@@ -34,11 +34,11 @@ describe("file tree panel", () => {
     });
     document.body.append(panel.element);
     panel.update(nodes, "");
-    const rows = () => panel.element.querySelectorAll(".coloride-file-tree [data-path]").length;
+    const rows = () => panel.element.querySelectorAll(".hilo-file-tree [data-path]").length;
     const before = rows();
 
     // The panel turns out to be much taller than the default the tree assumed.
-    const scroller = panel.element.querySelector<HTMLElement>(".coloride-file-tree-scroll");
+    const scroller = panel.element.querySelector<HTMLElement>(".hilo-file-tree-scroll");
     Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 3000 });
     notify();
     expect(rows()).toBeGreaterThan(before);

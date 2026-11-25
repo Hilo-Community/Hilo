@@ -1,15 +1,15 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
 import { CockpitDomController, createCockpitStoreBundle } from "../../index.js";
 import type { Inspector } from "./inspector.js";
 
-describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () => {
+describe("@hilo/web-ui — Zone 4 inspector (editor, tabs, file tree)", () => {
   it("shows the project file tree next to the editor and opens files from it", () => {
     const rootContainer = document.createElement("div");
     document.body.appendChild(rootContainer);
     const stores = createCockpitStoreBundle();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -17,7 +17,7 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     const controller = new CockpitDomController({ rootContainer, stores, editorView });
     const editorDom = editorView.getEditorView().dom;
     const zone4 = controller.getZoneElements().zone4;
-    const tree = () => zone4.querySelector<HTMLElement>(".coloride-file-tree");
+    const tree = () => zone4.querySelector<HTMLElement>(".hilo-file-tree");
     expect(tree()?.textContent).toBe("No project open");
     stores.setFileTree([
       { path: "src", name: "src", depth: 0, isDirectory: true, validationState: "UnchangedBlue" },
@@ -29,25 +29,23 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
         validationState: "UnchangedBlue",
       },
     ]);
-    const rows = tree()?.querySelectorAll<HTMLElement>(".cm-coloride-virtual-tree-row");
+    const rows = tree()?.querySelectorAll<HTMLElement>(".cm-hilo-virtual-tree-row");
     expect(rows).toHaveLength(2);
-    const filter = zone4.querySelector<HTMLInputElement>(".coloride-file-tree-filter");
+    const filter = zone4.querySelector<HTMLInputElement>(".hilo-file-tree-filter");
     if (!filter) throw new Error("Missing tree filter");
     filter.value = "zzz";
     filter.dispatchEvent(new Event("input"));
     expect(tree()?.textContent).toBe("No matching files");
     filter.value = "APP";
     filter.dispatchEvent(new Event("input"));
-    expect(tree()?.querySelectorAll(".cm-coloride-virtual-tree-row")).toHaveLength(2);
+    expect(tree()?.querySelectorAll(".cm-hilo-virtual-tree-row")).toHaveLength(2);
     filter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(filter.value).toBe("");
-    zone4
-      .querySelectorAll<HTMLElement>(".coloride-file-tree .cm-coloride-virtual-tree-row")[1]
-      ?.click();
+    zone4.querySelectorAll<HTMLElement>(".hilo-file-tree .cm-hilo-virtual-tree-row")[1]?.click();
     expect(stores.zone4.getState().activeDocumentId).toBe("src/app.ts");
     expect(
       rootContainer
-        .querySelector('.coloride-zone-4-header .coloride-header-tab[data-path="src/app.ts"]')
+        .querySelector('.hilo-zone-4-header .hilo-header-tab[data-path="src/app.ts"]')
         ?.getAttribute("aria-selected"),
     ).toBe("true");
     expect(editorView.getEditorView().dom).toBe(editorDom);
@@ -59,7 +57,7 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     const rootContainer = document.createElement("div");
     document.body.appendChild(rootContainer);
     const stores = createCockpitStoreBundle();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -68,7 +66,7 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     const editorDom = editorView.getEditorView().dom;
     const tabs = () =>
       Array.from(
-        rootContainer.querySelectorAll<HTMLElement>(".coloride-zone-4-header .coloride-header-tab"),
+        rootContainer.querySelectorAll<HTMLElement>(".hilo-zone-4-header .hilo-header-tab"),
       );
     const paths = () => tabs().map((tab) => tab.dataset.path);
     const active = () => stores.zone4.getState().activeDocumentId;
@@ -76,7 +74,7 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     stores.selectFileFromTree("src/a.cpp");
     stores.selectFileFromTree("src/b.cpp");
     expect(paths()).toEqual([first, "src/a.cpp", "src/b.cpp"]);
-    expect(tabs()[1]?.querySelector(".coloride-header-tab-icon svg")).not.toBeNull();
+    expect(tabs()[1]?.querySelector(".hilo-header-tab-icon svg")).not.toBeNull();
     expect(tabs()[1]?.textContent).toContain("a.cpp");
 
     tabs()[1]?.click();
@@ -92,14 +90,14 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     }
     expect(tabs()).toHaveLength(0);
     expect(
-      rootContainer.querySelector<HTMLElement>(".coloride-zone-4-editor-host")?.style.display,
+      rootContainer.querySelector<HTMLElement>(".hilo-zone-4-editor-host")?.style.display,
     ).toBe("none");
-    expect(rootContainer.querySelector<HTMLElement>(".coloride-zone-4-empty")?.hidden).toBe(false);
+    expect(rootContainer.querySelector<HTMLElement>(".hilo-zone-4-empty")?.hidden).toBe(false);
     expect(editorView.getEditorView().dom).toBe(editorDom);
 
     stores.selectFileFromTree("src/c.cpp");
     expect(paths()).toEqual(["src/c.cpp"]);
-    expect(rootContainer.querySelector<HTMLElement>(".coloride-zone-4-empty")?.hidden).toBe(true);
+    expect(rootContainer.querySelector<HTMLElement>(".hilo-zone-4-empty")?.hidden).toBe(true);
     controller.destroy();
     rootContainer.remove();
   });
@@ -107,7 +105,7 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     const rootContainer = document.createElement("div");
     document.body.appendChild(rootContainer);
     const stores = createCockpitStoreBundle();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -115,10 +113,10 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     const controller = new CockpitDomController({ rootContainer, stores, editorView });
     const paths = () =>
       Array.from(
-        rootContainer.querySelectorAll<HTMLElement>(".coloride-zone-4-header .coloride-header-tab"),
+        rootContainer.querySelectorAll<HTMLElement>(".hilo-zone-4-header .hilo-header-tab"),
       ).map((tab) => tab.dataset.path);
     const empty = () =>
-      rootContainer.querySelector<HTMLElement>(".coloride-zone-4-empty")?.hidden === false;
+      rootContainer.querySelector<HTMLElement>(".hilo-zone-4-empty")?.hidden === false;
 
     stores.setProjectPath("/projects/a");
     stores.selectFileFromTree("a1.ts");
@@ -149,7 +147,7 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     const rootContainer = document.createElement("div");
     document.body.appendChild(rootContainer);
     const stores = createCockpitStoreBundle();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -157,15 +155,15 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     const controller = new CockpitDomController({ rootContainer, stores, editorView });
     const tab = (path: string) =>
       rootContainer.querySelector<HTMLElement>(
-        `.coloride-zone-4-header .coloride-header-tab[data-path="${path}"]`,
+        `.hilo-zone-4-header .hilo-header-tab[data-path="${path}"]`,
       );
     const dotShown = (path: string) =>
-      tab(path)?.querySelector<HTMLElement>(".coloride-header-tab-dot")?.hidden === false;
+      tab(path)?.querySelector<HTMLElement>(".hilo-header-tab-dot")?.hidden === false;
     const close = (path: string) =>
       rootContainer
         .querySelector<HTMLButtonElement>(`[aria-label="Close ${path.split("/").pop()}"]`)
         ?.click();
-    const dialog = () => rootContainer.querySelector<HTMLElement>(".coloride-unsaved-dialog");
+    const dialog = () => rootContainer.querySelector<HTMLElement>(".hilo-unsaved-dialog");
     const choose = (choice: string) =>
       rootContainer.querySelector<HTMLButtonElement>(`[data-choice="${choice}"]`)?.click();
     cleanups.push(() => {
@@ -243,11 +241,11 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
   it("gives each work group its own file tabs, and an empty group shows the empty state", () => {
     const { stores, tab, root } = setup();
     const paths = () =>
-      Array.from(
-        root.querySelectorAll<HTMLElement>(".coloride-zone-4-header .coloride-header-tab"),
-      ).map((el) => el.dataset.path);
+      Array.from(root.querySelectorAll<HTMLElement>(".hilo-zone-4-header .hilo-header-tab")).map(
+        (el) => el.dataset.path,
+      );
     const emptyShown = () =>
-      root.querySelector<HTMLElement>(".coloride-zone-4-empty")?.hidden === false;
+      root.querySelector<HTMLElement>(".hilo-zone-4-empty")?.hidden === false;
     stores.selectFileFromTree("src/a.ts", "a");
     stores.selectFileFromTree("src/b.ts", "b");
     expect(paths()).toEqual(expect.arrayContaining(["src/a.ts", "src/b.ts"]));
@@ -272,7 +270,7 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     const root = document.createElement("div");
     document.body.appendChild(root);
     const stores = createCockpitStoreBundle();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -302,7 +300,7 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     ]);
     const openFromTree = async () => {
       root
-        .querySelector<HTMLElement>(".coloride-zone-4-tree-column .cm-coloride-virtual-tree-row")
+        .querySelector<HTMLElement>(".hilo-zone-4-tree-column .cm-hilo-virtual-tree-row")
         ?.click();
       await new Promise((resolve) => setTimeout(resolve, 0));
     };
@@ -321,12 +319,12 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
   it("empties the right side when an empty group is selected from the sidebar, in any project", () => {
     const { stores, root } = setup();
     const z4Tabs = () =>
-      Array.from(
-        root.querySelectorAll<HTMLElement>(".coloride-zone-4-header .coloride-header-tab"),
-      ).map((el) => el.dataset.path);
-    const empty = () => root.querySelector<HTMLElement>(".coloride-zone-4-empty")?.hidden === false;
+      Array.from(root.querySelectorAll<HTMLElement>(".hilo-zone-4-header .hilo-header-tab")).map(
+        (el) => el.dataset.path,
+      );
+    const empty = () => root.querySelector<HTMLElement>(".hilo-zone-4-empty")?.hidden === false;
     const editorShown = () =>
-      root.querySelector<HTMLElement>(".coloride-zone-4-editor-host")?.style.display !== "none";
+      root.querySelector<HTMLElement>(".hilo-zone-4-editor-host")?.style.display !== "none";
     const clickGroup = (id: string) =>
       root.querySelector<HTMLButtonElement>(`.sidebar-row-select[data-group-id="${id}"]`)?.click();
 
@@ -349,10 +347,10 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
         validationState: "UnchangedBlue",
       },
     ]);
-    const z4Element = root.querySelector<HTMLElement>(".coloride-zone-4-inspector") as HTMLElement;
+    const z4Element = root.querySelector<HTMLElement>(".hilo-zone-4-inspector") as HTMLElement;
     const selectedRows = () =>
       root.querySelectorAll(
-        '.coloride-zone-4-tree-column .cm-coloride-virtual-tree-row[aria-selected="true"]',
+        '.hilo-zone-4-tree-column .cm-hilo-virtual-tree-row[aria-selected="true"]',
       ).length;
     clickGroup("initial-group");
     stores.selectFileFromTree("a1.ts");
@@ -384,7 +382,7 @@ describe("@coloride/web-ui — Zone 4 inspector (editor, tabs, file tree)", () =
     document.body.appendChild(root);
     const stores = createCockpitStoreBundle();
     const ipcChannel = new InMemoryBinaryHostBridge();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel,

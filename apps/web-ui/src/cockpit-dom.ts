@@ -1,4 +1,4 @@
-import type { ColorideEditorView } from "@coloride/editor-cm6";
+import type { HiloEditorView } from "@hilo/editor-cm6";
 import type { AgentHost } from "./agent/store.js";
 import {
   TrustBanner,
@@ -50,7 +50,7 @@ export type {
 export interface CockpitDomControllerOptions {
   readonly rootContainer: HTMLElement;
   readonly stores: CockpitStoreBundle;
-  readonly editorView: ColorideEditorView;
+  readonly editorView: HiloEditorView;
   readonly onboardingController?: OnboardingModalController;
   readonly openWorkspace?: () => Promise<readonly CockpitFileTreeNode[] | null>;
   readonly switchWorkspace?: (path: string) => Promise<readonly CockpitFileTreeNode[] | null>;
@@ -91,11 +91,11 @@ export interface CockpitDomControllerOptions {
  * changes to them. The zones live in `./cockpit/`:
  * Zone 1 `ActivityBar`, Zone 2 `SidebarPanels`, Zone 3 `ChatGrid`, Zone 4 `Inspector`, plus the
  * `TitleBar` that holds the Zone 3 and Zone 4 headers.
- * The singleton `ColorideEditorView` is mounted once in Zone 4 and never re-mounted.
+ * The singleton `HiloEditorView` is mounted once in Zone 4 and never re-mounted.
  */
 export class CockpitDomController {
   private readonly stores: CockpitStoreBundle;
-  private readonly editorView: ColorideEditorView;
+  private readonly editorView: HiloEditorView;
   private readonly onboardingController: OnboardingModalController;
   private readonly ownsOnboardingController: boolean;
   private readonly analyzeDocument?: CockpitDomControllerOptions["analyzeDocument"];
@@ -225,7 +225,7 @@ export class CockpitDomController {
     );
 
     this.shell = doc.createElement("div");
-    this.shell.className = "coloride-cockpit-shell";
+    this.shell.className = "hilo-cockpit-shell";
     this.shell.setAttribute("role", "application");
     this.shell.setAttribute("aria-label", UI_STRINGS.shell.cockpit);
     this.shell.style.display = "grid";
@@ -247,7 +247,7 @@ export class CockpitDomController {
     );
     if (this.settings) this.shell.append(this.settings.element);
     this.activityBar.element.addEventListener("click", (event) => {
-      if (!(event.target as HTMLElement).closest(".coloride-settings-btn")) this.showWorkspace();
+      if (!(event.target as HTMLElement).closest(".hilo-settings-btn")) this.showWorkspace();
     });
     rootContainer.append(this.shell);
     this.terminalAvailable = options.terminalHost !== undefined;

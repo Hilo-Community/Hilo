@@ -34,7 +34,7 @@ impl OrphanWatchdog {
         let mut process = Command::new("/bin/sh")
             .arg("-c")
             .arg(r#"read _; kill -s KILL -- "-$1" 2>/dev/null"#)
-            .arg("coloride-sandbox-watchdog")
+            .arg("hilo-sandbox-watchdog")
             .arg(group.to_string())
             .stdin(Stdio::piped())
             .stdout(Stdio::null())

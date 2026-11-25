@@ -4,7 +4,7 @@ import {
   type DeclarativeVsixSnippet,
   type DeclarativeVsixTheme,
   translateVsCodeKeyToCm6,
-} from "@coloride/editor-cm6";
+} from "@hilo/editor-cm6";
 import { parseJsonc, parseJsoncObject } from "./jsonc.js";
 
 type JsonObject = Record<string, unknown>;

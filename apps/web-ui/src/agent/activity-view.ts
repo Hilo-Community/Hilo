@@ -45,7 +45,7 @@ export class ExplorationView {
   readonly card: CardView;
   constructor(doc: Document) {
     this.card = new CardView(doc);
-    this.card.element.classList.add("coloride-agent-activity", "coloride-agent-exploration");
+    this.card.element.classList.add("hilo-agent-activity", "hilo-agent-exploration");
     this.card.body.setAttribute("role", "list");
   }
   update(tools: ToolCard[], children: HTMLElement[]): HTMLElement {

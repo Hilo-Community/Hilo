@@ -26,11 +26,11 @@ pub struct ImportedEditorSettings {
 impl Default for ImportedEditorSettings {
     fn default() -> Self {
         Self {
-            color_theme: DEFAULT_COLORIDE_THEME.to_string(),
-            icon_theme: DEFAULT_COLORIDE_ICON_THEME.to_string(),
-            font_family: DEFAULT_COLORIDE_FONT_FAMILY.to_string(),
-            font_size: DEFAULT_COLORIDE_FONT_SIZE,
-            tab_size: DEFAULT_COLORIDE_TAB_SIZE,
+            color_theme: DEFAULT_HILO_THEME.to_string(),
+            icon_theme: DEFAULT_HILO_ICON_THEME.to_string(),
+            font_family: DEFAULT_HILO_FONT_FAMILY.to_string(),
+            font_size: DEFAULT_HILO_FONT_SIZE,
+            tab_size: DEFAULT_HILO_TAB_SIZE,
             insert_spaces: true,
             keymap_preset: KeymapPreset::VsCode,
         }
@@ -75,7 +75,7 @@ pub fn parse_settings_jsonc(input: &str) -> Result<ImportedEditorSettings, Migra
 
     // Detect Vim or JetBrains keymap preference if configured in settings
     if let Some(keymap_raw) = obj
-        .get("coloride.keymapPreset")
+        .get("hilo.keymapPreset")
         .or_else(|| obj.get("keymap.preset"))
         .and_then(|v| v.as_str())
     {

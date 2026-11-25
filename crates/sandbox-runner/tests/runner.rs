@@ -394,7 +394,7 @@ fn a_long_lived_process_is_stopped_at_the_end_of_its_lifetime_budget() {
     assert!(wait_until_dead(grandchild));
 }
 
-const HELPER_ENV: &str = "COLORIDE_SANDBOX_HOST_HELPER_DIR";
+const HELPER_ENV: &str = "HILO_SANDBOX_HOST_HELPER_DIR";
 
 /// The "Host" of the abrupt-exit scenario is this test binary re-executed in a helper mode, then
 /// killed with `SIGKILL` so that none of its destructors run.

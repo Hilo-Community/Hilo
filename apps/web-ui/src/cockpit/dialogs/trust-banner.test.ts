@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CockpitDomController,
@@ -25,7 +25,7 @@ function setup(answer: "trust" | "decline" = "trust") {
     state: openRoot !== null && trusted.has(openRoot) ? "Trusted" : "Untrusted",
     workspaceRoot: openRoot,
   });
-  const editorView = new ColorideEditorView({
+  const editorView = new HiloEditorView({
     initialDocumentId: "src/main.ts",
     initialContent: "const ready = true;\n",
     ipcChannel: new InMemoryBinaryHostBridge(),
@@ -53,9 +53,9 @@ function setup(answer: "trust" | "decline" = "trust") {
     stores.setProjectPath(path);
     await settle();
   };
-  const banner = () => root.querySelector<HTMLElement>(".coloride-trust-banner");
+  const banner = () => root.querySelector<HTMLElement>(".hilo-trust-banner");
   const clickTrust = async () => {
-    banner()?.querySelector<HTMLButtonElement>(".coloride-trust-banner-action")?.click();
+    banner()?.querySelector<HTMLButtonElement>(".hilo-trust-banner-action")?.click();
     await settle();
   };
   return { controller, editorView, openFolder, banner, clickTrust, prompts: () => prompts };

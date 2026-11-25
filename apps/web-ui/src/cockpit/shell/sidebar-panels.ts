@@ -54,7 +54,7 @@ export class SidebarPanels {
     const { stores } = options;
     this.element = doc.createElement("aside");
     this.element.className =
-      "coloride-zone-2-sidebar bg-sidebar border-y border-l border-r-0 border-white/8 rounded-tl-[16px] rounded-bl-[16px] p-2.5 h-full";
+      "hilo-zone-2-sidebar bg-sidebar border-y border-l border-r-0 border-white/8 rounded-tl-[16px] rounded-bl-[16px] p-2.5 h-full";
     this.element.setAttribute("aria-label", UI_STRINGS.shell.sidebar);
     this.element.style.minWidth = "0";
     // The project controls stay fixed at the top; everything below them scrolls inside `scroll`
@@ -63,9 +63,9 @@ export class SidebarPanels {
     this.element.style.display = "flex";
     this.element.style.flexDirection = "column";
     const viewport = doc.createElement("div");
-    viewport.className = "coloride-zone-2-viewport";
+    viewport.className = "hilo-zone-2-viewport";
     const scroll = doc.createElement("div");
-    scroll.className = "coloride-zone-2-scroll";
+    scroll.className = "hilo-zone-2-scroll";
 
     this.projectControls = doc.createElement("div");
     this.projectControls.className = "sidebar-project-controls";
@@ -73,41 +73,41 @@ export class SidebarPanels {
     this.sessions.className = "sidebar-navigation";
 
     this.search = doc.createElement("div");
-    this.search.className = "coloride-zone-2-search flex flex-col gap-2";
+    this.search.className = "hilo-zone-2-search flex flex-col gap-2";
     this.search.setAttribute("aria-label", UI_STRINGS.search.panel);
     this.searchInput = doc.createElement("input");
     this.searchInput.type = "search";
-    this.searchInput.className = "coloride-global-search-input";
+    this.searchInput.className = "hilo-global-search-input";
     this.searchInput.placeholder = UI_STRINGS.search.placeholder;
     this.searchInput.setAttribute("aria-label", UI_STRINGS.search.input);
     this.searchInput.addEventListener("change", () => this.runSearch());
     this.searchResults = doc.createElement("div");
-    this.searchResults.className = "coloride-global-search-results";
+    this.searchResults.className = "hilo-global-search-results";
     this.searchResults.setAttribute("role", "list");
     this.search.append(this.searchInput, this.searchResults);
 
     this.debug = doc.createElement("div");
-    this.debug.className = "coloride-zone-2-debug flex flex-col gap-2";
+    this.debug.className = "hilo-zone-2-debug flex flex-col gap-2";
     this.debug.setAttribute("aria-label", UI_STRINGS.debug.panel);
     this.symbolsList = doc.createElement("div");
-    this.symbolsList.className = "coloride-ast-symbols-list";
+    this.symbolsList.className = "hilo-ast-symbols-list";
     this.symbolsList.setAttribute("role", "list");
     this.impactedList = doc.createElement("div");
-    this.impactedList.className = "coloride-impacted-tests-list";
+    this.impactedList.className = "hilo-impacted-tests-list";
     this.impactedList.setAttribute("role", "list");
     this.debug.append(this.symbolsList, this.impactedList);
 
     this.mcp = doc.createElement("div");
-    this.mcp.className = "coloride-zone-2-mcp flex flex-col gap-2";
+    this.mcp.className = "hilo-zone-2-mcp flex flex-col gap-2";
     this.mcp.setAttribute("aria-label", UI_STRINGS.mcp.panel);
     this.wizardButton = doc.createElement("button");
     this.wizardButton.type = "button";
-    this.wizardButton.className = "coloride-open-onboarding-btn";
+    this.wizardButton.className = "hilo-open-onboarding-btn";
     this.wizardButton.addEventListener("click", () => {
       options.onboarding.setModalOpen(!options.onboarding.store.getState().modalOpen);
     });
     this.mcpSummary = doc.createElement("div");
-    this.mcpSummary.className = "coloride-mcp-onboarding-summary";
+    this.mcpSummary.className = "hilo-mcp-onboarding-summary";
     this.mcp.append(this.wizardButton, this.mcpSummary);
 
     scroll.append(this.sessions, this.search, this.debug, this.mcp);
@@ -185,7 +185,7 @@ export class SidebarPanels {
       ...results.map((hit) => {
         const button = doc.createElement("button");
         button.type = "button";
-        button.className = "coloride-search-result-item";
+        button.className = "hilo-search-result-item";
         button.setAttribute("role", "listitem");
         button.dataset.filePath = hit.filePath;
         button.dataset.line = String(hit.line);
@@ -222,7 +222,7 @@ export class SidebarPanels {
       this.symbolsList.replaceChildren(
         ...symbols.map((symbol) => {
           const row = doc.createElement("div");
-          row.className = "coloride-ast-symbol-item";
+          row.className = "hilo-ast-symbol-item";
           row.setAttribute("role", "listitem");
           row.dataset.symbolName = symbol.name;
           row.dataset.symbolKind = symbol.kind;
@@ -238,7 +238,7 @@ export class SidebarPanels {
       this.impactedList.replaceChildren(
         ...impacted.map((test) => {
           const row = doc.createElement("div");
-          row.className = "coloride-impacted-test-item";
+          row.className = "hilo-impacted-test-item";
           row.setAttribute("role", "listitem");
           row.dataset.testFilePath = test.testFilePath;
           row.dataset.coveredSymbol = test.coveredSymbol;

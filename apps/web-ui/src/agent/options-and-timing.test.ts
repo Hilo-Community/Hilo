@@ -74,7 +74,7 @@ describe("where a turn's time goes", () => {
     expect(tools.find((t) => t.id === "slow")?.durationMs).toBe(2500);
     expect(tools.find((t) => t.id === "quick")?.durationMs).toBe(1200);
     const shown = new ConversationView().elements(document, store.getState(), button, actions);
-    expect(shown[0]?.querySelector(".coloride-agent-card-time")?.textContent).toBe("2.5s");
+    expect(shown[0]?.querySelector(".hilo-agent-card-time")?.textContent).toBe("2.5s");
     // 2.2 - 1.0 = 1.2s here, so craft a really quick one:
     const quick = clocked();
     quick.at(0);
@@ -87,7 +87,7 @@ describe("where a turn's time goes", () => {
       button,
       actions,
     );
-    expect(card?.querySelector(".coloride-agent-card-time")).toBeNull();
+    expect(card?.querySelector(".hilo-agent-card-time")).toBeNull();
   });
   it("tells how long a turn took and how much of it was waiting for the user", () => {
     const { store, at } = clocked();
@@ -115,7 +115,7 @@ describe("where a turn's time goes", () => {
       button,
       actions,
     );
-    expect(during.some((el) => el.classList.contains("coloride-agent-turn-time"))).toBe(false);
+    expect(during.some((el) => el.classList.contains("hilo-agent-turn-time"))).toBe(false);
   });
 });
 
@@ -186,7 +186,7 @@ describe("what the agent lets the user choose", () => {
     for (let i = 0; i < 10; i++) await Promise.resolve();
     store.enqueue({ type: "ready", sessionId: "s" });
     store.enqueue({ type: "options", options: [model, mode] });
-    const chip = panel.element.querySelector<HTMLButtonElement>(".coloride-agent-option");
+    const chip = panel.element.querySelector<HTMLButtonElement>(".hilo-agent-option");
     expect(chip?.textContent).toBe("Deep");
     expect(chip?.disabled).toBe(false);
     chip?.click();
@@ -194,10 +194,10 @@ describe("what the agent lets the user choose", () => {
     for (let i = 0; i < 10; i++) await Promise.resolve();
     expect(setOption).toHaveBeenCalledWith("model", "fast");
     store.enqueue({ type: "message", role: "user", text: "work" });
-    expect(panel.element.querySelector<HTMLButtonElement>(".coloride-agent-option")?.disabled).toBe(
+    expect(panel.element.querySelector<HTMLButtonElement>(".hilo-agent-option")?.disabled).toBe(
       true,
     );
-    expect(panel.element.querySelector(".coloride-agent-busy-time")?.textContent).toMatch(/s$/);
+    expect(panel.element.querySelector(".hilo-agent-busy-time")?.textContent).toMatch(/s$/);
     panel.destroy();
   });
 });
@@ -212,7 +212,7 @@ describe("the thinking of the agent", () => {
     const store = new AgentStore((callback) => callback());
     thinking(store, "\n\n**Building memory-hash comparison**\n\nThen compare `dist/`.");
     const [card] = new ConversationView().elements(document, store.getState(), button, actions);
-    const body = card?.querySelector(".coloride-agent-card-body");
+    const body = card?.querySelector(".hilo-agent-card-body");
     expect(body?.querySelector("strong")?.textContent).toBe("Building memory-hash comparison");
     expect(body?.querySelector("code")?.textContent).toBe("dist/");
     expect(body?.textContent).not.toContain("**");
@@ -231,7 +231,7 @@ describe("the thinking of the agent", () => {
     const label = () =>
       view
         .elements(document, store.getState(), button, actions)[0]
-        ?.querySelector(".coloride-agent-card-verb")?.textContent;
+        ?.querySelector(".hilo-agent-card-verb")?.textContent;
     expect(label()).toBe("Thought briefly");
     const slow = new AgentStore(
       (callback) => callback(),
@@ -242,7 +242,7 @@ describe("the thinking of the agent", () => {
     now = 8000;
     slow.enqueue({ type: "update", update: { sessionUpdate: "turn_complete" } });
     const [card] = new ConversationView().elements(document, slow.getState(), button, actions);
-    expect(card?.querySelector(".coloride-agent-card-verb")?.textContent).toBe("Thought for 8s");
+    expect(card?.querySelector(".hilo-agent-card-verb")?.textContent).toBe("Thought for 8s");
   });
 });
 

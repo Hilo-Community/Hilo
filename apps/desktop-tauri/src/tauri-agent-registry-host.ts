@@ -1,4 +1,4 @@
-import type { AgentRegistryHost, InstalledAgent } from "@coloride/web-ui";
+import type { AgentRegistryHost, InstalledAgent } from "@hilo/web-ui";
 import { listen } from "@tauri-apps/api/event";
 
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;

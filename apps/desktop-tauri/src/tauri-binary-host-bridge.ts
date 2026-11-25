@@ -1,4 +1,4 @@
-import type { BinaryIpcChannel } from "@coloride/editor-cm6";
+import type { BinaryIpcChannel } from "@hilo/editor-cm6";
 import { invoke } from "@tauri-apps/api/core";
 
 function toUint8Array(value: number[] | Uint8Array): Uint8Array {

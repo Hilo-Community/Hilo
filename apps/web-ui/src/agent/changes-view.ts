@@ -34,7 +34,7 @@ export class ChangesView {
   private signature = "";
   constructor(private readonly doc: Document) {
     this.card = new CardView(doc);
-    this.card.element.classList.add("coloride-agent-changes");
+    this.card.element.classList.add("hilo-agent-changes");
     this.card.element.dataset.variant = "diff";
   }
   update(changes: FileChange[], openLocation: (path: string, line: number) => void): HTMLElement {
@@ -45,13 +45,13 @@ export class ChangesView {
     const removed = changes.reduce((sum, change) => sum + change.removed, 0);
     const counts = (a: number, r: number) => {
       const wrap = this.doc.createElement("span");
-      wrap.className = "coloride-agent-card-extra";
+      wrap.className = "hilo-agent-card-extra";
       if (a || r) {
         const plus = this.doc.createElement("span");
-        plus.className = "coloride-agent-diff-added";
+        plus.className = "hilo-agent-diff-added";
         plus.textContent = `+${a}`;
         const minus = this.doc.createElement("span");
-        minus.className = "coloride-agent-diff-removed";
+        minus.className = "hilo-agent-diff-removed";
         minus.textContent = `−${r}`;
         wrap.append(plus, minus);
       }
@@ -61,9 +61,9 @@ export class ChangesView {
     const rows = changes.map((change) => {
       const row = this.doc.createElement("button");
       row.type = "button";
-      row.className = "coloride-agent-change-file";
+      row.className = "hilo-agent-change-file";
       const name = this.doc.createElement("span");
-      name.className = "coloride-agent-change-path";
+      name.className = "hilo-agent-change-path";
       name.textContent = change.path;
       row.append(name, counts(change.added, change.removed));
       row.addEventListener("click", () => openLocation(change.path, 1));

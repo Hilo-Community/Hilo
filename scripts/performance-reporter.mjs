@@ -11,7 +11,7 @@ export default class PerformanceReporter {
   }
   onUserConsoleLog(log) {
     for (const line of log.content.split("\n")) {
-      const marker = "COLORIDE_PERFORMANCE ";
+      const marker = "HILO_PERFORMANCE ";
       const start = line.indexOf(marker);
       if (start >= 0) this.metrics.push(JSON.parse(line.slice(start + marker.length)));
     }

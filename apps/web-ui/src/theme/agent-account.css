@@ -1,44 +1,44 @@
-.coloride-agent-account {
+.hilo-agent-account {
   grid-column: 1 / -1;
   width: 100%;
   padding-top: 16px;
   border-top: 1px solid var(--border-color, #333);
 }
 
-.coloride-agent-account[hidden] {
+.hilo-agent-account[hidden] {
   display: none;
 }
 
-.coloride-agent-account > div,
-.coloride-agent-account > div > div {
+.hilo-agent-account > div,
+.hilo-agent-account > div > div {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
 }
 
-.coloride-agent-account h4,
-.coloride-agent-account p,
-.coloride-agent-account label {
+.hilo-agent-account h4,
+.hilo-agent-account p,
+.hilo-agent-account label {
   width: 100%;
   margin: 0;
 }
 
-.coloride-agent-account p {
+.hilo-agent-account p {
   color: var(--text-secondary, #aaa);
   font-size: 12px;
   line-height: 1.5;
 }
 
-.coloride-agent-account label {
+.hilo-agent-account label {
   display: flex;
   flex-direction: column;
   gap: 6px;
   font-size: 12px;
 }
 
-.coloride-agent-account input,
-.coloride-agent-account textarea {
+.hilo-agent-account input,
+.hilo-agent-account textarea {
   box-sizing: border-box;
   width: 100%;
   padding: 8px;
@@ -51,11 +51,11 @@
 /* A pending sign-in is the only thing to do: the output area becomes a column and the card sits
    in the middle of it, horizontally and vertically (auto margins, so a tall card still scrolls
    from its top instead of being cut off). */
-.coloride-agent-output:has(> .coloride-agent-authentication) {
+.hilo-agent-output:has(> .hilo-agent-authentication) {
   display: flex;
   flex-direction: column;
 }
-.coloride-agent-authentication {
+.hilo-agent-authentication {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -70,25 +70,25 @@
   background: var(--color-card, #2a2a2a);
   text-align: center;
 }
-.coloride-agent-authentication p {
+.hilo-agent-authentication p {
   margin: 0;
 }
-.coloride-agent-authentication-head {
+.hilo-agent-authentication-head {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
 }
-.coloride-agent-authentication-head strong {
+.hilo-agent-authentication-head strong {
   font-size: 17px;
 }
-.coloride-agent-authentication-host {
+.hilo-agent-authentication-host {
   font-size: 12px;
   color: var(--color-text-secondary, #878888);
 }
 /* The code is what the user types in the browser: large, spaced, selectable. No box around it:
    the text alone. Clicking copies it, and the text turns green for a moment to say so. */
-.coloride-agent-authentication-code {
+.hilo-agent-authentication-code {
   padding: 4px 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 28px;
@@ -98,27 +98,27 @@
   cursor: pointer;
   transition: color 0.15s;
 }
-.coloride-agent-authentication-code:hover {
+.hilo-agent-authentication-code:hover {
   color: #fff;
 }
-.coloride-agent-authentication-code[data-copied] {
+.hilo-agent-authentication-code[data-copied] {
   color: #4ade80;
 }
-.coloride-agent-authentication-status {
+.hilo-agent-authentication-status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
   color: var(--color-text-secondary, #878888);
 }
-.coloride-agent-authentication-status svg {
+.hilo-agent-authentication-status svg {
   width: 12px;
   height: 12px;
 }
-.coloride-agent-authentication-status:empty {
+.hilo-agent-authentication-status:empty {
   display: none;
 }
-.coloride-agent-authentication-actions {
+.hilo-agent-authentication-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -126,7 +126,7 @@
 }
 /* Small, hairline outline, no fill: the Connect button of this panel and the buttons of
    Settings. The panel's generic square buttons are overridden here. */
-.coloride-agent-panel .coloride-agent-authentication button {
+.hilo-agent-panel .hilo-agent-authentication button {
   height: 24px;
   margin: 0;
   padding: 0 12px;
@@ -136,31 +136,31 @@
   font-size: 11px;
   white-space: nowrap;
 }
-.coloride-agent-panel .coloride-agent-authentication button:hover:not(:disabled) {
+.hilo-agent-panel .hilo-agent-authentication button:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.coloride-agent-terminal-login {
+.hilo-agent-terminal-login {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
   gap: 6px;
 }
-.coloride-agent-terminal-login[hidden],
-.coloride-agent-terminal-login [hidden] {
+.hilo-agent-terminal-login[hidden],
+.hilo-agent-terminal-login [hidden] {
   display: none;
 }
-.coloride-agent-terminal-login strong {
+.hilo-agent-terminal-login strong {
   font-size: 13px;
   font-weight: 500;
 }
-.coloride-agent-terminal-login p {
+.hilo-agent-terminal-login p {
   margin: 0;
   color: var(--color-text-secondary, #878888);
   font-size: 13px;
 }
-.coloride-agent-login-screen {
+.hilo-agent-login-screen {
   flex: 1;
   min-width: 0;
   min-height: 200px;
@@ -168,27 +168,27 @@
   margin-top: 4px;
   overflow: hidden;
 }
-.coloride-agent-login-screen > .xterm {
+.hilo-agent-login-screen > .xterm {
   height: 100%;
   padding: 4px 0;
   background: var(--color-main);
 }
-.coloride-agent-login-screen .xterm-viewport {
+.hilo-agent-login-screen .xterm-viewport {
   background-color: transparent !important;
 }
-.coloride-agent-terminal-login pre {
+.hilo-agent-terminal-login pre {
   margin: 0;
   font-size: 11px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.coloride-agent-terminal-login-actions {
+.hilo-agent-terminal-login-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
-.coloride-agent-panel .coloride-agent-terminal-login-actions button {
+.hilo-agent-panel .hilo-agent-terminal-login-actions button {
   height: 24px;
   margin: 0;
   padding: 0 12px;

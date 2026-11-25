@@ -43,20 +43,20 @@ export class TrustBanner {
     private readonly host: WorkspaceTrustHost,
   ) {
     this.element = doc.createElement("div");
-    this.element.className = "coloride-trust-banner";
+    this.element.className = "hilo-trust-banner";
     this.element.setAttribute("role", "status");
     this.element.hidden = true;
 
     const header = doc.createElement("div");
-    header.className = "coloride-trust-banner-header";
+    header.className = "hilo-trust-banner-header";
     const icon = doc.createElement("span");
-    icon.className = "coloride-trust-banner-icon";
+    icon.className = "hilo-trust-banner-icon";
     icon.innerHTML = NOTICE_ICON;
     const title = doc.createElement("strong");
     title.textContent = UI_STRINGS.trust.restrictedTitle;
     const close = doc.createElement("button");
     close.type = "button";
-    close.className = "coloride-trust-banner-close";
+    close.className = "hilo-trust-banner-close";
     close.setAttribute("aria-label", UI_STRINGS.trust.dismiss);
     close.innerHTML = CLOSE_ICON;
     close.addEventListener("click", () => this.dismiss());
@@ -67,15 +67,15 @@ export class TrustBanner {
 
     // What "Learn more" reveals: the capabilities the trust gate withholds (see AGENTS.md rule 6).
     const more = doc.createElement("p");
-    more.className = "coloride-trust-banner-more";
+    more.className = "hilo-trust-banner-more";
     more.hidden = true;
     more.textContent = UI_STRINGS.trust.learnMoreDetail;
 
     const actions = doc.createElement("div");
-    actions.className = "coloride-trust-banner-actions";
+    actions.className = "hilo-trust-banner-actions";
     const learn = doc.createElement("button");
     learn.type = "button";
-    learn.className = "coloride-trust-banner-learn";
+    learn.className = "hilo-trust-banner-learn";
     learn.textContent = UI_STRINGS.trust.learnMore;
     learn.setAttribute("aria-expanded", "false");
     learn.addEventListener("click", () => {
@@ -84,7 +84,7 @@ export class TrustBanner {
     });
     this.button = doc.createElement("button");
     this.button.type = "button";
-    this.button.className = "coloride-trust-banner-action";
+    this.button.className = "hilo-trust-banner-action";
     this.button.textContent = UI_STRINGS.trust.trustFolder;
     this.button.addEventListener("click", () => void this.requestTrust());
     actions.append(learn, this.button);

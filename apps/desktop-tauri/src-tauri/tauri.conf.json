@@ -1,18 +1,18 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Coloride",
+  "productName": "Hilo",
   "version": "0.1.0",
-  "identifier": "dev.coloride.desktop",
+  "identifier": "dev.hilo.desktop",
   "build": {
-    "beforeDevCommand": "pnpm --filter @coloride/web-ui build && pnpm dev:watch",
+    "beforeDevCommand": "pnpm --filter @hilo/web-ui build && pnpm dev:watch",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "pnpm --filter @coloride/web-ui build && pnpm build",
+    "beforeBuildCommand": "pnpm --filter @hilo/web-ui build && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
-        "title": "Coloride",
+        "title": "Hilo",
         "hiddenTitle": true,
         "titleBarStyle": "Overlay",
         "width": 1440,

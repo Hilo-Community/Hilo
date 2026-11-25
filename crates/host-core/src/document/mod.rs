@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::contracts::{
-    ColorideValidationState, EditorSelection, EditorSnapshot, EditorTransaction, TextChange,
+    EditorSelection, EditorSnapshot, EditorTransaction, HiloValidationState, TextChange,
     TransactionOrigin, Utf16Span, Utf8ByteOffset, Utf8Span, CONTRACT_SCHEMA_VERSION,
 };
 use crate::journal::{JournalError, JournalRecord, WriteAheadJournal};
@@ -50,10 +50,10 @@ impl DocumentSessionKey {
 pub struct DocumentValidationRange {
     pub span_utf8: Utf8Span,
     pub span_utf16: Utf16Span,
-    pub state: ColorideValidationState,
+    pub state: HiloValidationState,
 }
 
-/// Details of an external modification detected on disk outside of Coloride.
+/// Details of an external modification detected on disk outside of Hilo.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExternalDiskConflict {
     pub document_id: String,

@@ -1,8 +1,8 @@
 import {
   type Cm6TranslatedKeybinding,
-  DEFAULT_COLORIDE_CM6_THEME,
+  DEFAULT_HILO_CM6_THEME,
   type KeymapPresetId,
-} from "@coloride/editor-cm6";
+} from "@hilo/editor-cm6";
 import { REDACTED_ENV_VALUE, isSensitiveEnvEntry } from "../security/secrets.js";
 import { parseJsonc, parseJsoncObject } from "./jsonc.js";
 import { scanConventionInjectionDirectives, scanMcpSecurityWarnings } from "./security-scan.js";
@@ -27,10 +27,10 @@ export interface ImportedEditorSettings {
 
 export function defaultEditorSettings(): ImportedEditorSettings {
   return {
-    colorTheme: DEFAULT_COLORIDE_CM6_THEME.label,
-    iconTheme: "Coloride Geometric Icons",
-    fontFamily: DEFAULT_COLORIDE_CM6_THEME.fontFamily ?? "JetBrains Mono, monospace",
-    fontSizePx: DEFAULT_COLORIDE_CM6_THEME.fontSizePx ?? 14,
+    colorTheme: DEFAULT_HILO_CM6_THEME.label,
+    iconTheme: "Hilo Geometric Icons",
+    fontFamily: DEFAULT_HILO_CM6_THEME.fontFamily ?? "JetBrains Mono, monospace",
+    fontSizePx: DEFAULT_HILO_CM6_THEME.fontSizePx ?? 14,
     tabSize: 2,
     insertSpaces: true,
     detectedPreset: null,
@@ -40,7 +40,7 @@ export function defaultEditorSettings(): ImportedEditorSettings {
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, Math.round(value)));
 
-/** Reads a VS Code / Cursor `settings.json`; fields it does not set keep the Coloride defaults. */
+/** Reads a VS Code / Cursor `settings.json`; fields it does not set keep the Hilo defaults. */
 export function parseVsCodeSettings(settingsJsonc: string): ImportedEditorSettings {
   const parsed = parseJsoncObject(settingsJsonc, "Root settings.json");
   const defaults = defaultEditorSettings();

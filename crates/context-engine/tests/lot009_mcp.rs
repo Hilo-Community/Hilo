@@ -43,7 +43,7 @@ fn blocking_mcp_200_calls_p95_under_20ms() {
     use std::io::{BufRead, BufReader, Write};
     use std::process::{Command, Stdio};
     let (dir, server) = fixture();
-    let mut process = Command::new(env!("CARGO_BIN_EXE_coloride-context-mcp"))
+    let mut process = Command::new(env!("CARGO_BIN_EXE_hilo-context-mcp"))
         .arg(dir.path())
         .arg(server.engine.db_path())
         .arg("main")
@@ -231,7 +231,7 @@ fn stdio_binary_runs_the_mcp_handshake() {
     use std::process::{Command, Stdio};
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("file.ts"), "export const hello = 1;").unwrap();
-    let mut process = Command::new(env!("CARGO_BIN_EXE_coloride-context-mcp"))
+    let mut process = Command::new(env!("CARGO_BIN_EXE_hilo-context-mcp"))
         .arg(dir.path())
         .arg(dir.path().join("context.sqlite"))
         .arg("main")
@@ -314,7 +314,7 @@ fn exact_symbol_lookup_is_not_truncated_by_lexical_candidate_limit() {
     assert_eq!(engine.get_symbol_definition("renamedSymbol").len(), 1);
     engine
         .scanner_mut()
-        .add_colorideignore_rules("src/duplicate1.ts");
+        .add_hiloignore_rules("src/duplicate1.ts");
     assert_eq!(engine.get_symbol_definition("commonSymbol").len(), 268);
 }
 

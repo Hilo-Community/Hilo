@@ -24,7 +24,7 @@ const NPM_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const NPM_OUTPUT_BYTES: usize = 64 * 1024;
 /// npm packages come from here, whatever the user's npm configuration says.
 const NPM_REGISTRY: &str = "https://registry.npmjs.org/";
-const NPM_MANIFEST: &str = r#"{"name":"coloride-agent","private":true,"version":"0.0.0"}"#;
+const NPM_MANIFEST: &str = r#"{"name":"hilo-agent","private":true,"version":"0.0.0"}"#;
 
 fn not_installable(entry: &CatalogEntry, reason: impl Into<String>) -> RegistryError {
     RegistryError::NotInstallable {

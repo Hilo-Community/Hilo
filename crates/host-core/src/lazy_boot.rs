@@ -281,7 +281,7 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         let custom_cache = WorkspaceSessionCache {
             schema_version: CONTRACT_SCHEMA_VERSION,
-            workspace_root: "/workspace/coloride".to_string(),
+            workspace_root: "/workspace/hilo".to_string(),
             active_persona: "Develop".to_string(),
             active_activity_panel: "search".to_string(),
             active_inspector_tab: "code-diff".to_string(),

@@ -14,7 +14,7 @@ export {
   inferImpactedTestsHeuristically as computeImpactedTestsForBuffer,
 } from "../analysis/cockpit-analysis.js";
 export { AtomicStore, type StoreListener } from "../state/atomic-store.js";
-export { COLORIDE_DESIGN_TOKENS, type DesignStateTokens } from "../ui/design-state-tokens.js";
+export { HILO_DESIGN_TOKENS, type DesignStateTokens } from "../ui/design-state-tokens.js";
 export type { AreaSize } from "../layout/layout-tree.js";
 export type { WorkGroup, WorkspaceNavigationState } from "../state/workspace-navigation.js";
 export { resolveGroupLayout, resolveGroupMaximized } from "../state/workspace-navigation.js";

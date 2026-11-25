@@ -254,7 +254,7 @@ impl LanguageServices {
                     if attempt < START_ATTEMPTS =>
                 {
                     tracing::debug!(
-                        target: "coloride::lsp",
+                        target: "hilo::lsp",
                         "{:?} disconnected while starting (attempt {attempt}), starting it again",
                         profile.source
                     );

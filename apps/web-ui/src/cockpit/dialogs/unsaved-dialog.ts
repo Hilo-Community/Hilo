@@ -26,21 +26,21 @@ export function askUnsavedPrompt(
   const doc = host.ownerDocument;
   return new Promise((resolve) => {
     const overlay = doc.createElement("div");
-    overlay.className = "coloride-unsaved-overlay";
+    overlay.className = "hilo-unsaved-overlay";
     const dialog = doc.createElement("div");
-    dialog.className = "coloride-unsaved-dialog";
+    dialog.className = "hilo-unsaved-dialog";
     dialog.setAttribute("role", "alertdialog");
     dialog.setAttribute("aria-modal", "true");
-    dialog.setAttribute("aria-labelledby", "coloride-unsaved-title");
+    dialog.setAttribute("aria-labelledby", "hilo-unsaved-title");
 
     const title = doc.createElement("h3");
-    title.id = "coloride-unsaved-title";
+    title.id = "hilo-unsaved-title";
     title.textContent = UI_STRINGS.editor.unsavedTitle;
     const message = doc.createElement("p");
     message.textContent = options.message;
 
     const actions = doc.createElement("div");
-    actions.className = "coloride-unsaved-actions";
+    actions.className = "hilo-unsaved-actions";
     const finish = (choice: UnsavedChoice) => {
       overlay.remove();
       resolve(choice);
@@ -59,7 +59,7 @@ export function askUnsavedPrompt(
       options.saveLabel === null
         ? null
         : button(options.saveLabel ?? UI_STRINGS.editor.save, "save");
-    save?.classList.add("coloride-unsaved-primary");
+    save?.classList.add("hilo-unsaved-primary");
     actions.append(...(save ? [discard, cancel, save] : [discard, cancel]));
 
     dialog.append(title, message, actions);

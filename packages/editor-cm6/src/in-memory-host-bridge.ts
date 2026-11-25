@@ -1,4 +1,4 @@
-import { CONTRACT_SCHEMA_VERSION, type EditorSnapshot } from "@coloride/protocol-types";
+import { CONTRACT_SCHEMA_VERSION, type EditorSnapshot } from "@hilo/protocol-types";
 import {
   type BinaryIpcChannel,
   decodeEditorTransactionBinary,

@@ -1,8 +1,4 @@
-import type {
-  ColorideValidationState,
-  ConfidenceLevel,
-  ExcerptFreshness,
-} from "@coloride/protocol-types";
+import type { ConfidenceLevel, ExcerptFreshness, HiloValidationState } from "@hilo/protocol-types";
 import type { AreaSize, SplitDirection, SplitPosition } from "../layout/layout-tree.js";
 import type { AtomicStore } from "../state/atomic-store.js";
 import type {
@@ -41,7 +37,7 @@ export interface CockpitFileTreeNode {
   readonly name: string;
   readonly depth: number;
   readonly isDirectory: boolean;
-  readonly validationState: ColorideValidationState;
+  readonly validationState: HiloValidationState;
 }
 
 export interface CockpitSessionSummary {
@@ -49,7 +45,7 @@ export interface CockpitSessionSummary {
   readonly chatId: string;
   readonly title: string;
   readonly modelName: string;
-  readonly validationState: ColorideValidationState;
+  readonly validationState: HiloValidationState;
   readonly targetDocumentId: string;
 }
 
@@ -103,7 +99,7 @@ export type CockpitChatKind = "agent" | "terminal";
 interface SessionBase {
   readonly chatId: string;
   readonly title: string;
-  readonly validationState: ColorideValidationState;
+  readonly validationState: HiloValidationState;
   readonly targetDocumentId?: string;
   readonly targetDocumentContent?: string;
   readonly previewUrl?: string;
@@ -135,7 +131,7 @@ export interface Zone4InspectorState {
   readonly activeInspectorTab: InspectorTab;
   readonly syncedChatId: string;
   readonly activeDocumentId: string;
-  readonly activeValidationState: ColorideValidationState;
+  readonly activeValidationState: HiloValidationState;
   readonly previewUrl: string;
   readonly lastSyncDurationMs: number;
   readonly hasUnsavedChanges: boolean;

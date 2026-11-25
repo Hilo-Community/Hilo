@@ -42,7 +42,7 @@ export class ConversationView {
     if (state.restored && state.timeline.length) {
       if (!this.note) {
         this.note = doc.createElement("p");
-        this.note.className = "coloride-agent-restored-note";
+        this.note.className = "hilo-agent-restored-note";
         this.note.textContent = UI_STRINGS.agent.restoredNote;
       }
       content.push(this.note);
@@ -118,7 +118,7 @@ export class ConversationView {
     const timing = state.turn;
     if (timing?.endedAt !== undefined && !state.busy && state.timeline.length) {
       this.turnTime ??= doc.createElement("p");
-      this.turnTime.className = "coloride-agent-turn-time";
+      this.turnTime.className = "hilo-agent-turn-time";
       const waiting = timing.waitingMs >= 1000 ? formatDuration(timing.waitingMs) : undefined;
       this.turnTime.textContent = uiText.workedFor(
         formatDuration(timing.endedAt - timing.startedAt),
@@ -149,12 +149,12 @@ export class ConversationView {
       let cached = this.permissions.get(permission.id);
       if (!cached || cached.reason !== permission.reason) {
         const view = new CardView(doc);
-        view.element.classList.add("coloride-agent-permission");
+        view.element.classList.add("hilo-agent-permission");
         const reason = doc.createElement("p");
-        reason.className = "coloride-agent-card-note";
+        reason.className = "hilo-agent-card-note";
         reason.textContent = permission.reason;
         const choices = doc.createElement("div");
-        choices.className = "coloride-agent-permission-actions";
+        choices.className = "hilo-agent-permission-actions";
         choices.append(
           button(UI_STRINGS.agent.allow, () => actions.answer(permission.id, true)),
           button(UI_STRINGS.agent.reject, () => actions.answer(permission.id, false)),
@@ -177,7 +177,7 @@ export class ConversationView {
     let view = this.thoughts.get(thought.id);
     if (!view) {
       view = new CardView(doc);
-      view.element.classList.add("coloride-agent-activity", "coloride-agent-thinking");
+      view.element.classList.add("hilo-agent-activity", "hilo-agent-thinking");
       this.thoughts.set(thought.id, view);
     }
     // A thought is written in Markdown (`**Plan the check**`), and starts with blank lines.
@@ -245,7 +245,7 @@ export function conversationElements(
 
 export function planList(doc: Document, plan: AgentState["plan"]): HTMLElement {
   const list = doc.createElement("ol");
-  list.className = "coloride-agent-plan";
+  list.className = "hilo-agent-plan";
   list.setAttribute("aria-label", UI_STRINGS.agent.plan);
   for (const entry of plan) {
     const item = doc.createElement("li");
@@ -254,13 +254,13 @@ export function planList(doc: Document, plan: AgentState["plan"]): HTMLElement {
     item.dataset.status = status;
     if (status === "in_progress") item.setAttribute("aria-current", "step");
     const mark = doc.createElement("span");
-    mark.className = "coloride-agent-plan-mark";
+    mark.className = "hilo-agent-plan-mark";
     mark.setAttribute("aria-hidden", "true");
     mark.textContent = status === "completed" ? "✓" : status === "in_progress" ? "◐" : "○";
     const text = doc.createElement("span");
     text.textContent = entry.content;
     const state = doc.createElement("span");
-    state.className = "coloride-agent-plan-state";
+    state.className = "hilo-agent-plan-state";
     state.textContent = UI_STRINGS.agent.planStates[status];
     item.append(mark, text, state);
     list.append(item);

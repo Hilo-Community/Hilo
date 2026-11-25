@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Coloride Deterministic Judge & Orchestrator: persistent state machine, Policy Engine, budgets, Model Gateway, ACP bridge & Evidence verifier"
+description = "Hilo Deterministic Judge & Orchestrator: persistent state machine, Policy Engine, budgets, Model Gateway, ACP bridge & Evidence verifier"
 
 [lints]
 workspace = true

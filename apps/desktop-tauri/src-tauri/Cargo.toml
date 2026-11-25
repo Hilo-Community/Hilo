@@ -1,20 +1,20 @@
 [package]
-name = "coloride-desktop"
+name = "hilo-desktop"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Coloride Tauri v2 Desktop Shell assembling Host Core, Context Engine, Judge Orchestrator and Sandbox Runner"
+description = "Hilo Tauri v2 Desktop Shell assembling Host Core, Context Engine, Judge Orchestrator and Sandbox Runner"
 
 [lints]
 workspace = true
 
 [lib]
-name = "coloride_desktop_lib"
+name = "hilo_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "coloride-desktop"
+name = "hilo-desktop"
 path = "src/main.rs"
 
 [dependencies]

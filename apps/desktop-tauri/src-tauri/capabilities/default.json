@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-capability",
-  "description": "Minimal capability for the local Coloride control window",
+  "description": "Minimal capability for the local Hilo control window",
   "windows": ["main"],
   "permissions": [
     "core:default",

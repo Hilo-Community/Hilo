@@ -56,13 +56,13 @@ export class TerminalPane {
     private readonly createView: TerminalViewFactory,
   ) {
     this.element = doc.createElement("div");
-    this.element.className = "coloride-terminal-pane";
+    this.element.className = "hilo-terminal-pane";
     this.element.setAttribute("aria-label", UI_STRINGS.terminal.panel);
     this.status = doc.createElement("div");
-    this.status.className = "coloride-terminal-status";
+    this.status.className = "hilo-terminal-status";
     this.status.setAttribute("role", "status");
     this.screen = doc.createElement("div");
-    this.screen.className = "coloride-terminal-screen";
+    this.screen.className = "hilo-terminal-screen";
     this.element.append(this.screen, this.status);
     this.resizeObserver =
       typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => this.refit());

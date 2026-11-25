@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "./index.js";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "./index.js";
 
 function editor() {
-  const view = new ColorideEditorView({
+  const view = new HiloEditorView({
     initialDocumentId: "src/app.js",
     initialContent: "const a = 1;\nconst b = 2;\nconsole.log(a + b);\n",
     ipcChannel: new InMemoryBinaryHostBridge(),

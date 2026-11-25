@@ -2,7 +2,7 @@
 //! Events reach the UI over a binary Tauri `Channel` as JSON frames, at most one every 16 ms.
 //!
 //! The adapter is never downloaded by the app. It is looked up, in order, at
-//! `$COLORIDE_JS_DEBUG` (path to `dapDebugServer.js`), in the app data folder under
+//! `$HILO_JS_DEBUG` (path to `dapDebugServer.js`), in the app data folder under
 //! `tools/js-debug/<version>/`, and, in development builds, in the repository's `tools/`
 //! folder filled by `pnpm fetch:js-debug`.
 
@@ -22,7 +22,7 @@ const JS_DEBUG_VERSION: &str = "v1.140.0";
 const DAP_SERVER: &str = "js-debug/src/dapDebugServer.js";
 
 pub(crate) fn locate_js_debug(app_data_dir: &Path) -> Option<PathBuf> {
-    let from_env = std::env::var_os("COLORIDE_JS_DEBUG").map(PathBuf::from);
+    let from_env = std::env::var_os("HILO_JS_DEBUG").map(PathBuf::from);
     let installed = app_data_dir
         .join("tools/js-debug")
         .join(JS_DEBUG_VERSION)

@@ -4,7 +4,7 @@
  */
 export const UI_STRINGS = {
   shell: {
-    cockpit: "Coloride 4-Zone Multi-Chat Cockpit",
+    cockpit: "Hilo 4-Zone Multi-Chat Cockpit",
     activityBar: "Activity bar",
     sidebar: "Sidebar",
     chatGrid: "Multi-chat grid",
@@ -132,7 +132,7 @@ export const UI_STRINGS = {
     trustFolder: "Trust this folder",
     learnMore: "Learn more",
     learnMoreDetail:
-      "Closing this notice does not lift Restricted Mode. While the folder is restricted, Coloride will not start workspace language servers, run Git hooks or startup scripts, launch the debugger or activate extensions, and the terminal stays unavailable. Trusting the folder asks you to confirm first, and you can revoke it at any time.",
+      "Closing this notice does not lift Restricted Mode. While the folder is restricted, Hilo will not start workspace language servers, run Git hooks or startup scripts, launch the debugger or activate extensions, and the terminal stays unavailable. Trusting the folder asks you to confirm first, and you can revoke it at any time.",
   },
   sidebar: {
     navigation: "Folder, groups and sessions",
@@ -182,7 +182,7 @@ export const UI_STRINGS = {
     rejected: "Rejected",
     approve: "Approve",
     reject: "Reject",
-    resetDefaults: "Reset to Coloride defaults",
+    resetDefaults: "Reset to Hilo defaults",
   },
   agent: {
     connecting: "Connecting…",

@@ -1,14 +1,14 @@
 import {
   type Approval,
   CONTRACT_SCHEMA_VERSION,
-  type ColorideValidationState,
+  type HiloValidationState,
   type TargetEnvironment,
   type TaskState,
 } from "./generated.js";
 
 export * from "./generated.js";
 
-export const COLORIDE_VALIDATION_STATES: readonly ColorideValidationState[] = [
+export const HILO_VALIDATION_STATES: readonly HiloValidationState[] = [
   "ValidatedGreen",
   "ReviewYellow",
   "FailedRed",
@@ -31,14 +31,14 @@ export const TASK_STATES: readonly TaskState[] = [
 ] as const;
 
 export interface ValidationBadgeMeta {
-  readonly state: ColorideValidationState;
+  readonly state: HiloValidationState;
   readonly icon: "✓" | "!" | "✕" | "⟳" | "•";
   readonly labelFr: string;
   readonly labelEn: string;
   readonly labelEs: string;
 }
 
-export const COLORIDE_STATE_META: Record<ColorideValidationState, ValidationBadgeMeta> = {
+export const HILO_STATE_META: Record<HiloValidationState, ValidationBadgeMeta> = {
   ValidatedGreen: {
     state: "ValidatedGreen",
     icon: "✓",

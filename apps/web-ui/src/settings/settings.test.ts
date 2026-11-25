@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { describe, expect, it, vi } from "vitest";
 import { CockpitDomController, createCockpitStoreBundle } from "../index.js";
 import { AgentRegistryPanel } from "./agent-registry-panel.js";
@@ -87,9 +87,7 @@ const click = (root: ParentNode, label: string) => {
   if (!found) throw new Error(`no button "${label}"`);
   found.click();
 };
-const cards = (root: ParentNode) => [
-  ...root.querySelectorAll<HTMLElement>(".coloride-registry-card"),
-];
+const cards = (root: ParentNode) => [...root.querySelectorAll<HTMLElement>(".hilo-registry-card")];
 
 describe("agent registry state", () => {
   it("returns an existing Settings page to External Agents after a filtered search", async () => {
@@ -105,7 +103,7 @@ describe("agent registry state", () => {
     page.showExternalAgents();
     await settle();
     expect(search?.value).toBe("");
-    expect(page.element.querySelector(".coloride-registry")).not.toBeNull();
+    expect(page.element.querySelector(".hilo-registry")).not.toBeNull();
     page.destroy();
   });
   it("opens installed agents only when Open is clicked, alongside the current action", async () => {
@@ -117,7 +115,7 @@ describe("agent registry state", () => {
     const button = buttons(panel.element, "Open CODEX")[0];
     expect(button?.textContent).toBe("Open");
     expect(button?.querySelector("svg")).toBeNull();
-    expect(button?.classList.contains("coloride-registry-ghost")).toBe(false);
+    expect(button?.classList.contains("hilo-registry-ghost")).toBe(false);
     expect(buttons(panel.element, "Remove CODEX")).toHaveLength(1);
     button?.click();
     await settle();
@@ -368,7 +366,7 @@ describe("agent registry panel", () => {
     await settle();
     expect(account.signOut).not.toHaveBeenCalled();
     const confirm = [
-      ...panel.element.querySelectorAll<HTMLButtonElement>(".coloride-agent-account button"),
+      ...panel.element.querySelectorAll<HTMLButtonElement>(".hilo-agent-account button"),
     ].find((b) => b.textContent === "Unlink");
     confirm?.click();
     await settle();
@@ -393,7 +391,7 @@ describe("agent registry panel", () => {
     );
     const card = cards(panel.element)[0] as HTMLElement;
     expect(card.textContent).toContain("v2.0.0");
-    const version = card.querySelector(".coloride-registry-version--update") as HTMLElement;
+    const version = card.querySelector(".hilo-registry-version--update") as HTMLElement;
     expect(version.title).toBe("Installed 1.0.0; 2.0.0 is available.");
     expect(buttons(panel.element, "Remove A")).toHaveLength(0);
     click(panel.element, "Update A to 2.0.0");
@@ -407,7 +405,7 @@ describe("agent registry panel", () => {
       listing([agent("alpha"), agent("beta")], [installed("beta")]),
     );
     const filter = (label: string) =>
-      [...panel.element.querySelectorAll(".coloride-registry-filters button")].find(
+      [...panel.element.querySelectorAll(".hilo-registry-filters button")].find(
         (b) => b.textContent === label,
       ) as HTMLButtonElement;
     filter("Installed").click();
@@ -420,7 +418,7 @@ describe("agent registry panel", () => {
     expect(cards(panel.element).map((c) => c.dataset.agent)).toEqual(["alpha"]);
     search.value = "zzz";
     search.dispatchEvent(new Event("input"));
-    expect(panel.element.querySelector(".coloride-registry-empty")?.textContent).toContain(
+    expect(panel.element.querySelector(".hilo-registry-empty")?.textContent).toContain(
       "No agents match",
     );
     expect(host.list).toHaveBeenCalledTimes(1);
@@ -431,7 +429,7 @@ describe("agent registry panel", () => {
     const { panel, host, set } = await mount(
       listing([agent("a")], [], { origin: "saved", refreshError: "Download failed: offline" }),
     );
-    const alert = panel.element.querySelector(".coloride-registry-alert") as HTMLElement;
+    const alert = panel.element.querySelector(".hilo-registry-alert") as HTMLElement;
     expect(alert.hidden).toBe(false);
     expect(alert.textContent).toContain("saved earlier");
     expect(alert.textContent).toContain("Download failed: offline");
@@ -440,9 +438,7 @@ describe("agent registry panel", () => {
     await settle();
     expect(host.list).toHaveBeenLastCalledWith(true);
     expect(cards(panel.element)).toHaveLength(2);
-    expect((panel.element.querySelector(".coloride-registry-alert") as HTMLElement).hidden).toBe(
-      true,
-    );
+    expect((panel.element.querySelector(".hilo-registry-alert") as HTMLElement).hidden).toBe(true);
     panel.destroy();
   });
 
@@ -451,7 +447,7 @@ describe("agent registry panel", () => {
     vi.mocked(host.install).mockRejectedValueOnce(new Error("npm could not install a@1.0.0: 404"));
     click(panel.element, "Install A 1.0.0");
     await settle();
-    const failure = panel.element.querySelector(".coloride-registry-failure") as HTMLElement;
+    const failure = panel.element.querySelector(".hilo-registry-failure") as HTMLElement;
     expect(failure.getAttribute("role")).toBe("alert");
     expect(failure.textContent).toContain("404");
     expect(buttons(panel.element, "Install A 1.0.0")[0]?.disabled).toBe(false);
@@ -510,10 +506,10 @@ describe("settings page", () => {
   it("shows the sidebar with External Agents as its only category", async () => {
     const { root, cleanup } = mount();
     await settle();
-    const labels = [...root.querySelectorAll(".coloride-settings-nav-label")];
+    const labels = [...root.querySelectorAll(".hilo-settings-nav-label")];
     expect(labels.map((l) => l.textContent)).toEqual(["External Agents"]);
-    expect(root.querySelector(".coloride-settings-subnav")?.textContent).toBe("ACP Registry");
-    expect(root.querySelector(".coloride-registry")).not.toBeNull();
+    expect(root.querySelector(".hilo-settings-subnav")?.textContent).toBe("ACP Registry");
+    expect(root.querySelector(".hilo-registry")).not.toBeNull();
     expect(cards(root).map((c) => c.dataset.agent)).toEqual(["a"]);
     cleanup();
   });
@@ -526,26 +522,26 @@ describe("settings page", () => {
     ) as HTMLInputElement;
     search.value = "registry";
     search.dispatchEvent(new Event("input"));
-    expect(root.querySelector(".coloride-registry")).not.toBeNull();
+    expect(root.querySelector(".hilo-registry")).not.toBeNull();
     search.value = "xyzxyz";
     search.dispatchEvent(new Event("input"));
-    expect(root.querySelector(".coloride-registry")).toBeNull();
+    expect(root.querySelector(".hilo-registry")).toBeNull();
     expect(root.querySelector('[role="status"]')?.textContent).toContain("No settings found");
     search.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(search.value).toBe("");
-    expect(root.querySelector(".coloride-registry")).not.toBeNull();
+    expect(root.querySelector(".hilo-registry")).not.toBeNull();
     cleanup();
   });
 
   it("keeps the registry and pending operations alive when hidden and shown again", async () => {
     const { root, page, host, cleanup } = mount();
     await settle();
-    const registry = root.querySelector(".coloride-registry");
+    const registry = root.querySelector(".hilo-registry");
     click(root, "Install A 1.0.0");
     page.hide();
     page.show();
     await settle();
-    expect(root.querySelector(".coloride-registry")).toBe(registry);
+    expect(root.querySelector(".hilo-registry")).toBe(registry);
     expect(host.install).toHaveBeenCalledWith("a", "1.0.0");
     expect(buttons(root, "Remove A")).toHaveLength(1);
     cleanup();
@@ -557,7 +553,7 @@ describe("settings tab in the cockpit", () => {
     const root = document.createElement("div");
     document.body.append(root);
     const stores = createCockpitStoreBundle();
-    const editor = new ColorideEditorView({
+    const editor = new HiloEditorView({
       initialDocumentId: "src/file.ts",
       initialContent: "const a = 1;",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -583,9 +579,9 @@ describe("settings tab in the cockpit", () => {
 
   it("offers no Settings button without a registry host", () => {
     const { root, cleanup } = mount();
-    expect(root.querySelector(".coloride-settings-btn")).toBeNull();
+    expect(root.querySelector(".hilo-settings-btn")).toBeNull();
     document.dispatchEvent(new KeyboardEvent("keydown", { key: ",", metaKey: true }));
-    expect(root.querySelector(".coloride-settings-page")).toBeNull();
+    expect(root.querySelector(".hilo-settings-page")).toBeNull();
     cleanup();
   });
 
@@ -594,14 +590,14 @@ describe("settings tab in the cockpit", () => {
     const openSettingsWindow = vi.fn(async () => {});
     const { root, editor, cleanup } = mount(host, openSettingsWindow);
     const instance = editor.getEditorView();
-    (root.querySelector(".coloride-settings-btn") as HTMLButtonElement).click();
+    (root.querySelector(".hilo-settings-btn") as HTMLButtonElement).click();
     document.dispatchEvent(
       new KeyboardEvent("keydown", { key: ",", metaKey: true, bubbles: true }),
     );
     await settle();
     expect(openSettingsWindow).toHaveBeenCalledTimes(2);
     expect(root.querySelector('[data-view="settings"]')).toBeNull();
-    expect((root.querySelector(".coloride-settings-page") as HTMLElement).hidden).toBe(true);
+    expect((root.querySelector(".hilo-settings-page") as HTMLElement).hidden).toBe(true);
     expect(editor.getEditorView()).toBe(instance);
     expect(editor.getStoreSnapshot().mountCount).toBe(1);
     cleanup();
@@ -613,11 +609,11 @@ describe("settings tab in the cockpit", () => {
     const instance = editor.getEditorView();
     const parent = instance.dom.parentElement;
     const updates = stores.zone4.getUpdateCount();
-    const open = () => (root.querySelector(".coloride-settings-btn") as HTMLButtonElement).click();
+    const open = () => (root.querySelector(".hilo-settings-btn") as HTMLButtonElement).click();
     open();
     open();
     expect(stores.zone4.getUpdateCount()).toBe(updates);
-    const page = root.querySelector<HTMLElement>(".coloride-settings-page") as HTMLElement;
+    const page = root.querySelector<HTMLElement>(".hilo-settings-page") as HTMLElement;
     expect(page.hidden).toBe(false);
     expect(root.querySelectorAll('[data-view="settings"]')).toHaveLength(1);
     expect(root.querySelector('[data-view="settings"]')?.getAttribute("aria-selected")).toBe(

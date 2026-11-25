@@ -117,9 +117,9 @@ pub fn run_one_click_migration(input: &OneClickMigrationInput) -> OneClickMigrat
     }
 }
 
-/// 1-click rollback to clean Coloride default settings (`LOT-006` Risk & Rollback mitigation).
+/// 1-click rollback to clean Hilo default settings (`LOT-006` Risk & Rollback mitigation).
 #[must_use]
-pub fn reset_to_coloride_defaults() -> OneClickMigrationReport {
+pub fn reset_to_hilo_defaults() -> OneClickMigrationReport {
     OneClickMigrationReport {
         settings: ImportedEditorSettings::default(),
         keybindings: Vec::new(),

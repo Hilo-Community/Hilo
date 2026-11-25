@@ -16,7 +16,7 @@ const SIZE: TerminalSize = TerminalSize {
     cols: 100,
     rows: 30,
 };
-const HELPER_ENV: &str = "COLORIDE_LOT010_TERMINAL_HOST_DIR";
+const HELPER_ENV: &str = "HILO_LOT010_TERMINAL_HOST_DIR";
 
 fn gate(dir: &std::path::Path, trusted: bool) -> WorkspaceTrustGate {
     let workspace = dir.join("workspace");

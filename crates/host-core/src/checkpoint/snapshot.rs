@@ -1,6 +1,6 @@
 //! Builds the Git tree of the workspace as the user sees it, without touching `.git/index`.
 //!
-//! The tree is assembled in Coloride's own index file (`<git dir>/coloride_tmp_index`), which
+//! The tree is assembled in Hilo's own index file (`<git dir>/hilo_tmp_index`), which
 //! doubles as a stat cache: a file whose size, times and inode did not change since the last
 //! snapshot keeps its blob id instead of being hashed again. Blobs are written with
 //! `git_blob_create_from_disk` / `git_blob_create_from_buffer`, which apply **no** Git filter

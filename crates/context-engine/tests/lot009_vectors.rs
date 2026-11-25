@@ -96,7 +96,7 @@ fn missing_runtime_reports_actionable_failure_over_mcp() {
     let dir = tempfile::tempdir().unwrap();
     let cache = dir.path().join("model-cache");
     std::fs::create_dir(&cache).unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_coloride-context-mcp"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_hilo-context-mcp"))
         .env_remove("ORT_DYLIB_PATH")
         .arg(dir.path())
         .arg(dir.path().join("context.sqlite"))

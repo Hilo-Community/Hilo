@@ -1,4 +1,4 @@
-.coloride-agent-panel {
+.hilo-agent-panel {
   /* The menus of the model and mode buttons are placed against the panel. */
   position: relative;
   --sidebar-edge: 12px;
@@ -18,8 +18,8 @@
   color: var(--color-text-primary);
   background: var(--color-main);
 }
-.coloride-agent-panel input:not([type="checkbox"]),
-.coloride-agent-panel textarea {
+.hilo-agent-panel input:not([type="checkbox"]),
+.hilo-agent-panel textarea {
   display: block;
   width: 100%;
   padding: 8px;
@@ -29,7 +29,7 @@
   border: 1px solid var(--color-border, #555);
   user-select: text;
 }
-.coloride-agent-panel button {
+.hilo-agent-panel button {
   color: inherit;
   background: transparent;
   border: 1px solid var(--color-border, #555);
@@ -37,15 +37,15 @@
   margin: 4px;
   cursor: pointer;
 }
-.coloride-agent-panel button:disabled {
+.hilo-agent-panel button:disabled {
   opacity: 0.5;
   cursor: default;
 }
-.coloride-agent-panel :focus-visible {
+.hilo-agent-panel :focus-visible {
   outline: 2px solid var(--agent-focus);
   outline-offset: 2px;
 }
-.coloride-agent-output {
+.hilo-agent-output {
   box-sizing: border-box;
   flex: 1;
   min-height: 0;
@@ -55,30 +55,30 @@
   overflow: auto;
   user-select: text;
 }
-.coloride-agent-output article {
+.hilo-agent-output article {
   margin-bottom: 12px;
 }
-.coloride-agent-output article p,
-.coloride-agent-output article ul,
-.coloride-agent-output article ol {
+.hilo-agent-output article p,
+.hilo-agent-output article ul,
+.hilo-agent-output article ol {
   margin: 0 0 8px;
 }
-.coloride-agent-output article ul,
-.coloride-agent-output article ol {
+.hilo-agent-output article ul,
+.hilo-agent-output article ol {
   padding-left: 20px;
 }
-.coloride-agent-output article code {
+.hilo-agent-output article code {
   padding: 1px 4px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.08);
   font-family: var(--font-terminal);
   font-size: 0.92em;
 }
-.coloride-agent-output article pre code {
+.hilo-agent-output article pre code {
   padding: 0;
   background: transparent;
 }
-.coloride-agent-output article table {
+.hilo-agent-output article table {
   display: block;
   max-width: 100%;
   margin: 0 0 10px;
@@ -86,42 +86,42 @@
   border-collapse: collapse;
   font-size: 0.95em;
 }
-.coloride-agent-output article th,
-.coloride-agent-output article td {
+.hilo-agent-output article th,
+.hilo-agent-output article td {
   padding: 4px 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   text-align: left;
 }
-.coloride-agent-output article th {
+.hilo-agent-output article th {
   background: rgba(255, 255, 255, 0.05);
   font-weight: 600;
 }
-.coloride-agent-output pre {
+.hilo-agent-output pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-family: var(--font-terminal);
   user-select: text;
 }
-.coloride-agent-panel textarea {
+.hilo-agent-panel textarea {
   min-height: 64px;
   resize: vertical;
 }
 
 /* Composer: a rounded field with the agent and the send button inside it. */
-.coloride-agent-composer,
-.coloride-agent-composer *,
-.coloride-agent-meta,
-.coloride-agent-status {
+.hilo-agent-composer,
+.hilo-agent-composer *,
+.hilo-agent-meta,
+.hilo-agent-status {
   box-sizing: border-box;
 }
 /* One plain input bar in every state (no roomy card before the first message): on one line the
    text sits centred on the left, the agent and the send button on the right. Once the text needs
    several lines (`is-multiline`, set by the prompt input) it takes the whole width on top and
    the agent and send button move to a row under it. */
-.coloride-agent-composer[hidden] {
+.hilo-agent-composer[hidden] {
   display: none;
 }
-.coloride-agent-composer {
+.hilo-agent-composer {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
@@ -138,12 +138,12 @@
   /* The sidebar's gray, as the reference composer uses. */
   background: var(--color-sidebar, #212121);
 }
-.coloride-agent-composer:focus-within {
+.hilo-agent-composer:focus-within {
   border-color: rgba(255, 255, 255, 0.18);
 }
 /* The text field is a small CodeMirror view (editor-cm6 createPromptInput), so the caret is
    CodeMirror's thin one rather than the system's. */
-.coloride-agent-composer .cm-editor {
+.hilo-agent-composer .cm-editor {
   flex: 1;
   min-width: 0;
   /* Undo the code editor's global look (editor.css: editor background, monospace 13px, full
@@ -159,23 +159,23 @@
 /* editor.css paints every .cm-editor with `!bg-main` inside @layer components, and an important
    declaration in a layer beats an unlayered one, so the override lives in the same layer with
    a more specific selector. */
-.coloride-agent-composer.is-multiline {
+.hilo-agent-composer.is-multiline {
   padding-top: 9px;
   border-radius: 18px;
 }
-.coloride-agent-composer.is-multiline .cm-editor {
+.hilo-agent-composer.is-multiline .cm-editor {
   flex-basis: 100%;
   padding-right: 7px;
 }
-.coloride-agent-composer.is-multiline .coloride-agent-bar {
+.hilo-agent-composer.is-multiline .hilo-agent-bar {
   margin-left: auto;
 }
 @layer components {
-  .coloride-agent-composer .cm-editor {
+  .hilo-agent-composer .cm-editor {
     background: transparent !important;
   }
 }
-.coloride-agent-bar {
+.hilo-agent-bar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -185,7 +185,7 @@
   margin-bottom: 0;
 }
 /* The agent, where the reference has its model picker: 24px tall, 8px left and 6px right. */
-.coloride-agent-who {
+.hilo-agent-who {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -195,21 +195,21 @@
   color: var(--color-text-secondary, #878888);
   font-size: 13px;
 }
-.coloride-agent-who .coloride-registry-mark {
+.hilo-agent-who .hilo-registry-mark {
   width: 16px;
   height: 16px;
 }
-.coloride-agent-who .coloride-registry-mark svg {
+.hilo-agent-who .hilo-registry-mark svg {
   width: 15px;
   height: 15px;
 }
-.coloride-agent-who .coloride-registry-mark--letter {
+.hilo-agent-who .hilo-registry-mark--letter {
   width: 16px;
   height: 16px;
   font-size: 10px;
 }
-.coloride-agent-panel .coloride-agent-send,
-.coloride-agent-panel .coloride-agent-stop {
+.hilo-agent-panel .hilo-agent-send,
+.hilo-agent-panel .hilo-agent-stop {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -223,16 +223,16 @@
   background: #f2f2f2;
   color: #111;
 }
-.coloride-agent-panel .coloride-agent-send:disabled {
+.hilo-agent-panel .hilo-agent-send:disabled {
   background: rgba(255, 255, 255, 0.14);
   color: rgba(255, 255, 255, 0.4);
   opacity: 1;
 }
-.coloride-agent-panel .coloride-agent-send[hidden],
-.coloride-agent-panel .coloride-agent-stop[hidden] {
+.hilo-agent-panel .hilo-agent-send[hidden],
+.hilo-agent-panel .hilo-agent-stop[hidden] {
   display: none;
 }
-.coloride-agent-meta {
+.hilo-agent-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -244,23 +244,23 @@
   color: var(--color-text-secondary, #878888);
   font-size: 13px;
 }
-.coloride-agent-sandbox {
+.hilo-agent-sandbox {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
-.coloride-agent-busy[hidden] {
+.hilo-agent-busy[hidden] {
   display: none;
 }
-.coloride-agent-busy svg {
-  animation: coloride-agent-spin 0.8s linear infinite;
+.hilo-agent-busy svg {
+  animation: hilo-agent-spin 0.8s linear infinite;
 }
-@keyframes coloride-agent-spin {
+@keyframes hilo-agent-spin {
   to {
     transform: rotate(360deg);
   }
 }
-.coloride-agent-status {
+.hilo-agent-status {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -272,13 +272,13 @@
   color: var(--color-text-secondary, #878888);
   font-size: 13px;
 }
-.coloride-agent-status[hidden] {
+.hilo-agent-status[hidden] {
   display: none;
 }
-.coloride-agent-status p {
+.hilo-agent-status p {
   margin: 0;
 }
-.coloride-agent-panel .coloride-agent-connect {
+.hilo-agent-panel .hilo-agent-connect {
   flex: none;
   height: 24px;
   margin: 0;
@@ -288,39 +288,39 @@
   font-size: 11px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .coloride-agent-busy svg {
+  .hilo-agent-busy svg {
     animation-duration: 3s;
   }
 }
-.coloride-agent-send svg {
+.hilo-agent-send svg {
   width: 16px;
   height: 16px;
 }
-.coloride-agent-stop svg {
+.hilo-agent-stop svg {
   width: 11px;
   height: 11px;
 }
 
-.coloride-agent-panel {
+.hilo-agent-panel {
   container-type: inline-size;
 }
-.coloride-agent-who {
+.hilo-agent-who {
   margin-right: 0;
 }
-.coloride-agent-meta,
-.coloride-agent-status {
+.hilo-agent-meta,
+.hilo-agent-status {
   padding-inline: 6px;
 }
 /* A narrow panel keeps the logo and drops the agent's name. */
 @container (max-width: 420px) {
-  .coloride-agent-who {
+  .hilo-agent-who {
     font-size: 0;
     gap: 0;
   }
 }
 
 /* How to sign in: at the bottom, above the composer, flat, as wide as the composer. */
-.coloride-agent-auth-bar {
+.hilo-agent-auth-bar {
   box-sizing: border-box;
   flex: none;
   width: 100%;
@@ -328,40 +328,39 @@
   margin: 0 auto;
   padding: 0 6px 4px;
 }
-.coloride-agent-auth-bar[hidden] {
+.hilo-agent-auth-bar[hidden] {
   display: none;
 }
 /* When an interactive sign-in terminal is active, collapse the empty output area above it and
    let the terminal login fill the available height of the panel cleanly. */
-.coloride-agent-panel:has(.coloride-agent-terminal-login:not([hidden]))
-  .coloride-agent-output:empty {
+.hilo-agent-panel:has(.hilo-agent-terminal-login:not([hidden])) .hilo-agent-output:empty {
   display: none;
 }
-.coloride-agent-auth-bar:has(.coloride-agent-terminal-login:not([hidden])) {
+.hilo-agent-auth-bar:has(.hilo-agent-terminal-login:not([hidden])) {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
   padding-bottom: 0;
 }
-.coloride-agent-auth-choice strong {
+.hilo-agent-auth-choice strong {
   display: block;
   font-size: 13px;
   font-weight: 500;
 }
-.coloride-agent-auth-choice p {
+.hilo-agent-auth-choice p {
   margin: 4px 0 0;
   color: var(--color-text-secondary, #878888);
   font-size: 13px;
 }
-.coloride-agent-auth-choice-actions {
+.hilo-agent-auth-choice-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 10px;
 }
-.coloride-agent-panel .coloride-agent-auth-choice-actions button {
+.hilo-agent-panel .hilo-agent-auth-choice-actions button {
   height: 24px;
   margin: 0;
   padding: 0 12px;
@@ -371,12 +370,12 @@
   font-size: 11px;
   white-space: nowrap;
 }
-.coloride-agent-panel .coloride-agent-auth-choice-actions button:hover {
+.hilo-agent-panel .hilo-agent-auth-choice-actions button:hover {
   background: rgba(255, 255, 255, 0.05);
 }
 
 /* Sign-in prompts at the bottom: the same content as the centered card, flat and left-aligned. */
-.coloride-agent-auth-bar .coloride-agent-authentication {
+.hilo-agent-auth-bar .hilo-agent-authentication {
   align-items: flex-start;
   gap: 6px;
   max-width: none;
@@ -385,31 +384,31 @@
   background: transparent;
   text-align: left;
 }
-.coloride-agent-auth-bar .coloride-agent-authentication-head {
+.hilo-agent-auth-bar .hilo-agent-authentication-head {
   flex-direction: row;
   align-items: baseline;
   gap: 8px;
 }
-.coloride-agent-auth-bar .coloride-agent-authentication-head strong {
+.hilo-agent-auth-bar .hilo-agent-authentication-head strong {
   font-size: 13px;
   font-weight: 500;
 }
-.coloride-agent-auth-bar .coloride-agent-authentication p {
+.hilo-agent-auth-bar .hilo-agent-authentication p {
   color: var(--color-text-secondary, #878888);
   font-size: 13px;
 }
-.coloride-agent-auth-bar .coloride-agent-authentication-code {
+.hilo-agent-auth-bar .hilo-agent-authentication-code {
   padding: 0;
   font-size: 18px;
   letter-spacing: 0.1em;
 }
-.coloride-agent-auth-bar .coloride-agent-authentication-actions {
+.hilo-agent-auth-bar .hilo-agent-authentication-actions {
   align-self: flex-end;
   justify-content: flex-end;
 }
 
 /* Text rows share one disclosure structure for tools, thinking, and permissions. */
-.coloride-agent-card {
+.hilo-agent-card {
   --card-body: var(--color-main);
   --card-accent: var(--color-text-muted);
   position: relative;
@@ -421,27 +420,27 @@
   font-size: 12px;
   line-height: 1.55;
 }
-.coloride-agent-output .coloride-agent-card {
+.hilo-agent-output .hilo-agent-card {
   margin-bottom: 8px;
 }
-.coloride-agent-card[data-status="done"] {
+.hilo-agent-card[data-status="done"] {
   --card-accent: var(--agent-done);
 }
-.coloride-agent-card[data-status="pending"] {
+.hilo-agent-card[data-status="pending"] {
   --card-accent: var(--agent-waiting);
 }
-.coloride-agent-card[data-status="failed"],
-.coloride-agent-card[data-status="denied"] {
+.hilo-agent-card[data-status="failed"],
+.hilo-agent-card[data-status="denied"] {
   --card-accent: var(--agent-failed);
 }
-.coloride-agent-card[data-status="failed"] > .coloride-agent-card-header .coloride-agent-card-verb,
-.coloride-agent-card[data-status="denied"] > .coloride-agent-card-header .coloride-agent-card-verb {
+.hilo-agent-card[data-status="failed"] > .hilo-agent-card-header .hilo-agent-card-verb,
+.hilo-agent-card[data-status="denied"] > .hilo-agent-card-header .hilo-agent-card-verb {
   color: var(--agent-failed);
 }
-.coloride-agent-permission > .coloride-agent-card-header .coloride-agent-card-verb {
+.hilo-agent-permission > .hilo-agent-card-header .hilo-agent-card-verb {
   color: var(--agent-waiting);
 }
-.coloride-agent-panel .coloride-agent-card-header {
+.hilo-agent-panel .hilo-agent-card-header {
   display: flex;
   width: 100%;
   min-width: 0;
@@ -455,36 +454,36 @@
   font: inherit;
   text-align: left;
 }
-.coloride-agent-panel .coloride-agent-card-header:disabled {
+.hilo-agent-panel .hilo-agent-card-header:disabled {
   opacity: 1;
 }
-.coloride-agent-card-header:hover:enabled {
+.hilo-agent-card-header:hover:enabled {
   color: var(--color-text-primary);
   background: transparent;
 }
-.coloride-agent-card-header:focus-visible {
+.hilo-agent-card-header:focus-visible {
   outline-offset: 2px;
 }
-.coloride-agent-card-icon,
-.coloride-agent-card-chevron {
+.hilo-agent-card-icon,
+.hilo-agent-card-chevron {
   display: inline-flex;
   flex: 0 0 14px;
 }
-.coloride-agent-card-chevron,
-.coloride-agent-card-icon:not(.explorer-icon) {
+.hilo-agent-card-chevron,
+.hilo-agent-card-icon:not(.explorer-icon) {
   color: var(--color-text-muted);
 }
-.coloride-agent-card-icon svg,
-.coloride-agent-card-chevron svg {
+.hilo-agent-card-icon svg,
+.hilo-agent-card-chevron svg {
   width: 14px;
   height: 14px;
 }
-.coloride-agent-card:not([data-variant="command"]):not([data-variant="diff"])
-  > .coloride-agent-card-header
-  > .coloride-agent-card-icon {
+.hilo-agent-card:not([data-variant="command"]):not([data-variant="diff"])
+  > .hilo-agent-card-header
+  > .hilo-agent-card-icon {
   display: none;
 }
-.coloride-agent-card-copy {
+.hilo-agent-card-copy {
   display: flex;
   align-items: baseline;
   gap: 7px;
@@ -493,67 +492,63 @@
   white-space: nowrap;
   font-size: 12px;
 }
-.coloride-agent-card-verb {
+.hilo-agent-card-verb {
   flex-shrink: 0;
 }
-.coloride-agent-card-target {
+.hilo-agent-card-target {
   color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.coloride-agent-card-state {
+.hilo-agent-card-state {
   color: var(--card-accent);
   font-size: 11px;
 }
-.coloride-agent-card-extra {
+.hilo-agent-card-extra {
   display: flex;
   gap: 5px;
   font-family: var(--font-terminal);
   font-size: 11px;
 }
-.coloride-agent-card-chevron {
+.hilo-agent-card-chevron {
   transition: transform 180ms ease;
 }
-.coloride-agent-card-chevron[hidden] {
+.hilo-agent-card-chevron[hidden] {
   display: none;
 }
-.coloride-agent-card[data-open="true"]
-  > .coloride-agent-card-header
-  > .coloride-agent-card-chevron {
+.hilo-agent-card[data-open="true"] > .hilo-agent-card-header > .hilo-agent-card-chevron {
   transform: rotate(90deg);
 }
-.coloride-agent-card-disclosure {
+.hilo-agent-card-disclosure {
   display: grid;
   grid-template-rows: 0fr;
   visibility: hidden;
   transition: grid-template-rows 180ms ease, visibility 180ms;
 }
-.coloride-agent-card[data-open="true"] > .coloride-agent-card-disclosure {
+.hilo-agent-card[data-open="true"] > .hilo-agent-card-disclosure {
   grid-template-rows: 1fr;
   visibility: visible;
 }
-.coloride-agent-card-clip {
+.hilo-agent-card-clip {
   min-height: 0;
   overflow: hidden;
 }
-.coloride-agent-card-body {
+.hilo-agent-card-body {
   border: 0;
   padding: 4px 0 8px;
   background: transparent;
   user-select: text;
 }
-.coloride-agent-card-note {
+.hilo-agent-card-note {
   padding: 0;
   color: var(--color-text-secondary);
 }
-.coloride-agent-card[data-status="running"]
-  > .coloride-agent-card-header
-  > .coloride-agent-card-copy {
+.hilo-agent-card[data-status="running"] > .hilo-agent-card-header > .hilo-agent-card-copy {
   mask-image: linear-gradient(110deg, black 30%, rgb(0 0 0 / 40%) 45%, black 60%);
   mask-size: 250% 100%;
-  animation: coloride-agent-shimmer 2.6s linear infinite;
+  animation: hilo-agent-shimmer 2.6s linear infinite;
 }
-@keyframes coloride-agent-shimmer {
+@keyframes hilo-agent-shimmer {
   from {
     mask-position: 150% 0;
   }
@@ -561,35 +556,35 @@
     mask-position: -100% 0;
   }
 }
-.coloride-agent-output .coloride-agent-command-source,
-.coloride-agent-output .coloride-agent-command-output,
-.coloride-agent-output .coloride-agent-list {
+.hilo-agent-output .hilo-agent-command-source,
+.hilo-agent-output .hilo-agent-command-output,
+.hilo-agent-output .hilo-agent-list {
   padding: 4px 0;
   margin: 0;
   font-family: var(--font-terminal);
   font-size: 12px;
 }
-.coloride-agent-command-prompt,
-.coloride-agent-diff-added {
+.hilo-agent-command-prompt,
+.hilo-agent-diff-added {
   color: var(--agent-done);
 }
-.coloride-agent-diff-removed {
+.hilo-agent-diff-removed {
   color: var(--agent-failed);
 }
-.coloride-agent-command-source {
+.hilo-agent-command-source {
   color: var(--color-text-primary);
 }
-.coloride-agent-command-output {
+.hilo-agent-command-output {
   /* Eight lines of output; the rest scrolls. */
   max-height: calc(8 * 1.55em + 16px);
   overflow: auto;
   color: var(--color-text-secondary);
 }
-.coloride-agent-output-fades {
+.hilo-agent-output-fades {
   position: relative;
 }
-.coloride-agent-output-fades::before,
-.coloride-agent-output-fades::after {
+.hilo-agent-output-fades::before,
+.hilo-agent-output-fades::after {
   content: "";
   position: absolute;
   left: 0;
@@ -597,27 +592,27 @@
   height: 8px;
   pointer-events: none;
 }
-.coloride-agent-output-fades::before {
+.hilo-agent-output-fades::before {
   top: 0;
   background: linear-gradient(var(--card-body), transparent);
 }
-.coloride-agent-output-fades::after {
+.hilo-agent-output-fades::after {
   bottom: 0;
   background: linear-gradient(transparent, var(--card-body));
 }
-.coloride-agent-command-result {
+.hilo-agent-command-result {
   padding: 4px 0;
   color: var(--card-accent);
 }
-.coloride-agent-list,
-.coloride-agent-locations {
+.hilo-agent-list,
+.hilo-agent-locations {
   max-height: 104px;
   overflow: auto;
 }
-.coloride-agent-locations {
+.hilo-agent-locations {
   padding: 3px 6px;
 }
-.coloride-agent-panel .coloride-agent-location {
+.hilo-agent-panel .hilo-agent-location {
   display: block;
   border: 0;
   margin: 0;
@@ -628,37 +623,37 @@
   color: var(--color-text-secondary);
   font: inherit;
 }
-.coloride-agent-location:hover {
+.hilo-agent-location:hover {
   text-decoration: underline;
 }
-.coloride-agent-locations.is-inline {
+.hilo-agent-locations.is-inline {
   position: absolute;
   right: 3px;
   top: 0;
   padding: 0;
 }
-.coloride-agent-card:has(> .coloride-agent-locations.is-inline) .coloride-agent-card-header {
+.hilo-agent-card:has(> .hilo-agent-locations.is-inline) .hilo-agent-card-header {
   padding-right: 36px;
 }
-.coloride-agent-output .coloride-agent-diff {
+.hilo-agent-output .hilo-agent-diff {
   max-height: 176px;
   overflow: auto;
   margin: 0;
   padding: 5px 0;
   white-space: pre;
 }
-.coloride-agent-diff-line {
+.hilo-agent-diff-line {
   display: flex;
   min-width: max-content;
   line-height: 20px;
 }
-.coloride-agent-diff-line[data-kind="+"] {
+.hilo-agent-diff-line[data-kind="+"] {
   color: var(--agent-done);
 }
-.coloride-agent-diff-line[data-kind="-"] {
+.hilo-agent-diff-line[data-kind="-"] {
   color: var(--agent-failed);
 }
-.coloride-agent-line-number {
+.hilo-agent-line-number {
   width: 36px;
   flex: 0 0 36px;
   padding: 0 7px;
@@ -666,72 +661,72 @@
   color: var(--color-text-muted);
   user-select: none;
 }
-.coloride-agent-diff-text {
+.hilo-agent-diff-text {
   padding-right: 12px;
   user-select: text;
 }
-.coloride-agent-diff-gap {
+.hilo-agent-diff-gap {
   padding: 0 12px;
   color: var(--color-text-muted);
 }
-.coloride-agent-arguments {
+.hilo-agent-arguments {
   display: grid;
   grid-template-columns: minmax(60px, auto) minmax(0, 1fr);
   gap: 4px 12px;
   padding: 4px 0;
 }
-.coloride-agent-arguments dt {
+.hilo-agent-arguments dt {
   color: var(--color-text-muted);
 }
-.coloride-agent-arguments dd {
+.hilo-agent-arguments dd {
   font-family: var(--font-terminal);
   user-select: text;
 }
-.coloride-agent-thinking .coloride-agent-card-verb {
+.hilo-agent-thinking .hilo-agent-card-verb {
   color: var(--color-text-muted);
 }
-.coloride-agent-thinking .coloride-agent-card-body {
+.hilo-agent-thinking .hilo-agent-card-body {
   padding: 8px 10px;
   color: var(--color-text-secondary);
 }
-.coloride-agent-plan {
+.hilo-agent-plan {
   list-style: none;
   margin: 8px 0 12px;
   padding: 0;
   font-size: 12px;
 }
-.coloride-agent-plan li {
+.hilo-agent-plan li {
   display: flex;
   align-items: baseline;
   gap: 8px;
   padding: 4px 8px;
   color: var(--color-text-muted);
 }
-.coloride-agent-plan li[data-status="in_progress"] {
+.hilo-agent-plan li[data-status="in_progress"] {
   color: var(--color-text-primary);
 }
-.coloride-agent-plan li[data-status="completed"] .coloride-agent-plan-mark {
+.hilo-agent-plan li[data-status="completed"] .hilo-agent-plan-mark {
   color: var(--agent-done);
 }
-.coloride-agent-plan li[data-status="in_progress"] .coloride-agent-plan-mark {
+.hilo-agent-plan li[data-status="in_progress"] .hilo-agent-plan-mark {
   color: var(--agent-waiting);
 }
-.coloride-agent-plan-mark {
+.hilo-agent-plan-mark {
   width: 14px;
   flex-shrink: 0;
 }
-.coloride-agent-plan-state {
+.hilo-agent-plan-state {
   margin-left: auto;
   font-size: 11px;
   white-space: nowrap;
   color: var(--color-text-muted);
 }
-.coloride-agent-permission-actions {
+.hilo-agent-permission-actions {
   display: flex;
   gap: 5px;
   padding: 0;
 }
-.coloride-agent-panel .coloride-agent-permission-actions button {
+.hilo-agent-panel .hilo-agent-permission-actions button {
   margin: 0;
   padding: 2px 6px 2px 0;
   border: 0;
@@ -741,96 +736,82 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.coloride-agent-permission-actions button:first-child {
+.hilo-agent-permission-actions button:first-child {
   color: var(--agent-waiting);
 }
 @media (prefers-reduced-motion: reduce) {
-  .coloride-agent-card,
-  .coloride-agent-card-disclosure,
-  .coloride-agent-card-chevron {
+  .hilo-agent-card,
+  .hilo-agent-card-disclosure,
+  .hilo-agent-card-chevron {
     transition: none;
   }
-  .coloride-agent-card[data-status="running"]
-    > .coloride-agent-card-header
-    > .coloride-agent-card-copy {
+  .hilo-agent-card[data-status="running"] > .hilo-agent-card-header > .hilo-agent-card-copy {
     animation: none;
     mask-image: none;
   }
 }
 
 /* Activities sit in the conversation flow; the shared disclosure still owns their behavior. */
-.coloride-agent-activity {
+.hilo-agent-activity {
   border: 0;
   border-radius: 0;
   background: transparent;
 }
-.coloride-agent-panel .coloride-agent-activity > .coloride-agent-card-header {
+.hilo-agent-panel .hilo-agent-activity > .hilo-agent-card-header {
   justify-content: flex-start;
   padding: 3px 0;
   border-radius: 0;
   color: var(--color-text-muted);
 }
-.coloride-agent-activity > .coloride-agent-card-header .coloride-agent-card-copy {
+.hilo-agent-activity > .hilo-agent-card-header .hilo-agent-card-copy {
   flex: 0 1 auto;
   min-width: 0;
 }
-.coloride-agent-activity > .coloride-agent-card-header .coloride-agent-card-verb {
+.hilo-agent-activity > .hilo-agent-card-header .hilo-agent-card-verb {
   flex-shrink: 1;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.coloride-agent-activity > .coloride-agent-card-header .coloride-agent-card-target {
+.hilo-agent-activity > .hilo-agent-card-header .hilo-agent-card-target {
   font-size: 12px;
 }
-.coloride-agent-activity > .coloride-agent-card-header .coloride-agent-card-target:empty,
-.coloride-agent-activity[data-status="done"]
-  > .coloride-agent-card-header
-  .coloride-agent-card-state {
+.hilo-agent-activity > .hilo-agent-card-header .hilo-agent-card-target:empty,
+.hilo-agent-activity[data-status="done"] > .hilo-agent-card-header .hilo-agent-card-state {
   display: none;
 }
-.coloride-agent-activity[data-status="failed"]
-  > .coloride-agent-card-header
-  .coloride-agent-card-verb,
-.coloride-agent-activity[data-status="denied"]
-  > .coloride-agent-card-header
-  .coloride-agent-card-verb {
+.hilo-agent-activity[data-status="failed"] > .hilo-agent-card-header .hilo-agent-card-verb,
+.hilo-agent-activity[data-status="denied"] > .hilo-agent-card-header .hilo-agent-card-verb {
   color: var(--agent-failed);
 }
-.coloride-agent-activity
-  > .coloride-agent-card-disclosure
-  > .coloride-agent-card-clip
-  > .coloride-agent-card-body {
+.hilo-agent-activity > .hilo-agent-card-disclosure > .hilo-agent-card-clip > .hilo-agent-card-body {
   border-top: 0;
   background: transparent;
 }
-.coloride-agent-thinking
-  > .coloride-agent-card-disclosure
-  > .coloride-agent-card-clip
-  > .coloride-agent-card-body {
+.hilo-agent-thinking > .hilo-agent-card-disclosure > .hilo-agent-card-clip > .hilo-agent-card-body {
   max-height: 220px;
   overflow: auto;
   padding: 4px 0 8px;
   white-space: normal;
 }
-.coloride-agent-thinking .coloride-agent-card-body > :last-child {
+.hilo-agent-thinking .hilo-agent-card-body > :last-child {
   margin-bottom: 0;
 }
-.coloride-agent-thinking .coloride-agent-card-note,
-.coloride-agent-thinking .coloride-agent-arguments {
+.hilo-agent-thinking .hilo-agent-card-note,
+.hilo-agent-thinking .hilo-agent-arguments {
   padding: 0;
 }
-.coloride-agent-exploration
-  > .coloride-agent-card-disclosure
-  > .coloride-agent-card-clip
-  > .coloride-agent-card-body {
+.hilo-agent-exploration
+  > .hilo-agent-card-disclosure
+  > .hilo-agent-card-clip
+  > .hilo-agent-card-body {
   position: relative;
   margin: 2px 0 5px 6px;
   padding: 0 0 0 15px;
 }
-.coloride-agent-exploration
-  > .coloride-agent-card-disclosure
-  > .coloride-agent-card-clip
-  > .coloride-agent-card-body::before {
+.hilo-agent-exploration
+  > .hilo-agent-card-disclosure
+  > .hilo-agent-card-clip
+  > .hilo-agent-card-body::before {
   content: "";
   position: absolute;
   left: 0;
@@ -839,55 +820,55 @@
   width: 1px;
   background: color-mix(in srgb, var(--agent-card-tint) 12%, transparent);
 }
-.coloride-agent-exploration .coloride-agent-tool {
+.hilo-agent-exploration .hilo-agent-tool {
   border: 0;
   margin: 0 0 2px;
   background: transparent;
 }
-.coloride-agent-panel .coloride-agent-exploration .coloride-agent-card-header {
+.hilo-agent-panel .hilo-agent-exploration .hilo-agent-card-header {
   min-height: 26px;
   padding-block: 3px;
 }
-.coloride-agent-exploration .coloride-agent-tool .coloride-agent-card-verb {
+.hilo-agent-exploration .hilo-agent-tool .hilo-agent-card-verb {
   color: var(--color-text-secondary);
   font-size: 12px;
 }
-.coloride-agent-exploration .coloride-agent-tool .coloride-agent-card-target {
+.hilo-agent-exploration .hilo-agent-tool .hilo-agent-card-target {
   font-size: 12px;
   color: var(--color-text-primary);
 }
-.coloride-agent-exploration .coloride-agent-tool[data-status="done"] .coloride-agent-card-state {
+.hilo-agent-exploration .hilo-agent-tool[data-status="done"] .hilo-agent-card-state {
   display: none;
 }
 
 /* The text leads: messages, and thoughts, a little larger than the tool rows around them. */
-.coloride-agent-output article[data-role],
-.coloride-agent-output
-  .coloride-agent-thinking
-  > .coloride-agent-card-disclosure
-  > .coloride-agent-card-clip
-  > .coloride-agent-card-body {
+.hilo-agent-output article[data-role],
+.hilo-agent-output
+  .hilo-agent-thinking
+  > .hilo-agent-card-disclosure
+  > .hilo-agent-card-clip
+  > .hilo-agent-card-body {
   color: var(--agent-reading-color);
   font-size: var(--agent-reading-size);
   line-height: var(--agent-reading-line);
 }
 
 /* Permission text and actions follow the tool that is waiting for an answer. */
-.coloride-agent-card:has(+ .coloride-agent-permission[data-attached]) {
+.hilo-agent-card:has(+ .hilo-agent-permission[data-attached]) {
   margin-bottom: 0;
 }
-.coloride-agent-output .coloride-agent-permission[data-attached] {
+.hilo-agent-output .hilo-agent-permission[data-attached] {
   margin-top: 0;
 }
-.coloride-agent-permission[data-attached] > .coloride-agent-card-header {
+.hilo-agent-permission[data-attached] > .hilo-agent-card-header {
   display: none;
 }
-.coloride-agent-permission[data-attached] .coloride-agent-card-body {
+.hilo-agent-permission[data-attached] .hilo-agent-card-body {
   border-top: 0;
 }
 
 /* The summary of a turn that edited several files: one row per file. */
-.coloride-agent-panel .coloride-agent-change-file {
+.hilo-agent-panel .hilo-agent-change-file {
   display: flex;
   width: 100%;
   align-items: center;
@@ -901,12 +882,12 @@
   text-align: left;
   cursor: pointer;
 }
-.coloride-agent-change-file:hover {
+.hilo-agent-change-file:hover {
   background: transparent;
   color: var(--color-text-primary);
   text-decoration: underline;
 }
-.coloride-agent-change-path {
+.hilo-agent-change-path {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -914,8 +895,8 @@
 }
 
 /* Terminal and edit previews share the same surface and header geometry. */
-.coloride-agent-card[data-variant="command"],
-.coloride-agent-card[data-variant="diff"] {
+.hilo-agent-card[data-variant="command"],
+.hilo-agent-card[data-variant="diff"] {
   --card-body: color-mix(in srgb, var(--agent-card-shade) 16%, var(--color-main));
   --card-border: color-mix(in srgb, var(--agent-card-tint) 9%, transparent);
   --command-border: var(--card-border);
@@ -923,140 +904,140 @@
   border-radius: 8px;
   background: var(--card-body);
 }
-.coloride-agent-panel .coloride-agent-card[data-variant="command"] > .coloride-agent-card-header,
-.coloride-agent-panel .coloride-agent-card[data-variant="diff"] > .coloride-agent-card-header {
+.hilo-agent-panel .hilo-agent-card[data-variant="command"] > .hilo-agent-card-header,
+.hilo-agent-panel .hilo-agent-card[data-variant="diff"] > .hilo-agent-card-header {
   padding: 4px 8px;
   border-radius: 7px;
   color: var(--color-text-muted);
 }
-.coloride-agent-card[data-variant="command"] .coloride-agent-card-copy {
+.hilo-agent-card[data-variant="command"] .hilo-agent-card-copy {
   flex: 1;
 }
-.coloride-agent-card[data-variant="command"] .coloride-agent-card-clip,
-.coloride-agent-card[data-variant="diff"] .coloride-agent-card-clip {
+.hilo-agent-card[data-variant="command"] .hilo-agent-card-clip,
+.hilo-agent-card[data-variant="diff"] .hilo-agent-card-clip {
   border-radius: 0 0 7px 7px;
 }
-.coloride-agent-card[data-variant="command"] .coloride-agent-card-verb {
+.hilo-agent-card[data-variant="command"] .hilo-agent-card-verb {
   color: var(--color-text-muted);
 }
-.coloride-agent-card[data-variant="command"] .coloride-agent-card-target {
+.hilo-agent-card[data-variant="command"] .hilo-agent-card-target {
   color: var(--color-text-secondary);
   font-family: var(--font-terminal);
   font-size: 11.5px;
 }
-.coloride-agent-card[data-variant="command"][data-open="true"] .coloride-agent-card-target {
+.hilo-agent-card[data-variant="command"][data-open="true"] .hilo-agent-card-target {
   display: none;
 }
-.coloride-agent-card[data-variant="command"] .coloride-agent-card-body {
+.hilo-agent-card[data-variant="command"] .hilo-agent-card-body {
   border-top: 0;
   padding: 4px 10px 8px;
   background: transparent;
 }
-.coloride-agent-card[data-variant="command"] .coloride-agent-command-source {
+.hilo-agent-card[data-variant="command"] .hilo-agent-command-source {
   max-height: calc(4 * 1.55em + 16px);
   overflow: auto;
   padding: 0 0 6px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.coloride-agent-card[data-variant="command"] .coloride-agent-output-fades {
+.hilo-agent-card[data-variant="command"] .hilo-agent-output-fades {
   border-top: 1px solid var(--command-border);
 }
-.coloride-agent-card[data-variant="command"] .coloride-agent-command-result {
+.hilo-agent-card[data-variant="command"] .hilo-agent-command-result {
   padding: 0 0 6px;
   font-size: 11.5px;
 }
-.coloride-agent-card[data-variant="command"] .coloride-agent-card-state {
+.hilo-agent-card[data-variant="command"] .hilo-agent-card-state {
   display: none;
 }
-.coloride-agent-card[data-variant="command"][data-status="failed"] .coloride-agent-card-state,
-.coloride-agent-card[data-variant="command"][data-status="denied"] .coloride-agent-card-state {
+.hilo-agent-card[data-variant="command"][data-status="failed"] .hilo-agent-card-state,
+.hilo-agent-card[data-variant="command"][data-status="denied"] .hilo-agent-card-state {
   display: inline;
 }
 
 /* Said once, above a conversation that was loaded from a previous run. */
-.coloride-agent-restored-note {
+.hilo-agent-restored-note {
   margin: 0 0 12px;
   color: var(--color-text-muted);
   font-size: 11.5px;
 }
 
 /* File card (an edit): the file's own header, its diff as a short preview, a button for the rest. */
-.coloride-agent-card[data-variant="diff"] {
+.hilo-agent-card[data-variant="diff"] {
   overflow: hidden;
 }
-.coloride-agent-card[data-variant="diff"] .coloride-agent-card-verb {
+.hilo-agent-card[data-variant="diff"] .hilo-agent-card-verb {
   color: var(--color-text-muted);
 }
-.coloride-agent-card[data-variant="diff"] .coloride-agent-card-target {
+.hilo-agent-card[data-variant="diff"] .hilo-agent-card-target {
   font-size: inherit;
 }
-.coloride-agent-card[data-variant="diff"] .coloride-agent-card-body {
+.hilo-agent-card[data-variant="diff"] .hilo-agent-card-body {
   border-top: 0;
   padding: 0;
   background: transparent;
 }
-.coloride-agent-card[data-variant="diff"] .coloride-agent-card-note,
-.coloride-agent-card[data-variant="diff"] .coloride-agent-locations {
+.hilo-agent-card[data-variant="diff"] .hilo-agent-card-note,
+.hilo-agent-card[data-variant="diff"] .hilo-agent-locations {
   padding: 5px 12px;
 }
-.coloride-agent-card[data-variant="diff"] .coloride-agent-card-chevron {
+.hilo-agent-card[data-variant="diff"] .hilo-agent-card-chevron {
   margin-left: auto;
 }
-.coloride-agent-card[data-variant="diff"] .coloride-agent-card-copy {
+.hilo-agent-card[data-variant="diff"] .hilo-agent-card-copy {
   flex: 0 1 auto;
   gap: 0;
 }
-.coloride-agent-card[data-variant="diff"] .coloride-agent-card-target:not(:empty)::before {
+.hilo-agent-card[data-variant="diff"] .hilo-agent-card-target:not(:empty)::before {
   content: "\00a0";
 }
-.coloride-agent-card[data-variant="diff"] .coloride-agent-card-extra {
+.hilo-agent-card[data-variant="diff"] .hilo-agent-card-extra {
   font-family: inherit;
   font-size: 12px;
 }
-.coloride-agent-card[data-variant="diff"][data-status="done"] .coloride-agent-card-state {
+.hilo-agent-card[data-variant="diff"][data-status="done"] .hilo-agent-card-state {
   display: none;
 }
 /* Changed lines fill the file surface; long previews can open into a taller scroll area. */
-.coloride-agent-output .coloride-agent-diff {
+.hilo-agent-output .hilo-agent-diff {
   max-height: min(560px, 60vh);
 }
-.coloride-agent-diff-line {
+.hilo-agent-diff-line {
   border-left: 3px solid transparent;
   color: var(--color-text-primary);
 }
-.coloride-agent-diff-prefix {
+.hilo-agent-diff-prefix {
   flex: 0 0 22px;
   width: 22px;
   color: var(--color-text-muted);
   user-select: none;
 }
-.coloride-agent-diff-line[data-kind="+"] .coloride-agent-diff-prefix {
+.hilo-agent-diff-line[data-kind="+"] .hilo-agent-diff-prefix {
   color: var(--agent-done);
 }
-.coloride-agent-diff-line[data-kind="-"] .coloride-agent-diff-prefix {
+.hilo-agent-diff-line[data-kind="-"] .hilo-agent-diff-prefix {
   color: var(--agent-failed);
 }
-.coloride-agent-diff-line[data-kind="+"] {
+.hilo-agent-diff-line[data-kind="+"] {
   border-left-color: var(--agent-done);
   color: var(--color-text-primary);
   background: var(--agent-diff-add-fill);
 }
-.coloride-agent-diff-line[data-kind="-"] {
+.hilo-agent-diff-line[data-kind="-"] {
   border-left-color: var(--agent-failed);
   color: var(--color-text-primary);
   background: var(--agent-diff-remove-fill);
 }
-.coloride-agent-line-number {
+.hilo-agent-line-number {
   width: 40px;
   flex-basis: 40px;
 }
-.coloride-agent-output .coloride-agent-diff[data-expanded="false"] {
+.hilo-agent-output .hilo-agent-diff[data-expanded="false"] {
   max-height: calc(18 * 20px + 10px);
   overflow: auto;
   mask-image: linear-gradient(to bottom, black calc(100% - 22px), transparent);
 }
-.coloride-agent-panel .coloride-agent-diff-more {
+.hilo-agent-panel .hilo-agent-diff-more {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1070,11 +1051,11 @@
   font-size: 11.5px;
   cursor: pointer;
 }
-.coloride-agent-panel .coloride-agent-diff-more:hover {
+.hilo-agent-panel .hilo-agent-diff-more:hover {
   color: var(--color-text-primary);
 }
 /* With several files in one card, each one has its own row. */
-.coloride-agent-file-head {
+.hilo-agent-file-head {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1083,74 +1064,74 @@
   border-bottom: 1px solid var(--card-border);
   color: var(--color-text-primary);
 }
-.coloride-agent-file-head:first-child {
+.hilo-agent-file-head:first-child {
   border-top: 0;
 }
-.coloride-agent-file-head .coloride-agent-card-extra {
+.hilo-agent-file-head .hilo-agent-card-extra {
   margin-left: auto;
 }
-.coloride-agent-file-name {
+.hilo-agent-file-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.coloride-agent-diff-more svg {
+.hilo-agent-diff-more svg {
   width: 14px;
   height: 14px;
   transform: rotate(90deg);
 }
-.coloride-agent-diff-more[data-expanded="true"] svg {
+.hilo-agent-diff-more[data-expanded="true"] svg {
   transform: rotate(-90deg);
 }
-.coloride-agent-diff .tok-comment {
+.hilo-agent-diff .tok-comment {
   color: var(--agent-code-comment);
   font-style: italic;
 }
-.coloride-agent-diff .tok-keyword,
-.coloride-agent-diff .tok-typeName,
-.coloride-agent-diff .tok-bool,
-.coloride-agent-diff .tok-operator {
+.hilo-agent-diff .tok-keyword,
+.hilo-agent-diff .tok-typeName,
+.hilo-agent-diff .tok-bool,
+.hilo-agent-diff .tok-operator {
   color: var(--agent-code-keyword);
 }
-.coloride-agent-diff .tok-string,
-.coloride-agent-diff .tok-string2 {
+.hilo-agent-diff .tok-string,
+.hilo-agent-diff .tok-string2 {
   color: var(--agent-code-string);
 }
-.coloride-agent-diff .tok-number,
-.coloride-agent-diff .tok-atom {
+.hilo-agent-diff .tok-number,
+.hilo-agent-diff .tok-atom {
   color: var(--agent-code-number);
 }
-.coloride-agent-diff .tok-function {
+.hilo-agent-diff .tok-function {
   color: var(--agent-code-function);
 }
-.coloride-agent-diff .tok-meta {
+.hilo-agent-diff .tok-meta {
   color: var(--agent-code-meta);
 }
-.coloride-agent-diff-text,
-.coloride-agent-diff-text span {
+.hilo-agent-diff-text,
+.hilo-agent-diff-text span {
   -webkit-user-select: text;
   user-select: text;
 }
 
 /* The model, effort and mode the agent offers, and how long it has been working. */
-.coloride-agent-meta-end {
+.hilo-agent-meta-end {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
 }
-.coloride-agent-options {
+.hilo-agent-options {
   display: flex;
   align-items: center;
   gap: 2px;
   min-width: 0;
 }
-.coloride-agent-options[hidden] {
+.hilo-agent-options[hidden] {
   display: none;
 }
-.coloride-agent-panel .coloride-agent-option {
+.hilo-agent-panel .hilo-agent-option {
   max-width: 160px;
   overflow: hidden;
   padding: 1px 7px;
@@ -1164,135 +1145,135 @@
   white-space: nowrap;
   cursor: pointer;
 }
-.coloride-agent-panel .coloride-agent-option:hover:enabled,
-.coloride-agent-panel .coloride-agent-option[aria-expanded="true"] {
+.hilo-agent-panel .hilo-agent-option:hover:enabled,
+.hilo-agent-panel .hilo-agent-option[aria-expanded="true"] {
   background: rgba(255, 255, 255, 0.08);
   color: var(--color-text-primary);
 }
-.coloride-agent-panel .coloride-agent-option:disabled {
+.hilo-agent-panel .hilo-agent-option:disabled {
   opacity: 0.5;
   cursor: default;
 }
-.coloride-agent-busy-time {
+.hilo-agent-busy-time {
   color: var(--color-text-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-.coloride-agent-busy-time:empty {
+.hilo-agent-busy-time:empty {
   display: none;
 }
-.coloride-agent-card-time {
+.hilo-agent-card-time {
   color: var(--color-text-muted);
 }
-.coloride-agent-turn-time {
+.hilo-agent-turn-time {
   margin: 4px 0 12px;
   color: var(--color-text-muted);
   font-size: 11.5px;
 }
 
 /* What the Markdown of a message needs, which the base reset removes: markers and headings. */
-.coloride-agent-output article ul {
+.hilo-agent-output article ul {
   list-style: disc;
 }
-.coloride-agent-output article ol {
+.hilo-agent-output article ol {
   list-style: decimal;
 }
-.coloride-agent-output article li {
+.hilo-agent-output article li {
   margin: 2px 0;
 }
-.coloride-agent-output article h1,
-.coloride-agent-output article h2,
-.coloride-agent-output article h3,
-.coloride-agent-output article h4,
-.coloride-agent-output article h5,
-.coloride-agent-output article h6 {
+.hilo-agent-output article h1,
+.hilo-agent-output article h2,
+.hilo-agent-output article h3,
+.hilo-agent-output article h4,
+.hilo-agent-output article h5,
+.hilo-agent-output article h6 {
   margin: 14px 0 6px;
   font-size: 1em;
   font-weight: 600;
   line-height: 1.35;
 }
-.coloride-agent-output article h1 {
+.hilo-agent-output article h1 {
   font-size: 1.25em;
 }
-.coloride-agent-output article h2 {
+.hilo-agent-output article h2 {
   font-size: 1.15em;
 }
-.coloride-agent-output article h3 {
+.hilo-agent-output article h3 {
   font-size: 1.05em;
 }
-.coloride-agent-output article h1:first-child,
-.coloride-agent-output article h2:first-child,
-.coloride-agent-output article h3:first-child {
+.hilo-agent-output article h1:first-child,
+.hilo-agent-output article h2:first-child,
+.hilo-agent-output article h3:first-child {
   margin-top: 0;
 }
 
 /* A file the agent mentions is plain inline text that acts as a link: coloured and underlined,
    flowing and wrapping with the sentence, no box. */
-.coloride-agent-output .coloride-agent-ref {
+.hilo-agent-output .hilo-agent-ref {
   color: #8fb8f0;
   text-decoration: underline;
   text-decoration-color: rgba(143, 184, 240, 0.4);
   text-underline-offset: 2px;
   cursor: pointer;
 }
-.coloride-agent-output .coloride-agent-ref:hover {
+.hilo-agent-output .hilo-agent-ref:hover {
   text-decoration-color: currentColor;
 }
-.coloride-agent-output .coloride-agent-ref:focus-visible {
+.hilo-agent-output .hilo-agent-ref:focus-visible {
   outline: 1px solid currentColor;
   outline-offset: 2px;
   border-radius: 2px;
 }
-.coloride-agent-output .coloride-agent-link {
+.hilo-agent-output .hilo-agent-link {
   color: #8fb8f0;
   text-decoration: underline dotted;
 }
 /* A conclusion reads as short paragraphs and a numbered list with room between its points. */
-.coloride-agent-output article li {
+.hilo-agent-output article li {
   margin: 6px 0;
 }
-.coloride-agent-output article li > .coloride-agent-ref:first-of-type {
+.hilo-agent-output article li > .hilo-agent-ref:first-of-type {
   margin-left: 2px;
 }
 
 /* The thinking block: the label and, right after it, a small chevron. Muted until the pointer is
    over it. */
-.coloride-agent-panel .coloride-agent-thinking > .coloride-agent-card-header {
+.hilo-agent-panel .hilo-agent-thinking > .hilo-agent-card-header {
   gap: 4px;
   min-height: 28px;
   color: var(--color-text-muted);
   transition: color 120ms ease;
 }
-.coloride-agent-panel .coloride-agent-thinking > .coloride-agent-card-header:hover:enabled {
+.hilo-agent-panel .hilo-agent-thinking > .hilo-agent-card-header:hover:enabled {
   background: none;
   color: var(--color-text-primary);
 }
-.coloride-agent-thinking > .coloride-agent-card-header:hover .coloride-agent-card-verb,
-.coloride-agent-thinking > .coloride-agent-card-header:hover .coloride-agent-card-chevron {
+.hilo-agent-thinking > .hilo-agent-card-header:hover .hilo-agent-card-verb,
+.hilo-agent-thinking > .hilo-agent-card-header:hover .hilo-agent-card-chevron {
   color: var(--color-text-primary);
 }
 /* Empty parts of the header must not add their gap between the label and the chevron. */
-.coloride-agent-thinking > .coloride-agent-card-header .coloride-agent-card-extra:empty,
-.coloride-agent-thinking > .coloride-agent-card-header .coloride-agent-card-state:empty {
+.hilo-agent-thinking > .hilo-agent-card-header .hilo-agent-card-extra:empty,
+.hilo-agent-thinking > .hilo-agent-card-header .hilo-agent-card-state:empty {
   display: none;
 }
-.coloride-agent-thinking > .coloride-agent-card-header .coloride-agent-card-copy {
+.hilo-agent-thinking > .hilo-agent-card-header .hilo-agent-card-copy {
   font-size: var(--agent-reading-size, 13px);
 }
 /* The chevron points right, turns down when open, is a little smaller, and sits right after the
    label: the arrow's drawing leaves some empty room on its left, which the margin takes back. */
-.coloride-agent-thinking > .coloride-agent-card-header .coloride-agent-card-chevron {
+.hilo-agent-thinking > .hilo-agent-card-header .hilo-agent-card-chevron {
   flex: 0 0 12px;
   margin-left: -1px;
 }
-.coloride-agent-thinking > .coloride-agent-card-header .coloride-agent-card-chevron svg {
+.hilo-agent-thinking > .hilo-agent-card-header .hilo-agent-card-chevron svg {
   width: 12px;
   height: 12px;
 }
-.coloride-agent-output
-  .coloride-agent-thinking
-  > .coloride-agent-card-disclosure
-  > .coloride-agent-card-clip
-  > .coloride-agent-card-body {
+.hilo-agent-output
+  .hilo-agent-thinking
+  > .hilo-agent-card-disclosure
+  > .hilo-agent-card-clip
+  > .hilo-agent-card-body {
   padding-top: 8px;
 }

@@ -1,7 +1,7 @@
 /* Restricted-mode notice */
 @layer components {
   /* Restricted-mode notice of an untrusted folder: floats over the shell, moves no zone */
-  .coloride-trust-banner {
+  .hilo-trust-banner {
     position: absolute;
     right: 12px;
     bottom: 12px;
@@ -19,41 +19,41 @@
     color: var(--color-text-secondary);
     font-size: 11px;
   }
-  .coloride-trust-banner[hidden] {
+  .hilo-trust-banner[hidden] {
     display: none;
   }
-  .coloride-trust-banner-header {
+  .hilo-trust-banner-header {
     display: flex;
     align-items: center;
     gap: 8px;
   }
-  .coloride-trust-banner-icon {
+  .hilo-trust-banner-icon {
     display: inline-flex;
     color: #ffb450;
   }
-  .coloride-trust-banner strong {
+  .hilo-trust-banner strong {
     color: #ffb450;
     font-size: 12px;
     font-weight: 600;
   }
-  .coloride-trust-banner p {
+  .hilo-trust-banner p {
     margin: 0;
     text-align: justify;
     hyphens: auto;
     line-height: 1.4;
   }
-  .coloride-trust-banner-more[hidden] {
+  .hilo-trust-banner-more[hidden] {
     display: none;
   }
-  .coloride-trust-banner-more {
+  .hilo-trust-banner-more {
     font-size: 10.5px;
     color: var(--color-text-secondary);
   }
-  .coloride-trust-banner button {
+  .hilo-trust-banner button {
     border: 0;
     cursor: pointer;
   }
-  .coloride-trust-banner-close {
+  .hilo-trust-banner-close {
     display: inline-flex;
     margin-left: auto;
     padding: 4px;
@@ -61,11 +61,11 @@
     background: transparent;
     color: var(--color-text-secondary);
   }
-  .coloride-trust-banner-close:hover {
+  .hilo-trust-banner-close:hover {
     background: rgba(255, 255, 255, 0.08);
     color: var(--color-text-primary);
   }
-  .coloride-trust-banner-actions {
+  .hilo-trust-banner-actions {
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -74,7 +74,7 @@
     padding-top: 8px;
     border-top: 0.5px solid rgba(255, 255, 255, 0.14);
   }
-  .coloride-trust-banner-learn {
+  .hilo-trust-banner-learn {
     height: 24px;
     padding: 0 8px;
     border-radius: 6px;
@@ -83,11 +83,11 @@
     font-size: 11px;
     font-weight: 500;
   }
-  .coloride-trust-banner-learn:hover {
+  .hilo-trust-banner-learn:hover {
     background: rgba(255, 255, 255, 0.06);
     color: var(--color-text-primary);
   }
-  .coloride-trust-banner-action {
+  .hilo-trust-banner-action {
     height: 24px;
     padding: 0 10px;
     border-radius: 6px;
@@ -97,14 +97,14 @@
     font-weight: 600;
     white-space: nowrap;
   }
-  .coloride-trust-banner-action:hover {
+  .hilo-trust-banner-action:hover {
     background: #f1c458;
   }
-  .coloride-trust-banner-action:disabled {
+  .hilo-trust-banner-action:disabled {
     opacity: 0.6;
     cursor: default;
   }
-  .coloride-trust-banner button:focus-visible {
+  .hilo-trust-banner button:focus-visible {
     outline: 2px solid rgba(255, 255, 255, 0.5);
     outline-offset: 2px;
   }

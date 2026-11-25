@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   type Approval,
-  COLORIDE_STATE_META,
-  COLORIDE_VALIDATION_STATES,
   CONTRACT_SCHEMA_VERSION,
   type ChangeSet,
   type ContextBundle,
   type EditorSnapshot,
   type EditorTransaction,
   type Evidence,
+  HILO_STATE_META,
+  HILO_VALIDATION_STATES,
   type ModelProvider,
   TASK_STATES,
   type TaskSpec,
@@ -16,13 +16,13 @@ import {
   isApprovalValidFor,
 } from "./index.js";
 
-describe("@coloride/protocol-types", () => {
-  it("defines all 5 accessible Coloride validation states with distinct icons", () => {
-    expect(COLORIDE_VALIDATION_STATES).toHaveLength(5);
-    const icons = new Set(Object.values(COLORIDE_STATE_META).map((m) => m.icon));
+describe("@hilo/protocol-types", () => {
+  it("defines all 5 accessible Hilo validation states with distinct icons", () => {
+    expect(HILO_VALIDATION_STATES).toHaveLength(5);
+    const icons = new Set(Object.values(HILO_STATE_META).map((m) => m.icon));
     expect(icons.size).toBe(5);
-    expect(COLORIDE_STATE_META.ValidatedGreen.icon).toBe("✓");
-    expect(COLORIDE_STATE_META.StaleOrange.icon).toBe("⟳");
+    expect(HILO_STATE_META.ValidatedGreen.icon).toBe("✓");
+    expect(HILO_STATE_META.StaleOrange.icon).toBe("⟳");
   });
 
   it("defines all 11 canonical task states", () => {
@@ -192,7 +192,7 @@ describe("@coloride/protocol-types", () => {
       evidence_id: "ev-1",
       task_id: spec.task_id,
       tested_snapshot_hash: changeSet.result_digest,
-      checkpoint_ref: "refs/coloride/checkpoints/task-1",
+      checkpoint_ref: "refs/hilo/checkpoints/task-1",
       commands: [
         {
           command: "pnpm",
@@ -224,7 +224,7 @@ describe("@coloride/protocol-types", () => {
     const approval: Approval = {
       schema_version: CONTRACT_SCHEMA_VERSION,
       approval_id: "appr-1",
-      actor_identity: "founder@coloride.dev",
+      actor_identity: "founder@hilo.dev",
       target_env: "Staging",
       action_kind: "ApplyChangeSet",
       approved_digest: changeSet.result_digest,
@@ -253,7 +253,7 @@ describe("@coloride/protocol-types", () => {
     const approval: Approval = {
       schema_version: CONTRACT_SCHEMA_VERSION,
       approval_id: "appr-sec",
-      actor_identity: "reviewer@coloride.dev",
+      actor_identity: "reviewer@hilo.dev",
       target_env: "Staging",
       action_kind: "ApplyChangeSet",
       approved_digest: h1,

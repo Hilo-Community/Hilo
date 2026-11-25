@@ -93,7 +93,7 @@ fn format_inline_object_variant(variant: &str) -> String {
     variant.to_string()
 }
 
-/// Generates the complete, deterministic TypeScript module for `@coloride/protocol-types`.
+/// Generates the complete, deterministic TypeScript module for `@hilo/protocol-types`.
 #[must_use]
 pub fn generate_typescript_bindings() -> String {
     let declarations = [
@@ -102,7 +102,7 @@ pub fn generate_typescript_bindings() -> String {
         LineCol::decl(),
         Utf8Span::decl(),
         Utf16Span::decl(),
-        ColorideValidationState::decl(),
+        HiloValidationState::decl(),
         TaskState::decl(),
         TransactionOrigin::decl(),
         TextChange::decl(),

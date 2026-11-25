@@ -46,7 +46,7 @@ impl Fixture {
         std::fs::create_dir(root.path().join("src")).unwrap();
         std::fs::write(root.path().join("src/file.rs"), "disk text").unwrap();
         let binary = root.path().join(FAKE_AGENT_BINARY);
-        std::fs::copy(env!("CARGO_BIN_EXE_coloride-acp-test-agent"), &binary).unwrap();
+        std::fs::copy(env!("CARGO_BIN_EXE_hilo-acp-test-agent"), &binary).unwrap();
         let mut spec = common::spec();
         spec.policy.allowed_paths = vec![".".into()];
         spec.budget_limits.max_cpu_ms = 1_000_000;
@@ -145,7 +145,7 @@ fn generic_gateway_authentication_precedes_session_creation_and_a_real_fixture_t
         protocol: "fixture".into(),
         base_url: "http://127.0.0.1:123/provider".into(),
         headers: std::collections::BTreeMap::from([(
-            "x-coloride-session".into(),
+            "x-hilo-session".into(),
             "session-token-only".into(),
         )]),
         provider_name: "Fixture".into(),
@@ -378,7 +378,7 @@ fn shared_dependency_folders_are_readable_but_never_writable_by_the_agent() {
     let f = Fixture::new();
     let shared = tempfile::tempdir().unwrap();
     let binary = shared.path().join("agent");
-    std::fs::copy(env!("CARGO_BIN_EXE_coloride-acp-test-agent"), &binary).unwrap();
+    std::fs::copy(env!("CARGO_BIN_EXE_hilo-acp-test-agent"), &binary).unwrap();
     let module = shared.path().join("module.txt");
     std::fs::write(&module, "shared package").unwrap();
     let runner = sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).unwrap();
@@ -409,7 +409,7 @@ fn installed_agent_modules_are_shared_read_only_through_the_launch_broker() {
     let f = Fixture::new();
     let installation = tempfile::tempdir().unwrap();
     let binary = installation.path().join("agent");
-    std::fs::copy(env!("CARGO_BIN_EXE_coloride-acp-test-agent"), &binary).unwrap();
+    std::fs::copy(env!("CARGO_BIN_EXE_hilo-acp-test-agent"), &binary).unwrap();
     let module = installation.path().join("module.txt");
     std::fs::write(&module, "installed code").unwrap();
     let runner = sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).unwrap();
@@ -611,7 +611,7 @@ fn terminal_lifecycle_replays_brokered_output_without_executing_again() {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
 fn real_environment_is_empty_of_configured_secrets_and_direct_writes_are_blocked() {
-    std::env::set_var("COLORIDE_TEST_BYOK_SECRET", "never-pass-this");
+    std::env::set_var("HILO_TEST_BYOK_SECRET", "never-pass-this");
     for mode in ["environment", "direct-write", "direct-read"] {
         let f = Fixture::new();
         let (mut session, rx) = f.start(mode);
@@ -619,7 +619,7 @@ fn real_environment_is_empty_of_configured_secrets_and_direct_writes_are_blocked
             if let AcpEvent::Update { update } = next(&rx) {
                 let text = update["content"]["text"].as_str().unwrap();
                 if mode == "environment" {
-                    assert!(!text.contains("COLORIDE_TEST_BYOK_SECRET"));
+                    assert!(!text.contains("HILO_TEST_BYOK_SECRET"));
                     assert!(!text.contains("HOME"));
                 } else if mode == "direct-read" {
                     assert_eq!(text, "direct-read=true");
@@ -632,7 +632,7 @@ fn real_environment_is_empty_of_configured_secrets_and_direct_writes_are_blocked
         session.stop();
         assert_eq!(f.disk(), "disk text");
     }
-    std::env::remove_var("COLORIDE_TEST_BYOK_SECRET");
+    std::env::remove_var("HILO_TEST_BYOK_SECRET");
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]

@@ -11,7 +11,7 @@ import type {
   DiagnosticSeverity,
   DiagnosticSource,
   DocumentDiagnostics,
-} from "@coloride/protocol-types";
+} from "@hilo/protocol-types";
 
 /** A diagnostic placed in the text the editor currently shows (UTF-16 offsets). */
 export interface EditorDiagnostic {
@@ -143,9 +143,9 @@ interface DiagnosticsState {
 }
 
 const SEVERITY_CLASS: Record<DiagnosticSeverity, string> = {
-  Error: "cm-coloride-diagnostic-error",
-  Warning: "cm-coloride-diagnostic-warning",
-  Information: "cm-coloride-diagnostic-info",
+  Error: "cm-hilo-diagnostic-error",
+  Warning: "cm-hilo-diagnostic-warning",
+  Information: "cm-hilo-diagnostic-info",
 };
 
 function buildDecorations(doc: Text, diagnostics: readonly EditorDiagnostic[]): DecorationSet {
@@ -165,7 +165,7 @@ function buildDecorations(doc: Text, diagnostics: readonly EditorDiagnostic[]): 
       from,
       to,
       Decoration.mark({
-        class: `cm-coloride-diagnostic ${SEVERITY_CLASS[diagnostic.severity]}`,
+        class: `cm-hilo-diagnostic ${SEVERITY_CLASS[diagnostic.severity]}`,
         attributes: {
           title: `${diagnostic.message}${diagnostic.code ? ` (${diagnostic.source} ${diagnostic.code})` : ""}`,
         },
@@ -218,17 +218,17 @@ export const diagnosticsField = StateField.define<DiagnosticsState>({
 });
 
 const diagnosticsTheme = EditorView.baseTheme({
-  ".cm-coloride-diagnostic": {
+  ".cm-hilo-diagnostic": {
     textDecorationLine: "underline",
     textDecorationStyle: "wavy",
     textDecorationSkipInk: "none",
     textUnderlineOffset: "3px",
   },
-  ".cm-coloride-diagnostic-error": { textDecorationColor: "#f14c4c" },
-  ".cm-coloride-diagnostic-warning": { textDecorationColor: "#cca700" },
-  ".cm-coloride-diagnostic-info": { textDecorationColor: "#3794ff" },
+  ".cm-hilo-diagnostic-error": { textDecorationColor: "#f14c4c" },
+  ".cm-hilo-diagnostic-warning": { textDecorationColor: "#cca700" },
+  ".cm-hilo-diagnostic-info": { textDecorationColor: "#3794ff" },
 });
 
-export function colorideDiagnostics(): Extension {
+export function hiloDiagnostics(): Extension {
   return [diagnosticsField, diagnosticsTheme];
 }

@@ -50,7 +50,7 @@ describe("tool card presentation", () => {
     expect(view.card.header.disabled).toBe(true);
     expect(view.card.header.getAttribute("aria-expanded")).toBe("false");
     expect(view.card.body.childElementCount).toBe(0);
-    (element.querySelector(".coloride-agent-location") as HTMLButtonElement).click();
+    (element.querySelector(".hilo-agent-location") as HTMLButtonElement).click();
     expect(open).toHaveBeenCalledWith("src/a.ts", 8);
     expect(element.querySelector("svg")).not.toBeNull();
   });
@@ -78,10 +78,10 @@ describe("tool card presentation", () => {
     expect(view.card.header.getAttribute("aria-expanded")).toBe("false");
     expect(view.card.body.parentElement?.parentElement?.inert).toBe(true);
     view.card.header.click();
-    const output = element.querySelector(".coloride-agent-command-output") as HTMLElement;
+    const output = element.querySelector(".hilo-agent-command-output") as HTMLElement;
     output.scrollTop = 24;
     view.update({ ...tool, output: "more" }, vi.fn());
-    expect(element.querySelector(".coloride-agent-command-output")?.scrollTop).toBe(24);
+    expect(element.querySelector(".hilo-agent-command-output")?.scrollTop).toBe(24);
     view.update({ ...tool, status: "denied" }, vi.fn());
     expect(element.textContent).toContain("Stopped");
     element.remove();
@@ -100,7 +100,7 @@ describe("tool card presentation", () => {
     expect(element.querySelector("dd")?.textContent).toContain("<img");
     expect(element.querySelector("img, script")).toBeNull();
     view.update(makeTool({ kind: "search", output: "src/a.ts\nsrc/b.ts" }), vi.fn());
-    expect(element.querySelector(".coloride-agent-list")?.textContent).toContain("src/b.ts");
+    expect(element.querySelector(".hilo-agent-list")?.textContent).toContain("src/b.ts");
   });
   it("renders read-only colored proposals with counters and accurate numbers after gaps", () => {
     const oldText = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n");
@@ -111,7 +111,7 @@ describe("tool card presentation", () => {
     expect(view.card.extra.textContent).toBe("+2−1");
     expect(element.textContent).toContain("proposal only");
     const removed = element.querySelector('[data-kind="-"]');
-    expect(removed?.querySelector(".coloride-agent-line-number")?.textContent).toBe("12");
+    expect(removed?.querySelector(".hilo-agent-line-number")?.textContent).toBe("12");
     expect(element.querySelector("[contenteditable]")).toBeNull();
     expect(diffView(document, diffLines("same", "same"), "a").textContent).toBe("No changes");
   });
@@ -225,10 +225,8 @@ describe("conversation extras", () => {
     document.body.append(root);
     const view = new ConversationView();
     view.render(root, state, button, actions());
-    const header = root.querySelector(".coloride-agent-card-header") as HTMLButtonElement;
-    const allow = root.querySelector(
-      ".coloride-agent-permission-actions button",
-    ) as HTMLButtonElement;
+    const header = root.querySelector(".hilo-agent-card-header") as HTMLButtonElement;
+    const allow = root.querySelector(".hilo-agent-permission-actions button") as HTMLButtonElement;
     allow.focus();
     view.render(
       root,
@@ -265,7 +263,7 @@ describe("conversation extras", () => {
     );
     expect(permission?.dataset.status).toBe("pending");
     const choices = permission?.querySelectorAll<HTMLButtonElement>(
-      ".coloride-agent-permission-actions button",
+      ".hilo-agent-permission-actions button",
     );
     choices?.[0]?.click();
     choices?.[1]?.click();
@@ -298,15 +296,15 @@ describe("turn summary and permissions", () => {
     ];
     const view = new ConversationView();
     const running = view.elements(document, stateOf(tools, { busy: true }), button, actions());
-    expect(running.some((el) => el.classList.contains("coloride-agent-changes"))).toBe(false);
+    expect(running.some((el) => el.classList.contains("hilo-agent-changes"))).toBe(false);
     const done = view.elements(document, stateOf(tools, { busy: false }), button, actions());
     const summary = done.at(-1) as HTMLElement;
-    expect(summary.classList.contains("coloride-agent-changes")).toBe(true);
+    expect(summary.classList.contains("hilo-agent-changes")).toBe(true);
     expect(summary.textContent).toContain("2 files changed");
-    expect(summary.querySelectorAll(".coloride-agent-change-file")).toHaveLength(2);
+    expect(summary.querySelectorAll(".hilo-agent-change-file")).toHaveLength(2);
     const open = actions();
     const again = new ConversationView().elements(document, stateOf(tools), button, open);
-    (again.at(-1)?.querySelector(".coloride-agent-change-file") as HTMLButtonElement).click();
+    (again.at(-1)?.querySelector(".hilo-agent-change-file") as HTMLButtonElement).click();
     expect(open.openLocation).toHaveBeenCalledWith("src/a.ts", 1);
   });
   it("does not summarize a single file", () => {
@@ -316,14 +314,14 @@ describe("turn summary and permissions", () => {
       button,
       actions(),
     );
-    expect(shown.some((el) => el.classList.contains("coloride-agent-changes"))).toBe(false);
+    expect(shown.some((el) => el.classList.contains("hilo-agent-changes"))).toBe(false);
   });
   it("draws a permission right under the tool that waits for it", () => {
     const waiting = makeTool({ id: "run", kind: "execute", status: "pending", command: "ls" });
     const later = makeTool({ id: "later", kind: "execute", status: "done", command: "pwd" });
     const state = stateOf([waiting, later], { permissions: [{ id: "p", reason: "Run ls" }] });
     const shown = new ConversationView().elements(document, state, button, actions());
-    expect(shown[1]?.classList.contains("coloride-agent-permission")).toBe(true);
+    expect(shown[1]?.classList.contains("hilo-agent-permission")).toBe(true);
     expect(shown[1]?.hasAttribute("data-attached")).toBe(true);
     const alone = new ConversationView().elements(
       document,

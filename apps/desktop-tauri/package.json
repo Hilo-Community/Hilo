@@ -1,14 +1,14 @@
 {
-  "name": "@coloride/desktop-tauri",
+  "name": "@hilo/desktop-tauri",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "dependencies": {
     "@tauri-apps/api": "2.12.4",
     "@tauri-apps/plugin-dialog": "2.8.4",
-    "@coloride/editor-cm6": "workspace:*",
-    "@coloride/protocol-types": "workspace:*",
-    "@coloride/web-ui": "workspace:*",
+    "@hilo/editor-cm6": "workspace:*",
+    "@hilo/protocol-types": "workspace:*",
+    "@hilo/web-ui": "workspace:*",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },

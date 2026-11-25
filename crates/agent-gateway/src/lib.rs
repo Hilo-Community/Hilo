@@ -80,7 +80,7 @@ impl GatewayEndpoint {
         )
     }
     pub fn proxy_url(&self) -> String {
-        format!("http://coloride:{}@{}", self.token, self.address)
+        format!("http://hilo:{}@{}", self.token, self.address)
     }
 }
 
@@ -235,9 +235,7 @@ fn response(status: StatusCode, message: &'static str) -> Response<Body> {
 }
 
 fn session_token(headers: &HeaderMap, expected: &str) -> bool {
-    let direct = headers
-        .get("x-coloride-session")
-        .and_then(|v| v.to_str().ok());
+    let direct = headers.get("x-hilo-session").and_then(|v| v.to_str().ok());
     let bearer = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
@@ -259,7 +257,7 @@ fn proxy_token(headers: &HeaderMap, expected: &str) -> bool {
     let Ok(value) = base64::engine::general_purpose::STANDARD.decode(encoded) else {
         return false;
     };
-    let expected = format!("coloride:{expected}");
+    let expected = format!("hilo:{expected}");
     constant_time_eq::constant_time_eq(&value, expected.as_bytes())
 }
 
@@ -383,7 +381,7 @@ fn strip_headers(headers: &mut HeaderMap) {
         "authorization",
         "x-api-key",
         "x-goog-api-key",
-        "x-coloride-session",
+        "x-hilo-session",
         "cookie",
         "set-cookie",
     ] {
@@ -490,7 +488,7 @@ mod tests {
                 let release = source_release.clone();
                 async move {
                     assert_eq!(request.headers()["authorization"], "Bearer host-only-key");
-                    assert!(request.headers().get("x-coloride-session").is_none());
+                    assert!(request.headers().get("x-hilo-session").is_none());
                     assert!(request.headers().get("cookie").is_none());
                     let first = futures_util::stream::once(async {
                         Ok::<_, io::Error>(Frame::data(Bytes::from_static(b"data: first\n\n")))
@@ -545,7 +543,7 @@ mod tests {
             .unwrap()
             .get(format!("http://{address}/openai/responses"))
             .header("authorization", "Bearer session-only-token")
-            .header("x-coloride-session", "session-only-token")
+            .header("x-hilo-session", "session-only-token")
             .header("cookie", "must-not-forward")
             .send()
             .await
@@ -587,13 +585,13 @@ mod tests {
         for header in [
             "",
             "Authorization: Bearer wrong\r\n",
-            "x-coloride-session: fake-provider-secret\r\n",
+            "x-hilo-session: fake-provider-secret\r\n",
         ] {
             let response = exchange(endpoint, &format!("GET /openai/models HTTP/1.1\r\nHost: localhost\r\n{header}Connection: close\r\n\r\n"));
             assert!(response.starts_with("HTTP/1.1 401"), "{response}");
             assert!(!response.contains("fake-provider-secret"));
         }
-        let response = exchange(endpoint, &format!("GET /anthropic/messages HTTP/1.1\r\nHost: localhost\r\nx-coloride-session: {}\r\nConnection: close\r\n\r\n", endpoint.token));
+        let response = exchange(endpoint, &format!("GET /anthropic/messages HTTP/1.1\r\nHost: localhost\r\nx-hilo-session: {}\r\nConnection: close\r\n\r\n", endpoint.token));
         assert!(response.starts_with("HTTP/1.1 403"), "{response}");
         let address = endpoint.address;
         drop(gateway);
@@ -607,8 +605,8 @@ mod tests {
         })
         .unwrap();
         let endpoint = gateway.endpoint();
-        let auth = base64::engine::general_purpose::STANDARD
-            .encode(format!("coloride:{}", endpoint.token));
+        let auth =
+            base64::engine::general_purpose::STANDARD.encode(format!("hilo:{}", endpoint.token));
         for target in [
             "evil.example.com:443",
             "127.0.0.1:443",
@@ -658,7 +656,7 @@ mod tests {
             "authorization",
             "x-api-key",
             "x-goog-api-key",
-            "x-coloride-session",
+            "x-hilo-session",
             "proxy-authorization",
             "cookie",
             "leaked-hop-header",
