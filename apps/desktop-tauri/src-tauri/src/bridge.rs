@@ -122,6 +122,11 @@ impl DesktopBinaryEditorBridge {
     /// Like `apply_binary_transaction`, then hands the applied delta to `observe`: the text
     /// before the transaction, its changes, and the session after it. This is how language
     /// servers are fed from the `ropey` buffer without re-reading the document.
+    ///
+    /// Writes to the WAL in group-commit mode (`apply_transaction_unflushed`): the keystroke
+    /// returns as soon as the change is in memory and written to the OS page cache, without
+    /// waiting for an `fsync`. A background task durably flushes the journal shortly after
+    /// (see `DesktopBinaryEditorBridge::flush_journal`); a save or app exit flushes it first.
     pub fn apply_binary_transaction_observed(
         &mut self,
         tx_bytes: &[u8],
@@ -144,7 +149,7 @@ impl DesktopBinaryEditorBridge {
             tx.session_generation,
             tx.changes.clone(),
         );
-        let snapshot = self.documents.apply_transaction(tx)?;
+        let snapshot = self.documents.apply_transaction_unflushed(tx)?;
         if let (Some(rope_before), Ok(session)) = (
             rope_before,
             self.documents.session(&document_id, session_generation),
@@ -154,6 +159,14 @@ impl DesktopBinaryEditorBridge {
         encode_editor_snapshot_ipc(&snapshot).map_err(|error| {
             DocumentError::EditorIpc(format!("EditorSnapshot IPC encode failed: {error}"))
         })
+    }
+
+    /// Durably `fsync` any WAL entries written since the last flush, advancing every session's
+    /// `journaled_revision`. Run on a short timer in the background and before app exit, so a
+    /// keystroke never blocks on disk I/O.
+    pub fn flush_journal(&mut self) -> Result<(), DocumentError> {
+        self.documents.flush_journal()?;
+        Ok(())
     }
 
     #[must_use]
