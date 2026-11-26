@@ -106,6 +106,16 @@ export function createChatActions(ctx: StoreContext): ChatActions {
     if (chatState.activeChatId !== chatId)
       zone3.setState((prev) => ({ ...prev, activeChatId: chatId }));
 
+    // Looking at the chat dismisses what it only had to report (a finished turn, an error, or a
+    // terminal's finished-agent mark). A running turn or a pending permission is still current.
+    if (
+      targetChat.kind === "agent"
+        ? targetChat.statusBadge === "done" || targetChat.statusBadge === "error"
+        : targetChat.detectedAgentFinished === true
+    ) {
+      ctx.bundle().clearChatStatusBadge(chatId);
+    }
+
     // A shell has no document or validation state: the inspector keeps what it shows.
     if (targetChat.kind === "terminal") return Math.max(0, performance.now() - t0);
 

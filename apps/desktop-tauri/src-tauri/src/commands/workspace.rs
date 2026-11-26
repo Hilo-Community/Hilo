@@ -101,18 +101,39 @@ pub(crate) fn load_workspace(
         .lock()
         .map_err(|_| "context engine lock poisoned".to_string())?;
     // The previous workspace's gate is closed first: anything still holding it (a language
-    // server supervisor, a pending trust prompt) can no longer launch a process. The new
-    // workspace starts from its persisted decision, untrusted by default.
+    // server supervisor, a pending trust prompt) can no longer launch a process. The exception is
+    // a workspace that still owns an agent or a terminal: those keep running for their own
+    // project, so its gate is retained (open) until they end or the project is removed. The new
+    // workspace starts from its persisted decision, untrusted by default, unless its own gate is
+    // one that was retained: then that same gate (and trust state) is reused.
     let mut trust_gate = state
         .trust_gate
         .lock()
         .map_err(|_| "workspace trust lock poisoned".to_string())?;
+    let mut retained = state
+        .retained_gates
+        .lock()
+        .map_err(|_| "retained gates lock poisoned".to_string())?;
     if let Some(previous) = trust_gate.take() {
-        previous.close();
+        if state.owns_sessions(previous.workspace_root()) {
+            retained.insert(previous.workspace_root().to_path_buf(), previous);
+        } else {
+            previous.close();
+        }
     }
-    *trust_gate = host_core::WorkspaceTrustGate::open(state.trust_store_path(), &canonical)
-        .map_err(|error| tracing::warn!(%error, "workspace stays untrusted"))
-        .ok();
+    retained.retain(|root, gate| {
+        let still_owns_sessions = state.owns_sessions(root);
+        if !still_owns_sessions {
+            gate.close();
+        }
+        still_owns_sessions
+    });
+    *trust_gate = retained.remove(&canonical).or_else(|| {
+        host_core::WorkspaceTrustGate::open(state.trust_store_path(), &canonical)
+            .map_err(|error| tracing::warn!(%error, "workspace stays untrusted"))
+            .ok()
+    });
+    drop(retained);
     // Same for its language servers: stopping them kills their processes. The new workspace
     // gets its own set, which stays idle until it is trusted.
     let mut language_services = state
@@ -123,9 +144,8 @@ pub(crate) fn load_workspace(
         previous.stop();
     }
     state.latest_diagnostics.clear();
-    // Terminals ran in the previous folder, under its trust: they go with it.
-    crate::commands::terminal::close_all_terminals(state);
-    crate::commands::agent::close_all_agents(state);
+    // Agents and terminals stay with their own workspace (see above). Debugging and the language
+    // servers follow the shown one, so the program being debugged ends here.
     crate::commands::debug::stop_debugging(state);
     *language_services = trust_gate.as_ref().map(|gate| {
         std::sync::Arc::new(host_core::LanguageServices::new(
@@ -142,6 +162,39 @@ pub(crate) fn load_workspace(
     *engine = None;
     state.workspace_generation.fetch_add(1, Ordering::SeqCst);
     Ok(nodes)
+}
+
+/// Stops the agents and terminals of the workspace at `root` and closes its retained gate (the
+/// user removed that project). Sessions of other workspaces are not touched.
+pub(crate) fn close_workspace_sessions(state: &DesktopAppState, root: &str) -> Result<(), String> {
+    // A folder that was deleted can no longer be canonicalized; its sessions were registered
+    // under the root as it was then, which is the path the UI still has.
+    let root = PathBuf::from(root)
+        .canonicalize()
+        .unwrap_or_else(|_| PathBuf::from(root));
+    crate::commands::agent::close_agents_of(state, &root);
+    crate::commands::terminal::close_terminals_of(state, &root);
+    if let Some(gate) = state
+        .retained_gates
+        .lock()
+        .map_err(|_| "retained gates lock poisoned".to_string())?
+        .remove(&root)
+    {
+        gate.close();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn close_workspace_sessions_command(
+    app: tauri::AppHandle,
+    root: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        close_workspace_sessions(&app.state::<DesktopAppState>(), &root)
+    })
+    .await
+    .map_err(|error| format!("Closing the project's sessions failed: {error}"))?
 }
 
 fn authorized_workspace_file(
@@ -215,6 +268,28 @@ mod tests {
         assert_eq!(state.workspace_generation.load(Ordering::SeqCst), 1);
         assert!(ensure_context_engine(&state));
         assert!(state.context_engine.lock().unwrap().is_some());
+    }
+
+    #[test]
+    fn a_workspace_without_sessions_closes_its_gate_when_another_is_shown() {
+        let data = tempfile::tempdir().unwrap();
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let state = test_state(data.path());
+
+        load_workspace(&state, first.path().to_str().unwrap()).unwrap();
+        let gate = state.trust_gate.lock().unwrap().clone().unwrap();
+        gate.grant().unwrap();
+        assert_eq!(gate.state(), host_core::WorkspaceTrustState::Trusted);
+
+        // Nothing runs in it: it is closed exactly as before, and nothing is retained.
+        load_workspace(&state, second.path().to_str().unwrap()).unwrap();
+        assert_eq!(gate.state(), host_core::WorkspaceTrustState::Untrusted);
+        assert!(state.retained_gates.lock().unwrap().is_empty());
+        // Coming back opens a fresh gate that starts from the persisted decision.
+        load_workspace(&state, first.path().to_str().unwrap()).unwrap();
+        let reopened = state.trust_gate.lock().unwrap().clone().unwrap();
+        assert_eq!(reopened.state(), host_core::WorkspaceTrustState::Trusted);
     }
 
     #[test]

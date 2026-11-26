@@ -318,6 +318,48 @@ describe("Workspace sidebar", () => {
     expect(stores.navigation.getState().projectPath).toBe("/projects/Website");
   });
 
+  it("ends the sessions that kept running for a project when it is removed, after switching away", async () => {
+    const calls: string[] = [];
+    const switchWorkspace = vi.fn(async (path: string) => {
+      calls.push(`switch:${path}`);
+      return [] as const;
+    });
+    const closeWorkspaceSessions = vi.fn(async (path: string) => {
+      calls.push(`close:${path}`);
+    });
+    const stores = createCockpitStoreBundle();
+    stores.setProjectPath("/projects/one");
+    stores.setProjectPath("/projects/two");
+    const root = document.createElement("aside");
+    const controlsHost = document.createElement("div");
+    const treeHost = document.createElement("div");
+    root.append(controlsHost, treeHost);
+    document.body.appendChild(root);
+    const sidebar = new WorkspaceSidebar({
+      stores,
+      controlsHost,
+      treeHost,
+      switchWorkspace,
+      closeWorkspaceSessions,
+    });
+    cleanup.push(() => {
+      sidebar.destroy();
+      root.remove();
+    });
+    // "/projects/two" is the shown project: the host switches to another one first, so nothing
+    // is closed under the feet of a project that is still on screen.
+    root
+      .querySelector<HTMLButtonElement>(
+        '.sidebar-project[data-project-path="/projects/two"] .sidebar-row--folder .sidebar-more',
+      )
+      ?.click();
+    Array.from(root.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find((item) => item.textContent === "Remove from list")
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelectorAll(".sidebar-project")).toHaveLength(1));
+    expect(calls).toEqual(["switch:/projects/one", "close:/projects/two"]);
+  });
+
   describe("new group in a project", () => {
     const groupTitles = (root: HTMLElement, project: string) =>
       Array.from(

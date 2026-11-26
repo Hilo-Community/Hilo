@@ -24,6 +24,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         // Closing the window with unsaved changes: hold it back and ask the UI first.
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -96,6 +97,7 @@ pub fn run() {
             commands::documents::apply_binary_transaction_command,
             commands::documents::save_document_binary_command,
             commands::workspace::load_workspace_command,
+            commands::workspace::close_workspace_sessions_command,
             commands::workspace::read_workspace_file_command,
             commands::session_cache::load_session_cache_command,
             commands::session_cache::save_session_cache_command,

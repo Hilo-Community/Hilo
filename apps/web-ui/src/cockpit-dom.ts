@@ -1,11 +1,12 @@
 import type { HiloEditorView } from "@hilo/editor-cm6";
 import type { AgentHost } from "./agent/store.js";
+import { type AgentCompletionAlert, watchAgentCompletions } from "./cockpit/agent-completions.js";
+import { askUnsavedPrompt } from "./cockpit/dialogs/unsaved-dialog.js";
 import {
-  TrustBanner,
+  WorkspaceTrust,
   type WorkspaceTrustHost,
   type WorkspaceTrustReport,
-} from "./cockpit/dialogs/trust-banner.js";
-import { askUnsavedPrompt } from "./cockpit/dialogs/unsaved-dialog.js";
+} from "./cockpit/dialogs/workspace-trust.js";
 import { type DebugHost, DebugPanel } from "./cockpit/inspector/debug-panel.js";
 import { Inspector } from "./cockpit/inspector/inspector.js";
 import { ChatGrid } from "./cockpit/panels/chat-grid.js";
@@ -35,17 +36,19 @@ export type {
   DebugHost,
 } from "./cockpit/inspector/debug-panel.js";
 export type {
+  TerminalAgentStatus,
   TerminalHandle,
   TerminalHost,
   TerminalView,
   TerminalViewFactory,
 } from "./cockpit/terminal/terminal-pane.js";
+export type { AgentCompletion, AgentCompletionAlert } from "./cockpit/agent-completions.js";
 export { createXtermView } from "./cockpit/terminal/xterm-view.js";
 export type {
   WorkspaceTrustHost,
   WorkspaceTrustReport,
   WorkspaceTrustState,
-} from "./cockpit/dialogs/trust-banner.js";
+} from "./cockpit/dialogs/workspace-trust.js";
 
 export interface CockpitDomControllerOptions {
   readonly rootContainer: HTMLElement;
@@ -54,6 +57,17 @@ export interface CockpitDomControllerOptions {
   readonly onboardingController?: OnboardingModalController;
   readonly openWorkspace?: () => Promise<readonly CockpitFileTreeNode[] | null>;
   readonly switchWorkspace?: (path: string) => Promise<readonly CockpitFileTreeNode[] | null>;
+  /**
+   * Told whenever an agent finishes its turn (an agent panel, or a recognized agent CLI running in
+   * a terminal), with whether the user was looking at that session: the host plays a sound and,
+   * for a session nobody was watching, shows a notification.
+   */
+  readonly onAgentFinished?: (completion: AgentCompletionAlert) => void;
+  /**
+   * Ends the agents and terminals that keep running for a project while another one is shown.
+   * Called when the user removes that project from the sidebar.
+   */
+  readonly closeWorkspaceSessions?: (path: string) => Promise<void>;
   readonly readWorkspaceFile?: (path: string) => Promise<string>;
   /**
    * Called with how many files have unsaved changes whenever that number changes, so the host
@@ -110,7 +124,7 @@ export class CockpitDomController {
   private readonly sidebar: SidebarPanels;
   private readonly chatGrid: ChatGrid;
   private readonly inspector: Inspector;
-  private readonly trustBanner: TrustBanner | null;
+  private readonly workspaceTrust: WorkspaceTrust | null;
   private readonly terminalAvailable: boolean;
   private readonly layout: ShellLayout;
   private readonly debugPanel: DebugPanel | null;
@@ -184,25 +198,56 @@ export class CockpitDomController {
       },
       ...(options.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
       ...(options.switchWorkspace ? { switchWorkspace: options.switchWorkspace } : {}),
+      ...(options.closeWorkspaceSessions
+        ? { closeWorkspaceSessions: options.closeWorkspaceSessions }
+        : {}),
       ...(options.searchWorkspace ? { searchWorkspace: options.searchWorkspace } : {}),
       // With a terminal host, "New session" opens a terminal, where the user can run an agent.
       newSessionKind: options.terminalHost ? "terminal" : "agent",
       ...(options.agentRegistryHost ? { agentRegistryHost: options.agentRegistryHost } : {}),
       openSettings: () => this.openSettings(),
     });
+    // A folder starts restricted and shows no notice about it: the host's native trust prompt is
+    // asked for when the user first tries to use the folder, i.e. starts a terminal or an agent.
+    this.workspaceTrust = options.workspaceTrust
+      ? new WorkspaceTrust(options.workspaceTrust)
+      : null;
+    const trust = this.workspaceTrust;
+    const baseTerminalHost = options.terminalHost;
+    const terminalHost: TerminalHost | undefined =
+      baseTerminalHost && trust
+        ? {
+            ...baseTerminalHost,
+            open: async (size, onOutput, onExit, onAgentStatus) => {
+              await trust.ensureTrusted();
+              return baseTerminalHost.open(size, onOutput, onExit, onAgentStatus);
+            },
+          }
+        : baseTerminalHost;
+    const baseAgentHost = options.agentHost;
+    const agentHost: AgentHost | undefined =
+      baseAgentHost && trust
+        ? {
+            ...baseAgentHost,
+            start: async (config, onEvent) => {
+              await trust.ensureTrusted();
+              return baseAgentHost.start(config, onEvent);
+            },
+          }
+        : baseAgentHost;
     this.chatGrid = new ChatGrid(
       doc,
       stores,
       this.titleBar.zone3Header,
-      options.terminalHost
+      terminalHost
         ? {
-            host: options.terminalHost,
+            host: terminalHost,
             createView: options.createTerminalView ?? createXtermView,
           }
         : null,
-      options.agentHost
+      agentHost
         ? {
-            host: options.agentHost,
+            host: agentHost,
             openLocation: async (path, line) => {
               await this.openWorkspaceFile(path);
               const view = editorView.getEditorView();
@@ -222,6 +267,7 @@ export class CockpitDomController {
           }
         : undefined,
       options.agentRegistryHost,
+      options.openWorkspace ? () => void this.sidebar.openProject() : undefined,
     );
 
     this.shell = doc.createElement("div");
@@ -260,11 +306,7 @@ export class CockpitDomController {
         })
       : null;
     if (this.debugPanel) this.sidebar.debugSection.prepend(this.debugPanel.element);
-    this.trustBanner = options.workspaceTrust ? new TrustBanner(doc, options.workspaceTrust) : null;
-    if (this.trustBanner) {
-      this.shell.append(this.trustBanner.element);
-      void this.trustBanner.refresh();
-    }
+    void this.workspaceTrust?.refresh();
 
     this.onboardingController.mountModal(this.shell);
     this.renderLayout();
@@ -274,6 +316,13 @@ export class CockpitDomController {
     this.titleBar.recordChatVisit(stores.zone3.getState().activeChatId);
     this.inspector.mountEditor();
 
+    if (options.onAgentFinished) {
+      this.unsubscribers.push(
+        watchAgentCompletions(stores, options.onAgentFinished, (chatId) => {
+          return doc.hasFocus() && stores.zone3.getState().activeChatId === chatId;
+        }),
+      );
+    }
     this.unsubscribers.push(
       bindShellShortcuts(doc, {
         stores,
@@ -289,7 +338,7 @@ export class CockpitDomController {
       // Each folder has its own trust decision: ask again whenever another one is opened.
       stores.navigation.subscribeSelector(
         (state) => state.projectPath,
-        () => void this.trustBanner?.refresh(),
+        () => void this.workspaceTrust?.refresh(),
       ),
       stores.navigation.subscribeSelector(
         (state) => [state.projectPath, state.activeGroupId] as const,
@@ -377,12 +426,12 @@ export class CockpitDomController {
 
   /** Trust decision last reported by the host; null when the cockpit has no trust host. */
   getWorkspaceTrust(): WorkspaceTrustReport | null {
-    return this.trustBanner?.getReport() ?? null;
+    return this.workspaceTrust?.getReport() ?? null;
   }
 
   /** Re-reads the trust decision from the host (after it changed outside the banner). */
   async refreshWorkspaceTrust(): Promise<void> {
-    await this.trustBanner?.refresh();
+    await this.workspaceTrust?.refresh();
   }
 
   /** Shows a project file in Zone 4 (opened from "go to definition", for example). */
@@ -484,7 +533,7 @@ export class CockpitDomController {
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.unsubscribers.length = 0;
     this.settings?.destroy();
-    this.trustBanner?.destroy();
+    this.workspaceTrust?.destroy();
     this.chatGrid.destroy();
     this.inspector.destroy();
     this.sidebar.destroy();

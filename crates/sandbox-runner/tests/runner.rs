@@ -22,6 +22,30 @@ fn runner(sink: &Arc<MemoryAuditSink>) -> OsNativeSandbox<PassthroughEngine> {
     OsNativeSandbox::new(PassthroughEngine, sink.clone()).unwrap()
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn an_unreaped_zombie_is_not_a_surviving_worker() {
+    let mut child = Command::new("/bin/sh")
+        .args(["-c", "exit 0"])
+        .spawn()
+        .unwrap();
+    let pid = child.id();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while is_alive(pid) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    // Keep it unreaped: kill(0) still sees the zombie, while our worker check must not.
+    let os_pid = rustix::process::Pid::from_raw(i32::try_from(pid).unwrap()).unwrap();
+    let exists = rustix::process::test_kill_process(os_pid).is_ok();
+    let alive = is_alive(pid);
+    child.wait().unwrap();
+    assert!(
+        exists,
+        "the positive control must still see the unreaped process"
+    );
+    assert!(!alive, "an unreaped zombie cannot execute work");
+}
+
 #[test]
 fn run_captures_output_and_the_exit_status() {
     let (_dir, root) = worktree();

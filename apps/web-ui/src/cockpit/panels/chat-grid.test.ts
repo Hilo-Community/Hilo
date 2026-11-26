@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { AcpEvent, AgentHandle, AgentHost } from "../../agent/store.js";
 import {
   CockpitDomController,
   type WorkGroup,
@@ -8,7 +9,27 @@ import {
   resolveGroupLayout,
 } from "../../index.js";
 import { type LayoutNode, panelIds } from "../../layout/layout-tree.js";
+import type { AgentRegistryHost, InstalledAgent } from "../../settings/agent-registry.js";
+import { UI_STRINGS } from "../../ui/ui-strings.js";
 import { isMacPlatform } from "./panel-shortcuts.js";
+
+/** Same fake `AgentHost` shape as `agent/agent.test.ts`: records the event callback to drive it. */
+function fakeAgentHost() {
+  let receive: (event: AcpEvent) => void = () => undefined;
+  const handle: AgentHandle = {
+    prompt: vi.fn(async () => undefined),
+    cancel: vi.fn(async () => undefined),
+    stop: vi.fn(async () => undefined),
+    answer: vi.fn(async () => undefined),
+  };
+  const host: AgentHost = {
+    start: vi.fn(async (_, onEvent) => {
+      receive = onEvent;
+      return handle;
+    }),
+  };
+  return { host, handle, emit: (event: AcpEvent) => receive(event) };
+}
 
 /** The header + offers each locally installed agent. */
 async function addSessionFromMenu(root: HTMLElement): Promise<void> {
@@ -278,6 +299,135 @@ describe("@hilo/web-ui — Zone 3 groups and sessions", () => {
     expect(stores.zone3.getState().activeChatId).toBe("chat-5");
     expect(editorView.getStoreSnapshot().mountCount).toBe(1);
     cleanup();
+  });
+
+  it("badges the sidebar and header tab while an agent waits for a permission, then once it " +
+    "finishes, clearing on focus", async () => {
+    // `AgentStore` batches enqueued events on `requestAnimationFrame`; stub it so the test
+    // controls exactly when a batch is flushed (same pattern as `agent/agent.test.ts`).
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      frames.push(cb);
+      return frames.length;
+    });
+    const flush = () => {
+      for (const frame of frames.splice(0)) frame(16);
+    };
+    const settle = async () => {
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    };
+
+    const fake = fakeAgentHost();
+    let open = (_agent: InstalledAgent) => {};
+    const registry: AgentRegistryHost = {
+      list: async () => ({ agents: [], installed: [], origin: "saved", refreshError: null }),
+      install: async () => null,
+      uninstall: async () => {},
+      onOpenRequested: (listener) => {
+        open = listener;
+        return () => {};
+      },
+    };
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const stores = createCockpitStoreBundle();
+    const editorView = new HiloEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const controller = new CockpitDomController({
+      rootContainer: root,
+      stores,
+      editorView,
+      agentHost: fake.host,
+      agentRegistryHost: registry,
+    });
+    open({
+      id: "claude-acp@1",
+      agentId: "claude-acp",
+      name: "Claude Agent",
+      version: "1",
+      distribution: "npm",
+    });
+    await settle();
+    const chatId = stores.zone3.getState().chats.at(-1)?.chatId ?? "";
+    const tabDot = () =>
+      root.querySelector<HTMLElement>(
+        `.hilo-header-tab[data-chat-id="${chatId}"] .hilo-header-tab-status-dot`,
+      );
+    expect(tabDot()?.hidden).toBe(true);
+
+    fake.emit({ type: "message", role: "user", text: "do it" });
+    flush();
+    expect(tabDot()?.hidden).toBe(false);
+    expect(tabDot()?.dataset.status).toBe("running");
+    expect(tabDot()?.querySelector("svg")).not.toBeNull();
+
+    fake.emit({ type: "permission", id: "p1", reason: "run a command", options: [] });
+    flush();
+    expect(tabDot()?.hidden).toBe(false);
+    expect(tabDot()?.dataset.status).toBe("waiting");
+
+    // Answering the permission goes back to "running": the turn keeps going, it is not done yet.
+    const allow = Array.from(
+      root.querySelectorAll<HTMLButtonElement>(".hilo-agent-permission-actions button"),
+    ).find((b) => b.textContent === UI_STRINGS.agent.allow);
+    allow?.click();
+    await settle();
+    expect(tabDot()?.dataset.status).toBe("running");
+
+    fake.emit({ type: "update", update: { sessionUpdate: "turn_complete" } });
+    flush();
+    expect(tabDot()?.hidden).toBe(false);
+    expect(tabDot()?.dataset.status).toBe("done");
+
+    // Looking at the chat dismisses its badge.
+    stores.selectChat(chatId);
+    expect(tabDot()?.hidden).toBe(true);
+
+    vi.unstubAllGlobals();
+    controller.destroy();
+    editorView.destroy();
+    root.remove();
+  });
+
+  it("with no project open the sidebar lists nothing and the empty group offers to open one", async () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const stores = createCockpitStoreBundle({ initialChats: [] });
+    const editorView = new HiloEditorView({
+      initialDocumentId: "src/main.ts",
+      initialContent: "",
+      ipcChannel: new InMemoryBinaryHostBridge(),
+    });
+    const openWorkspace = vi.fn(async () => null);
+    const controller = new CockpitDomController({
+      rootContainer: root,
+      stores,
+      editorView,
+      openWorkspace,
+    });
+    expect(root.querySelectorAll(".sidebar-project")).toHaveLength(0);
+    const visible = Array.from(
+      root.querySelectorAll<HTMLButtonElement>(".hilo-group-empty-add"),
+    ).filter((button) => !button.hidden);
+    expect(visible.map((button) => button.textContent)).toEqual(["Open project"]);
+    visible[0]?.click();
+    expect(openWorkspace).toHaveBeenCalledOnce();
+
+    // Once a project is open its empty group offers a session again.
+    stores.setProjectPath("/projects/one");
+    expect(root.querySelectorAll(".sidebar-project")).toHaveLength(1);
+    expect(
+      Array.from(root.querySelectorAll<HTMLButtonElement>(".hilo-group-empty-add"))
+        .filter((button) => !button.hidden)
+        .map((button) => button.textContent),
+    ).toEqual(["New session"]);
+
+    controller.destroy();
+    editorView.destroy();
+    root.remove();
   });
 
   it("a panel dragged by its header lands on an edge of another panel, or swaps with it", () => {

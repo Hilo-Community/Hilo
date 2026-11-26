@@ -4,18 +4,23 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use host_core::{TerminalEvent, TerminalLaunch, TerminalSession, TerminalSink, TerminalSize};
+use host_core::{
+    TerminalAgentStatus, TerminalEvent, TerminalLaunch, TerminalSession, TerminalSink,
+    TerminalSize, TerminalStatusSink,
+};
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::Manager;
 
-use crate::state::DesktopAppState;
+use crate::state::{DesktopAppState, TerminalEntry};
 
 /// Starts a terminal; `output` receives raw frames, then one empty message when the shell
-/// exits (a real frame always holds at least one byte).
+/// exits (a real frame always holds at least one byte). `status_sink`, when given, reports a
+/// known agent CLI running in the terminal's foreground (Unix only).
 pub(crate) fn open_terminal(
     state: &DesktopAppState,
     size: TerminalSize,
     sink: TerminalSink,
+    status_sink: Option<TerminalStatusSink>,
 ) -> Result<u32, String> {
     let gate = state
         .trust_gate
@@ -23,14 +28,27 @@ pub(crate) fn open_terminal(
         .map_err(|_| "workspace trust lock poisoned".to_string())?
         .clone()
         .ok_or_else(|| "No workspace is open".to_string())?;
-    let session = TerminalSession::spawn(&gate, &TerminalLaunch::default(), size, sink)
-        .map_err(|error| error.to_string())?;
+    let session = TerminalSession::spawn(
+        &gate,
+        &TerminalLaunch::default(),
+        size,
+        sink,
+        status_sink,
+        state.agent_hook_server(),
+    )
+    .map_err(|error| error.to_string())?;
     let id = state.next_terminal_id.fetch_add(1, Ordering::SeqCst);
     state
         .terminals
         .lock()
         .map_err(|_| "terminals lock poisoned".to_string())?
-        .insert(id, Arc::new(session));
+        .insert(
+            id,
+            TerminalEntry {
+                root: gate.workspace_root().to_path_buf(),
+                session: Arc::new(session),
+            },
+        );
     Ok(id)
 }
 
@@ -40,16 +58,27 @@ fn terminal(state: &DesktopAppState, id: u32) -> Result<Arc<TerminalSession>, St
         .lock()
         .map_err(|_| "terminals lock poisoned".to_string())?
         .get(&id)
-        .cloned()
+        .map(|entry| Arc::clone(&entry.session))
         .ok_or_else(|| "This terminal is closed".to_string())
 }
 
-/// Kills every terminal (the workspace was closed, or its trust revoked).
-pub(crate) fn close_all_terminals(state: &DesktopAppState) {
+/// Kills the terminals opened in the workspace at `root` (it was removed, or its trust revoked);
+/// the other workspaces' terminals keep running.
+pub(crate) fn close_terminals_of(state: &DesktopAppState, root: &std::path::Path) {
     let sessions: Vec<_> = state
         .terminals
         .lock()
-        .map(|mut terminals| terminals.drain().map(|(_, session)| session).collect())
+        .map(|mut terminals| {
+            let ids: Vec<u32> = terminals
+                .iter()
+                .filter(|(_, entry)| entry.root == root)
+                .map(|(id, _)| *id)
+                .collect();
+            ids.into_iter()
+                .filter_map(|id| terminals.remove(&id))
+                .map(|entry| entry.session)
+                .collect()
+        })
         .unwrap_or_default();
     for session in sessions {
         session.kill();
@@ -62,6 +91,7 @@ pub async fn terminal_open_command(
     cols: u16,
     rows: u16,
     output: Channel<InvokeResponseBody>,
+    agent_status: Channel<InvokeResponseBody>,
 ) -> Result<u32, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let sink: TerminalSink = Arc::new(move |event| {
@@ -71,10 +101,19 @@ pub async fn terminal_open_command(
             };
             let _ = output.send(InvokeResponseBody::Raw(bytes));
         });
+        let status_sink: TerminalStatusSink = Arc::new(move |status: TerminalAgentStatus| {
+            let payload = serde_json::json!({
+                "agentId": status.agent_id,
+                "busy": status.busy,
+            })
+            .to_string();
+            let _ = agent_status.send(InvokeResponseBody::Json(payload));
+        });
         open_terminal(
             &app.state::<DesktopAppState>(),
             TerminalSize { cols, rows },
             sink,
+            Some(status_sink),
         )
     })
     .await
@@ -111,8 +150,8 @@ pub fn terminal_close_command(state: tauri::State<'_, DesktopAppState>, id: u32)
         .lock()
         .ok()
         .and_then(|mut terminals| terminals.remove(&id));
-    if let Some(session) = session {
-        session.kill();
+    if let Some(entry) = session {
+        entry.session.kill();
     }
 }
 
@@ -125,20 +164,20 @@ mod tests {
     use crate::state::test_state;
 
     #[test]
-    fn terminals_need_trust_and_die_with_their_workspace_or_trust() {
+    fn terminals_need_trust_and_belong_to_their_workspace() {
         let data = tempfile::tempdir().unwrap();
         let workspace = tempfile::tempdir().unwrap();
         let other = tempfile::tempdir().unwrap();
         let state = test_state(data.path());
         let size = TerminalSize { cols: 80, rows: 24 };
         // No workspace, then an untrusted one: refused.
-        assert!(open_terminal(&state, size, Arc::new(|_| {})).is_err());
+        assert!(open_terminal(&state, size, Arc::new(|_| {}), None).is_err());
         load_workspace(&state, workspace.path().to_str().unwrap()).unwrap();
-        assert!(open_terminal(&state, size, Arc::new(|_| {})).is_err());
+        assert!(open_terminal(&state, size, Arc::new(|_| {}), None).is_err());
 
         let gate = state.trust_gate.lock().unwrap().clone().unwrap();
         apply_trust_decision(&gate, true).unwrap();
-        let first = open_terminal(&state, size, Arc::new(|_| {})).unwrap();
+        let first = open_terminal(&state, size, Arc::new(|_| {}), None).unwrap();
         let shell = terminal(&state, first).unwrap();
         // Revoking trust kills it.
         revoke_workspace_trust(&state).unwrap();
@@ -146,12 +185,63 @@ mod tests {
         assert!(shell.has_exited());
 
         apply_trust_decision(&gate, true).unwrap();
-        let second = open_terminal(&state, size, Arc::new(|_| {})).unwrap();
+        let second = open_terminal(&state, size, Arc::new(|_| {}), None).unwrap();
         let shell = terminal(&state, second).unwrap();
-        // Opening another folder kills it too.
+        // Showing another project does not: the shell stays with its own workspace.
         load_workspace(&state, other.path().to_str().unwrap()).unwrap();
+        assert!(terminal(&state, second).is_ok());
+        assert!(!shell.has_exited());
+        assert_eq!(gate.state(), host_core::WorkspaceTrustState::Trusted);
+        // The shown project has its own, untrusted gate: nothing starts there.
+        assert!(open_terminal(&state, size, Arc::new(|_| {}), None).is_err());
+        // Revoking trust of the shown project leaves the other project's shell alone.
+        revoke_workspace_trust(&state).unwrap();
+        assert!(terminal(&state, second).is_ok());
+        assert!(!shell.has_exited());
+
+        // Going back reuses the same gate, still trusted, and the shell is still there.
+        load_workspace(&state, workspace.path().to_str().unwrap()).unwrap();
+        let shown = state.trust_gate.lock().unwrap().clone().unwrap();
+        assert_eq!(shown.workspace_root(), gate.workspace_root());
+        assert_eq!(shown.state(), host_core::WorkspaceTrustState::Trusted);
+        assert!(!shell.has_exited());
+        assert!(state.retained_gates.lock().unwrap().is_empty());
+
+        // Removing the project ends its shell; leaving it for another project would not.
+        load_workspace(&state, other.path().to_str().unwrap()).unwrap();
+        assert!(terminal(&state, second).is_ok());
+        crate::commands::workspace::close_workspace_sessions(
+            &state,
+            workspace.path().to_str().unwrap(),
+        )
+        .unwrap();
         assert!(terminal(&state, second).is_err());
         assert!(shell.has_exited());
+        assert!(state.retained_gates.lock().unwrap().is_empty());
+        assert_eq!(gate.state(), host_core::WorkspaceTrustState::Untrusted);
+    }
+
+    #[test]
+    fn revoking_trust_ends_only_the_shells_of_that_workspace() {
+        let data = tempfile::tempdir().unwrap();
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let state = test_state(data.path());
+        let size = TerminalSize { cols: 80, rows: 24 };
+        load_workspace(&state, first.path().to_str().unwrap()).unwrap();
+        let first_gate = state.trust_gate.lock().unwrap().clone().unwrap();
+        apply_trust_decision(&first_gate, true).unwrap();
+        let in_first = open_terminal(&state, size, Arc::new(|_| {}), None).unwrap();
+        load_workspace(&state, second.path().to_str().unwrap()).unwrap();
+        let second_gate = state.trust_gate.lock().unwrap().clone().unwrap();
+        apply_trust_decision(&second_gate, true).unwrap();
+        let in_second = open_terminal(&state, size, Arc::new(|_| {}), None).unwrap();
+
+        revoke_workspace_trust(&state).unwrap();
+        assert!(terminal(&state, in_second).is_err());
+        assert!(terminal(&state, in_first).is_ok());
+        close_terminals_of(&state, first_gate.workspace_root());
+        assert!(terminal(&state, in_first).is_err());
     }
 }
 
@@ -172,6 +262,6 @@ mod unsupported_platform_tests {
         let gate = state.trust_gate.lock().unwrap().clone().unwrap();
         apply_trust_decision(&gate, true).unwrap();
         let size = TerminalSize { cols: 80, rows: 24 };
-        assert!(open_terminal(&state, size, Arc::new(|_| {})).is_err());
+        assert!(open_terminal(&state, size, Arc::new(|_| {}), None).is_err());
     }
 }

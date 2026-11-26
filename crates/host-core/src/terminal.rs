@@ -3,39 +3,27 @@
 //!
 //! The shell leads its own session and process group (`portable-pty` calls `setsid`), so the
 //! whole job tree is killed with the session, and an [`OrphanWatchdog`] kills it if the Host
-//! dies abruptly.
+//! dies abruptly. On Unix, a known agent CLI running in it is reported too (`agent_status`).
 
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 #[cfg(windows)]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use path_util::plain_path as plain_cwd;
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use thiserror::Error;
 
 use crate::process::{kill_process_group, OrphanWatchdog, SupervisionError};
 use crate::trust::{GatedCapability, TrustError, WorkspaceTrustGate};
 
-/// `\\?\C:\dir` to `C:\dir`: `cmd.exe` rejects the verbatim prefix returned by `canonicalize`
-/// ("UNC paths are not supported. Defaulting to Windows directory").
-fn plain_cwd(path: &Path) -> PathBuf {
-    if let Some(text) = path.to_str() {
-        if let Some(rest) = text.strip_prefix(r"\\?\") {
-            let bytes = rest.as_bytes();
-            if bytes.len() >= 3
-                && bytes[0].is_ascii_alphabetic()
-                && bytes[1] == b':'
-                && bytes[2] == b'\\'
-            {
-                return PathBuf::from(rest);
-            }
-        }
-    }
-    path.to_path_buf()
-}
+#[cfg(unix)]
+mod agent_status;
+#[cfg(unix)]
+mod osc_title;
 
 /// Output is sent at most once per frame (`AGENTS.md`: 16 ms stream batching).
 pub const TERMINAL_FRAME: Duration = Duration::from_millis(16);
@@ -83,6 +71,22 @@ pub enum TerminalEvent {
 
 pub type TerminalSink = Arc<dyn Fn(TerminalEvent) + Send + Sync>;
 
+/// Whether a known agent CLI (not the shell itself) is the terminal's foreground job, and
+/// whether it looks busy. Unix only (`tcgetpgrp` has no Windows equivalent); on other platforms
+/// this is never reported.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TerminalAgentStatus {
+    pub agent_id: Option<String>,
+    pub busy: bool,
+}
+
+pub type TerminalStatusSink = Arc<dyn Fn(TerminalAgentStatus) + Send + Sync>;
+
+/// The pty, shared with the threads that outlive a call (`None` once closed, on Windows).
+type SharedMaster = Arc<Mutex<Option<Box<dyn MasterPty + Send>>>>;
+/// The shell process, shared with the threads that watch it.
+type SharedChild = Arc<Mutex<Box<dyn Child + Send + Sync>>>;
+
 /// What to run. `program: None` is the user's login shell.
 #[derive(Debug, Clone, Default)]
 pub struct TerminalLaunch {
@@ -92,10 +96,12 @@ pub struct TerminalLaunch {
 
 pub struct TerminalSession {
     writer: Mutex<Box<dyn Write + Send>>,
-    master: Arc<Mutex<Option<Box<dyn MasterPty + Send>>>>,
-    child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
+    master: SharedMaster,
+    child: SharedChild,
     watchdog: Mutex<Option<OrphanWatchdog>>,
     pid: u32,
+    #[cfg(unix)]
+    observed: Option<agent_status::ObservedOutput>,
 }
 
 impl std::fmt::Debug for TerminalSession {
@@ -114,11 +120,19 @@ fn lock<T: ?Sized>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 impl TerminalSession {
     /// Starts a shell in the workspace root. Refused unless the workspace is trusted.
+    ///
+    /// `status_sink`, when given, is told whenever a known agent CLI becomes (or stops being)
+    /// the terminal's foreground job, and whenever its busy/idle guess changes. Unix only; on
+    /// other platforms it is accepted but never called.
     pub fn spawn(
         gate: &WorkspaceTrustGate,
         launch: &TerminalLaunch,
         size: TerminalSize,
         sink: TerminalSink,
+        #[cfg_attr(not(unix), allow(unused_variables))] status_sink: Option<TerminalStatusSink>,
+        #[cfg_attr(not(unix), allow(unused_variables))] hook_server: Option<
+            Arc<crate::agent_hooks::AgentHookServer>,
+        >,
     ) -> Result<Self, TerminalError> {
         gate.authorize(GatedCapability::Terminal)?;
         let pair = native_pty_system().openpty(size.pty()).map_err(pty_error)?;
@@ -134,6 +148,13 @@ impl TerminalSession {
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
         command.env("TERM_PROGRAM", "Hilo");
+        #[cfg(unix)]
+        let agent_status = agent_status::AgentStatusSetup::prepare(
+            status_sink,
+            hook_server.as_deref(),
+            gate.workspace_root(),
+            &mut command,
+        );
         // Trust may have been revoked while the pty was being opened.
         gate.authorize(GatedCapability::Terminal)?;
         let mut child = pair.slave.spawn_command(command).map_err(pty_error)?;
@@ -170,14 +191,24 @@ impl TerminalSession {
         }
         let master = Arc::new(Mutex::new(Some(pair.master)));
         let child = Arc::new(Mutex::new(child));
+        #[cfg(unix)]
+        let observed = agent_status
+            .as_ref()
+            .map(agent_status::AgentStatusSetup::observer);
         #[cfg(windows)]
         let active = Arc::new(AtomicBool::new(false));
         spawn_output_pump(
             reader,
             sink,
+            #[cfg(unix)]
+            observed.clone(),
             #[cfg(windows)]
             Arc::clone(&active),
         );
+        #[cfg(unix)]
+        if let Some(agent_status) = agent_status {
+            agent_status.start(Arc::clone(&master), Arc::clone(&child), pid);
+        }
         #[cfg(windows)]
         {
             let child = Arc::clone(&child);
@@ -203,7 +234,17 @@ impl TerminalSession {
             child,
             watchdog: Mutex::new(Some(watchdog)),
             pid,
+            #[cfg(unix)]
+            observed,
         })
+    }
+
+    /// The pid of the pty's current foreground process group, when it differs from the shell's
+    /// own (i.e. a foreground job is running). Unix only.
+    #[cfg(unix)]
+    #[must_use]
+    pub fn foreground_pgid(&self) -> Option<i32> {
+        foreground_pgid_of(&self.master)
     }
 
     /// OS process id of the shell, which is also its process group id.
@@ -214,6 +255,10 @@ impl TerminalSession {
 
     /// Sends keystrokes (or pasted text) to the shell.
     pub fn write(&self, bytes: &[u8]) -> Result<(), TerminalError> {
+        #[cfg(unix)]
+        if let Some(observed) = &self.observed {
+            observed.record_input(bytes);
+        }
         let mut writer = lock(&self.writer);
         writer.write_all(bytes).map_err(pty_error)?;
         writer.flush().map_err(pty_error)
@@ -266,6 +311,7 @@ impl Drop for TerminalSession {
 fn spawn_output_pump(
     mut reader: Box<dyn Read + Send>,
     sink: TerminalSink,
+    #[cfg(unix)] observed: Option<agent_status::ObservedOutput>,
     #[cfg(windows)] active: Arc<AtomicBool>,
 ) {
     let (chunks, received) = mpsc::channel::<Vec<u8>>();
@@ -312,6 +358,10 @@ fn spawn_output_pump(
                     std::thread::sleep(left);
                 }
             }
+            #[cfg(unix)]
+            if let Some(observed) = &observed {
+                observed.record(&frame);
+            }
             sink(TerminalEvent::Output(frame));
             last_sent = Some(Instant::now());
             if ended {
@@ -320,4 +370,11 @@ fn spawn_output_pump(
         }
         sink(TerminalEvent::Exited);
     });
+}
+
+#[cfg(unix)]
+fn foreground_pgid_of(master: &SharedMaster) -> Option<i32> {
+    let guard = lock(master);
+    let master = guard.as_ref()?;
+    master.process_group_leader()
 }

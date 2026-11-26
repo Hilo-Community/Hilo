@@ -70,6 +70,8 @@ fn open(
         Arc::new(move |event| {
             let _ = sender.lock().unwrap().send((Instant::now(), event));
         }),
+        None,
+        None,
     )
     .unwrap();
     (session, events)
@@ -127,7 +129,14 @@ fn wait_until_dead(pid: u32) -> bool {
 fn an_untrusted_workspace_gets_no_terminal() {
     let dir = tempfile::tempdir().unwrap();
     let gate = gate(dir.path(), false);
-    let refused = TerminalSession::spawn(&gate, &TerminalLaunch::default(), SIZE, Arc::new(|_| {}));
+    let refused = TerminalSession::spawn(
+        &gate,
+        &TerminalLaunch::default(),
+        SIZE,
+        Arc::new(|_| {}),
+        None,
+        None,
+    );
     assert!(matches!(
         refused,
         Err(host_core::TerminalError::Trust(TrustError::Untrusted {
@@ -159,6 +168,32 @@ fn keystrokes_reach_the_shell_in_the_workspace_and_its_output_comes_back() {
         .unwrap();
     session.write(b"stty size\n").unwrap();
     assert!(read_until(&events, "41 132").contains("41 132"));
+}
+
+/// The terminal agent-status poller's foundation: knowing when something other than the shell
+/// itself is in the pty's foreground.
+#[cfg(unix)]
+#[test]
+fn foreground_pgid_differs_from_the_shell_while_a_job_runs_in_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let gate = gate(dir.path(), true);
+    let (session, events) = open(&gate, &sh("exec /bin/sh -i"));
+    session.write(b"echo ready\n").unwrap();
+    let _ = read_until(&events, "ready");
+    // Idle at its own prompt: the foreground process group is the shell's.
+    assert_eq!(session.foreground_pgid(), Some(session.process_id() as i32));
+
+    session.write(b"sleep 5\n").unwrap();
+    let saw_foreground_job = (0..60).any(|_| {
+        std::thread::sleep(Duration::from_millis(50));
+        session
+            .foreground_pgid()
+            .is_some_and(|pgid| pgid != session.process_id() as i32)
+    });
+    assert!(
+        saw_foreground_job,
+        "expected `sleep` to become the foreground job"
+    );
 }
 
 #[cfg(windows)]

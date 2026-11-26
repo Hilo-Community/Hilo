@@ -42,7 +42,8 @@ pub(crate) fn workspace_trust(state: &DesktopAppState) -> Result<WorkspaceTrustR
 }
 
 /// Applies the user's answer to the gate that was open when the question was asked. If another
-/// workspace was opened meanwhile that gate is closed, and the answer never reaches the new one.
+/// workspace was opened meanwhile, the answer never reaches the new one: it stays with that gate
+/// (closed, or retained for the sessions of its own workspace).
 pub(crate) fn apply_trust_decision(
     gate: &WorkspaceTrustGate,
     approved: bool,
@@ -63,8 +64,9 @@ pub(crate) fn revoke_workspace_trust(
         if let Some(services) = state.language_services() {
             services.stop();
         }
-        crate::commands::terminal::close_all_terminals(state);
-        crate::commands::agent::close_all_agents(state);
+        // Only this workspace's sessions: other projects keep their own trust decision.
+        crate::commands::terminal::close_terminals_of(state, gate.workspace_root());
+        crate::commands::agent::close_agents_of(state, gate.workspace_root());
         crate::commands::debug::stop_debugging(state);
         revoked.map_err(|error| error.to_string())?;
     }

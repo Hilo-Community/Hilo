@@ -10,6 +10,7 @@ description = "Hilo Deterministic Judge & Orchestrator: persistent state machine
 workspace = true
 
 [dependencies]
+path-util.workspace = true
 host-core.workspace = true
 context-engine.workspace = true
 sandbox-runner.workspace = true

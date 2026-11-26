@@ -1,4 +1,4 @@
-//! Real-process assertions without depending on an external process-listing executable.
+//! Real-process assertions, including zombies (using procfs on Linux and ps on macOS).
 #![allow(dead_code)]
 
 #[cfg(unix)]
@@ -24,6 +24,23 @@ pub fn is_alive(pid: u32) -> bool {
                     .rsplit_once(')')
                     .is_some_and(|(_, rest)| rest.trim_start().starts_with('Z'))
                 {
+                    return false;
+                }
+            }
+            #[cfg(target_os = "macos")]
+            {
+                let output = std::process::Command::new("/bin/ps")
+                    .args(["-o", "stat=", "-p", &pid.as_raw_nonzero().to_string()])
+                    .output()
+                    .expect("query process state with ps");
+                let state = String::from_utf8_lossy(&output.stdout);
+                assert!(
+                    output.status.success()
+                        || (output.status.code() == Some(1) && output.stderr.is_empty()),
+                    "ps failed: {output:?}"
+                );
+                // A process that disappeared between kill(0) and ps is also dead.
+                if state.trim().is_empty() || state.trim_start().starts_with('Z') {
                     return false;
                 }
             }

@@ -28,6 +28,8 @@ pub enum DebugError {
     Io(String),
     #[error("the debug adapter did not start: {0}")]
     AdapterStart(String),
+    #[error("debug adapter process exited: {detail}")]
+    ProcessExited { detail: String },
     #[error("debug adapter disconnected")]
     Disconnected,
     #[error("debug adapter did not answer `{command}` in time")]
@@ -48,7 +50,23 @@ impl From<LspError> for DebugError {
     fn from(error: LspError) -> Self {
         match error {
             LspError::Trust(error) => Self::Trust(error),
+            LspError::ProcessExited { detail } => Self::ProcessExited { detail },
             other => Self::AdapterStart(other.to_string()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn adapter_exit_keeps_its_diagnostic_and_error_kind() {
+        let error = DebugError::from(LspError::ProcessExited {
+            detail: "exit 1: missing runtime".into(),
+        });
+        assert!(
+            matches!(error, DebugError::ProcessExited { ref detail } if detail == "exit 1: missing runtime")
+        );
     }
 }

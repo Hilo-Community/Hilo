@@ -8,6 +8,7 @@ use std::process::Command;
 use std::time::Duration;
 
 use crate::process::run_bounded;
+pub(crate) use path_util::plain_path;
 
 /// Lowest major version agents are expected to run with.
 pub const MIN_NODE_MAJOR: u32 = 22;
@@ -50,24 +51,6 @@ impl NodeToolchain {
         }
         Ok(command)
     }
-}
-
-/// `\\?\C:\dir` to `C:\dir`: Node.js on Windows fails in `fs.realpathSync` (`EISDIR, lstat 'C:'`)
-/// when its entry script argument uses the verbatim `\\?\` prefix returned by `canonicalize`.
-pub(crate) fn plain_path(path: PathBuf) -> PathBuf {
-    if let Some(text) = path.to_str() {
-        if let Some(rest) = text.strip_prefix(r"\\?\") {
-            let bytes = rest.as_bytes();
-            if bytes.len() >= 3
-                && bytes[0].is_ascii_alphabetic()
-                && bytes[1] == b':'
-                && bytes[2] == b'\\'
-            {
-                return PathBuf::from(rest);
-            }
-        }
-    }
-    path
 }
 
 /// The environment of this process without what would redirect Node, with Node's folder first
@@ -180,7 +163,7 @@ fn probe(node: &Path) -> Result<u32, String> {
 fn npm_for(node: &Path) -> (Option<PathBuf>, Option<PathBuf>) {
     let real = std::fs::canonicalize(node)
         .map(plain_path)
-        .unwrap_or_else(|_| plain_path(node.to_path_buf()));
+        .unwrap_or_else(|_| plain_path(node));
     let real_dir = real.parent().map(Path::to_path_buf).unwrap_or_default();
     let cli = [
         // Unix: <prefix>/bin/node and <prefix>/lib/node_modules/npm
@@ -202,7 +185,7 @@ fn npm_for(node: &Path) -> (Option<PathBuf>, Option<PathBuf>) {
     .find(|candidate| candidate.is_file())
     .and_then(|candidate| std::fs::canonicalize(candidate).ok())
     .map(plain_path);
-    let dir = plain_path(node.to_path_buf())
+    let dir = plain_path(node)
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_default();

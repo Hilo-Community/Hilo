@@ -54,11 +54,47 @@
   .hilo-header-tab:has(+ .hilo-header-tab:hover)::after {
     display: none;
   }
+  .hilo-header-tab-icon-wrap {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+  }
   .hilo-header-tab-icon {
     display: inline-flex;
     flex: none;
     width: 14px;
     height: 14px;
+  }
+  /* Derived agent/terminal status: a pending permission, a finished turn, an error, or an exited shell. */
+  .hilo-header-tab-status-dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--color-text-secondary);
+  }
+  .hilo-header-tab-status-dot[data-status="waiting"] {
+    background: var(--agent-waiting);
+  }
+  .hilo-header-tab-status-dot[data-status="done"] {
+    background: var(--agent-done);
+  }
+  .hilo-header-tab-status-dot[data-status="error"] {
+    background: var(--agent-failed);
+  }
+  .hilo-header-tab-status-dot[data-status="running"] {
+    top: -4px;
+    right: -4px;
+    width: 10px;
+    height: 10px;
+    background: transparent;
+    color: var(--color-text-secondary);
+  }
+  .hilo-header-tab-status-dot[data-status="running"] svg {
+    width: 100%;
+    height: 100%;
   }
   .hilo-header-tab-icon svg {
     width: 14px;

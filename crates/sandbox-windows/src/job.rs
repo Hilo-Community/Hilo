@@ -103,10 +103,12 @@ impl Job {
     /// Puts a process (created suspended) in the job: from then on, it and its descendants
     /// cannot leave it.
     pub(crate) fn assign(&self, process: &OwnedHandle) -> io::Result<()> {
+        self.assign_raw(process.as_raw_handle())
+    }
+
+    fn assign_raw(&self, process: std::os::windows::io::RawHandle) -> io::Result<()> {
         // SAFETY: both handles are live for the whole call.
-        check_bool(unsafe {
-            AssignProcessToJobObject(self.handle.as_raw_handle(), process.as_raw_handle())
-        })
+        check_bool(unsafe { AssignProcessToJobObject(self.handle.as_raw_handle(), process) })
     }
 
     /// Kills every process of the job. Returns false if the kernel refused.
@@ -119,7 +121,7 @@ impl Job {
 /// A Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` that ties a Host-supervised process
 /// tree (`host-core` terminal, language server or debug adapter) to the Host's lifetime.
 pub struct SupervisedJob {
-    handle: OwnedHandle,
+    job: Job,
 }
 
 impl fmt::Debug for SupervisedJob {
@@ -141,33 +143,14 @@ impl SupervisedJob {
                 "missing process handle",
             ));
         }
-        // SAFETY: default security and no name (both null); no other precondition.
-        let raw = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
-        let job = Self {
-            handle: owned_handle(raw)?,
-        };
-        let info = extended_limits(&JobLimits::default());
-        let size = u32::try_from(mem::size_of_val(&info)).expect("job information struct is small");
-        // SAFETY: the handle is a live job; `info` points to `size` readable bytes of
-        // `JOBOBJECT_EXTENDED_LIMIT_INFORMATION` and outlives the call.
-        check_bool(unsafe {
-            SetInformationJobObject(
-                job.handle.as_raw_handle(),
-                JobObjectExtendedLimitInformation,
-                ptr::from_ref(&info).cast::<c_void>(),
-                size,
-            )
-        })?;
-        // SAFETY: `job.handle` is a live job; `process` is a non-null OS handle validated by the
-        // kernel (`AssignProcessToJobObject` fails with `ERROR_INVALID_HANDLE` if invalid).
-        check_bool(unsafe { AssignProcessToJobObject(job.handle.as_raw_handle(), process) })?;
-        Ok(job)
+        let job = Job::create(&JobLimits::default())?;
+        job.assign_raw(process)?;
+        Ok(Self { job })
     }
 
     /// Kills every process in the job. Returns false if the kernel refused.
     pub fn terminate(&self) -> bool {
-        // SAFETY: the handle is a live job.
-        unsafe { TerminateJobObject(self.handle.as_raw_handle(), KILLED_EXIT_CODE) != 0 }
+        self.job.terminate()
     }
 }
 

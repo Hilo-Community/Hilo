@@ -112,3 +112,32 @@ Known limit: its DAP server listens on a TCP port of `127.0.0.1` without authent
 length of a session. Another process of the same user could connect to it and launch programs;
 such a process can already run programs as that user, so this does not cross a privilege
 boundary, but it is wider than a stdio pipe.
+
+## `getrandom = 0.3.4` (agent hook listener session tokens) — reviewed 2026-11-24
+
+Pinned exactly, matching the version already reviewed for `agent-gateway` and
+`judge-orchestrator` (same registry crate, same review). Used once, in `agent_hooks.rs`, to mint
+a random 32-byte bearer token per terminal session's hook registration — never a cryptographic
+key, never persisted beyond the running session (a restart mints a fresh one and reinstalls the
+hook with it, replacing the stale entry by its managed-marker, not by the old token).
+
+## `sysinfo = 0.36.1` (terminal agent detection, Unix only) — reviewed 2026-11-22
+
+Pinned exactly, `default-features = false, features = ["system"]` (process info only — no
+network/disk/component/user enumeration compiled in). Used from one place in `terminal.rs`:
+resolving the name of the process in a terminal's foreground job, to show its agent icon and a
+"thinking" spinner. The workspace forbids `unsafe_code` outside `sandbox-windows`; this crate's
+`unsafe` stays inside the dependency, not in our source.
+
+- macOS (`src/unix/apple/macos/process.rs`): no process spawning anywhere in the `system`
+  feature's path — `sysctl(KERN_PROC)` to enumerate pids and `libc::proc_pidpath`/`proc_pidinfo`
+  (the same syscalls `ps`/Activity Monitor use) to resolve a pid's name. The crate's only
+  `std::process::Command::new` call sites are in `cpu.rs` (CPU brand string), not reachable from
+  the `process_name` lookup we use.
+- Linux: reads `/proc/<pid>/{stat,cmdline,...}`, no process spawning.
+- We call `System::refresh_processes_specifics(ProcessesToUpdate::Some(&[pid]), false, ...)`
+  targeting the one pid we already found via `tcgetpgrp` (`portable-pty`), not a full-table scan;
+  this runs at most once a second per open terminal.
+- New crates pulled in: `objc2-io-kit` (macOS, implied by `system`) and its own small `objc2-*`
+  dependency chain; `ntapi`/`windows*` are Windows-only and never actually built for us (we only
+  depend on `sysinfo` under `[target.'cfg(unix)']`). Not reviewed line by line beyond the above.

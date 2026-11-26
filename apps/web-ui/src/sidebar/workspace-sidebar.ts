@@ -1,5 +1,5 @@
 import { NewPanelMenu } from "../cockpit/panels/new-panel-menu.js";
-import { sessionIcon } from "../cockpit/panels/session-presentation.js";
+import { sessionIcon, sessionStatusDot } from "../cockpit/panels/session-presentation.js";
 import type { AgentRegistryHost } from "../settings/agent-registry.js";
 import { type WorkGroup, listProjects } from "../state/workspace-navigation.js";
 import type { CockpitChatTab, CockpitFileTreeNode, CockpitStoreBundle } from "../stores/index.js";
@@ -48,6 +48,11 @@ export interface WorkspaceSidebarOptions {
    * Without it the sidebar only switches the navigation state.
    */
   readonly switchWorkspace?: (path: string) => Promise<readonly CockpitFileTreeNode[] | null>;
+  /**
+   * Ends the agents and terminals still running for a project (they survive switching to
+   * another one), once the user removes it.
+   */
+  readonly closeWorkspaceSessions?: (path: string) => Promise<void>;
   /** What the "+" of a group opens: a terminal panel, or an agent session (the default). */
   readonly newSessionKind?: "terminal" | "agent";
   readonly agentRegistryHost?: AgentRegistryHost;
@@ -195,10 +200,16 @@ export class WorkspaceSidebar {
       const next = listProjects(navigation).find((entry) => entry.path !== path);
       if (next && !(await this.switchTo(next.path))) return;
     }
+    try {
+      await this.options.closeWorkspaceSessions?.(path);
+    } catch (error: unknown) {
+      this.showError(error, UI_STRINGS.sidebar.switchFailed);
+    }
     if (!this.destroyed) stores.removeProject(path);
   }
 
-  private async openProject(): Promise<void> {
+  /** Asks the host for a project folder (the same as the "Open project" button). */
+  async openProject(): Promise<void> {
     if (!this.options.openWorkspace || this.opening || this.destroyed) return;
     this.opening = true;
     this.openProjectButton.disabled = true;
@@ -468,7 +479,11 @@ export class WorkspaceSidebar {
     const navigation = stores.navigation.getState();
     const chatState = stores.zone3.getState();
     const chats = new Map(chatState.chats.map((chat) => [chat.chatId, chat]));
-    const entries = listProjects(navigation);
+    // With no project open there is nothing to list: `listProjects` still returns the empty
+    // workspace so the navigation state has an active entry, but an empty one is not shown.
+    const entries = listProjects(navigation).filter(
+      (entry) => entry.path !== "" || entry.groups.some((group) => group.chatIds.length > 0),
+    );
     const retainedProjects = new Set(entries.map((entry) => entry.path));
     for (const [path] of this.projects) {
       if (!retainedProjects.has(path)) {
@@ -513,6 +528,7 @@ export class WorkspaceSidebar {
             nodes.chats.set(id, row);
           }
           row.setIcon(sessionIcon(chat));
+          row.setStatusDot(sessionStatusDot(chat));
           row.update(chat.title, groupActive && chatState.activeChatId === id);
           nextSessions.push(row.el);
         }

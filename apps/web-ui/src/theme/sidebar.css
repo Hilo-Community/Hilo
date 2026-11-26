@@ -84,6 +84,7 @@
   }
   /* Small glyph before a session's name (a terminal's), in the colour of the text */
   .sidebar-row-icon {
+    position: relative;
     display: inline-flex;
     flex: none;
     color: var(--color-text-secondary);
@@ -95,6 +96,37 @@
   .sidebar-row-icon svg.hilo-codex-icon {
     width: 14px;
     height: 14px;
+  }
+  /* Derived agent/terminal status: a pending permission, a finished turn, an error, or an exited shell. */
+  .sidebar-row-status-dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--color-text-secondary);
+  }
+  .sidebar-row-status-dot[data-status="waiting"] {
+    background: var(--agent-waiting);
+  }
+  .sidebar-row-status-dot[data-status="done"] {
+    background: var(--agent-done);
+  }
+  .sidebar-row-status-dot[data-status="error"] {
+    background: var(--agent-failed);
+  }
+  .sidebar-row-status-dot[data-status="running"] {
+    top: -4px;
+    right: -4px;
+    width: 10px;
+    height: 10px;
+    background: transparent;
+    color: var(--color-text-secondary);
+  }
+  .sidebar-row-status-dot[data-status="running"] svg {
+    width: 100%;
+    height: 100%;
   }
   .sidebar-row--session {
     padding-left: var(--sidebar-text-indent);
@@ -405,7 +437,9 @@
   .sidebar-menu-item:focus-visible .sidebar-menu-icon {
     color: var(--color-text-primary);
   }
-  .sidebar-menu-item--danger:not(:disabled) .sidebar-menu-icon {
+  .sidebar-menu-item--danger:not(:disabled) .sidebar-menu-icon,
+  .sidebar-menu-item--danger:hover:not(:disabled) .sidebar-menu-icon,
+  .sidebar-menu-item--danger:focus-visible .sidebar-menu-icon {
     color: inherit;
   }
   .sidebar-menu-item:disabled .sidebar-menu-icon {

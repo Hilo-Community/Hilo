@@ -3,6 +3,7 @@ import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CockpitDomController,
+  type TerminalHost,
   type WorkspaceTrustReport,
   createCockpitStoreBundle,
 } from "../../index.js";
@@ -21,6 +22,7 @@ function setup(answer: "trust" | "decline" = "trust") {
   const trusted = new Set<string>();
   let openRoot: string | null = null;
   let prompts = 0;
+  const opened: boolean[] = [];
   const report = (): WorkspaceTrustReport => ({
     state: openRoot !== null && trusted.has(openRoot) ? "Trusted" : "Untrusted",
     workspaceRoot: openRoot,
@@ -30,10 +32,28 @@ function setup(answer: "trust" | "decline" = "trust") {
     initialContent: "const ready = true;\n",
     ipcChannel: new InMemoryBinaryHostBridge(),
   });
+  // Records whether the folder was trusted at the moment a shell was asked for.
+  const terminalHost: TerminalHost = {
+    open: async () => {
+      opened.push(report().state === "Trusted");
+      return { write: () => undefined, resize: () => undefined, close: () => undefined };
+    },
+  };
   const controller = new CockpitDomController({
     rootContainer: root,
     stores,
     editorView,
+    terminalHost,
+    createTerminalView: () => ({
+      cols: 80,
+      rows: 24,
+      open: () => undefined,
+      write: () => undefined,
+      onData: () => undefined,
+      fit: () => false,
+      focus: () => undefined,
+      dispose: () => undefined,
+    }),
     workspaceTrust: {
       getTrust: async () => report(),
       requestTrust: async () => {
@@ -53,52 +73,64 @@ function setup(answer: "trust" | "decline" = "trust") {
     stores.setProjectPath(path);
     await settle();
   };
-  const banner = () => root.querySelector<HTMLElement>(".hilo-trust-banner");
-  const clickTrust = async () => {
-    banner()?.querySelector<HTMLButtonElement>(".hilo-trust-banner-action")?.click();
+  const startTerminal = async () => {
+    stores.createChat({ kind: "terminal" });
     await settle();
   };
-  return { controller, editorView, openFolder, banner, clickTrust, prompts: () => prompts };
+  return {
+    controller,
+    editorView,
+    root,
+    openFolder,
+    startTerminal,
+    prompts: () => prompts,
+    opened: () => opened,
+  };
 }
 
-describe("workspace trust — restricted mode notice", () => {
-  it("shows nothing while no folder is open", async () => {
-    const { banner, controller } = setup();
+describe("workspace trust — asked for when a folder is used, not announced", () => {
+  it("shows no notice at all, however the folder is restricted", async () => {
+    const { root, controller, openFolder } = setup();
     await settle();
-    expect(banner()?.hidden).toBe(true);
     expect(controller.getWorkspaceTrust()).toEqual({ state: "Untrusted", workspaceRoot: null });
+    await openFolder("/work/unknown-repo");
+    expect(root.querySelector(".hilo-trust-banner")).toBeNull();
+    expect(controller.getWorkspaceTrust()?.state).toBe("Untrusted");
   });
 
-  it("a newly opened folder is restricted until the user answers the host's prompt", async () => {
-    const { banner, controller, openFolder, clickTrust, prompts } = setup();
+  it("starting a terminal in an untrusted folder asks the host first, then starts it trusted", async () => {
+    const { controller, openFolder, startTerminal, prompts, opened } = setup();
     await openFolder("/work/unknown-repo");
-    expect(banner()?.hidden).toBe(false);
-    expect(controller.getWorkspaceTrust()?.state).toBe("Untrusted");
     expect(prompts()).toBe(0);
 
-    await clickTrust();
+    await startTerminal();
     expect(prompts()).toBe(1);
+    expect(opened()).toEqual([true]);
     expect(controller.getWorkspaceTrust()?.state).toBe("Trusted");
-    expect(banner()?.hidden).toBe(true);
   });
 
-  it("declining the prompt keeps restricted mode", async () => {
-    const { banner, controller, openFolder, clickTrust } = setup("decline");
+  it("declining still lets the host refuse (and say why), and asks again next time", async () => {
+    const { controller, openFolder, startTerminal, prompts, opened } = setup("decline");
     await openFolder("/work/unknown-repo");
-    await clickTrust();
+    await startTerminal();
+    expect(opened()).toEqual([false]);
     expect(controller.getWorkspaceTrust()?.state).toBe("Untrusted");
-    expect(banner()?.hidden).toBe(false);
+    await startTerminal();
+    expect(prompts()).toBe(2);
   });
 
-  it("trust does not carry over to another folder", async () => {
-    const { banner, openFolder, clickTrust } = setup();
+  it("a trusted folder is not asked again, and trust does not carry over to another folder", async () => {
+    const { openFolder, startTerminal, prompts } = setup();
     await openFolder("/work/mine");
-    await clickTrust();
-    expect(banner()?.hidden).toBe(true);
+    await startTerminal();
+    await startTerminal();
+    expect(prompts()).toBe(1);
     await openFolder("/work/downloaded");
-    expect(banner()?.hidden).toBe(false);
+    await startTerminal();
+    expect(prompts()).toBe(2);
     await openFolder("/work/mine");
-    expect(banner()?.hidden).toBe(true);
+    await startTerminal();
+    expect(prompts()).toBe(2);
   });
 
   it("editing and Lezer highlighting work normally in an untrusted folder", async () => {

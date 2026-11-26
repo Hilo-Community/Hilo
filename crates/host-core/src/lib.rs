@@ -1,3 +1,4 @@
+pub mod agent_hooks;
 pub mod checkpoint;
 pub mod contracts;
 pub mod dap;
@@ -11,6 +12,7 @@ pub mod process;
 pub mod terminal;
 pub mod trust;
 
+pub use agent_hooks::*;
 pub use checkpoint::*;
 pub use contracts::*;
 pub use dap::*;

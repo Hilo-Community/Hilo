@@ -1,6 +1,7 @@
 import { AgentPanel } from "../../agent/panel.js";
-import type { AgentHost } from "../../agent/store.js";
+import type { AgentHost, AgentState } from "../../agent/store.js";
 import { type LayoutNode, panel, panelIds, reconcileLayout } from "../../layout/layout-tree.js";
+import { SPINNER_ICON } from "../../settings/agent-marks.js";
 import type { AgentRegistryHost, InstalledAgent } from "../../settings/agent-registry.js";
 import { MORE_ICON, PLUS_ICON } from "../../sidebar/icons.js";
 import { SidebarMenu, type SidebarMenuAction } from "../../sidebar/sidebar-menu.js";
@@ -12,6 +13,7 @@ import {
   resolveGroupLayout,
   resolveGroupMaximized,
 } from "../../stores/index.js";
+import { type AgentBadgeInputs, nextAgentBadge } from "../../stores/session-status.js";
 import { SETTINGS_ICON } from "../../theme/icons.js";
 import { reconcile } from "../../ui/dom-utils.js";
 import { UI_STRINGS, uiText } from "../../ui/ui-strings.js";
@@ -37,7 +39,16 @@ import {
   settingsShortcutLabel,
   shortcutLabel,
 } from "./panel-shortcuts.js";
-import { sessionIcon } from "./session-presentation.js";
+import { sessionIcon, sessionStatusDot } from "./session-presentation.js";
+
+/** The part of an agent panel's state its sidebar/tab badge follows. */
+function badgeInputs(state: AgentState): AgentBadgeInputs {
+  return {
+    busy: state.busy,
+    pendingPermissions: state.permissions.length,
+    error: state.error,
+  };
+}
 
 /** The icon of a session's header tab: the terminal glyph, the Codex mark, or its state glyph. */
 function tabIcon(chat: CockpitChatTab, stateGlyph: string): { svg: string } | { text: string } {
@@ -61,6 +72,7 @@ interface ChatCellNodes {
   readonly title: HTMLElement;
   /** The mark of the agent (Codex) before the title, and the text after it. */
   readonly titleIcon: HTMLElement;
+  readonly titleStatusDot: HTMLElement;
   readonly titleText: HTMLElement;
   readonly splitRight: HTMLButtonElement;
   readonly splitDown: HTMLButtonElement;
@@ -88,6 +100,8 @@ export class ChatGrid {
   private readonly empty: HTMLElement;
   private readonly addButton: HTMLButtonElement;
   private readonly emptyAdd: HTMLButtonElement;
+  private readonly emptyOpenProject: HTMLButtonElement;
+  private readonly emptyText: HTMLElement;
   private layoutRoot: HTMLElement | null = null;
   private layoutShape = "";
   /** The layout on screen and the group it belongs to (what a drag starts from and saves into). */
@@ -125,6 +139,8 @@ export class ChatGrid {
     } | null = null,
     private readonly settings?: { select(): void; close(): void; selectWorkspace(): void },
     registry?: AgentRegistryHost,
+    /** Opens the project picker; the empty state offers it when no project is open. */
+    private readonly openProject?: () => void,
   ) {
     this.restoredChats = new Set(stores.zone3.getState().chats.map((chat) => chat.chatId));
     this.newPanelMenu = new NewPanelMenu(doc, registry);
@@ -165,13 +181,22 @@ export class ChatGrid {
     this.empty.className = "hilo-group-empty";
     const emptyText = doc.createElement("p");
     emptyText.textContent = UI_STRINGS.chat.emptyGroup;
+    this.emptyText = emptyText;
     this.emptyAdd = this.createAddButton(
       doc,
       "hilo-group-empty-add",
       UI_STRINGS.chat.newSession,
       () => this.stores.createChat(this.terminals ? { kind: "terminal" } : undefined),
     );
-    this.empty.append(emptyText, this.emptyAdd);
+    this.emptyOpenProject = this.createAddButton(
+      doc,
+      "hilo-group-empty-add",
+      UI_STRINGS.sidebar.openProject,
+      () => this.openProject?.(),
+    );
+    this.emptyOpenProject.title = UI_STRINGS.sidebar.openProjectHint;
+    this.empty.append(emptyText, this.emptyAdd, this.emptyOpenProject);
+    this.updateEmptyState();
 
     this.addButton = this.createAddButton(doc, "hilo-header-tab-add", "", () =>
       this.newPanelMenu.toggle(this.addButton, {
@@ -235,6 +260,16 @@ export class ChatGrid {
       onClick();
     });
     return btn;
+  }
+
+  /** With no project open, sessions cannot start: the empty group offers to open one instead. */
+  private updateEmptyState(): void {
+    // Only a host that can open a project offers it (otherwise sessions work without one).
+    const noProject =
+      this.openProject !== undefined && this.stores.navigation.getState().projectPath === "";
+    this.emptyAdd.hidden = noProject;
+    this.emptyOpenProject.hidden = !noProject;
+    this.emptyText.textContent = noProject ? UI_STRINGS.chat.noProject : UI_STRINGS.chat.emptyGroup;
   }
 
   private reportArea(): void {
@@ -322,6 +357,7 @@ export class ChatGrid {
         label: sessionDisplayTitle(chat.title),
         title: chat.kind === "terminal" ? chat.title : `${chat.title} · ${chat.modelName}`,
         icon: tabIcon(chat, token.icon),
+        statusDot: sessionStatusDot(chat),
         selected: !this.settingsActive && chat.chatId === z3.activeChatId,
         closable: this.canCloseSession(chat.chatId),
         data: { validationState: chat.validationState },
@@ -428,6 +464,7 @@ export class ChatGrid {
     if (!layout) {
       this.layoutRoot = null;
       this.layoutShape = "";
+      this.updateEmptyState();
       reconcile(this.grid, [this.empty]);
       return;
     }
@@ -509,6 +546,8 @@ export class ChatGrid {
           this.grid.ownerDocument,
           this.terminals.host,
           this.terminals.createView,
+          (running) => this.stores.setTerminalRunning(chat.chatId, running),
+          (status) => this.stores.setTerminalAgentStatus(chat.chatId, status.agentId, status.busy),
         );
         this.panes.set(chat.chatId, pane);
       }
@@ -533,6 +572,12 @@ export class ChatGrid {
           { chatId: chat.chatId, restore: this.restoredChats.has(chat.chatId) },
         );
         this.agentPanes.set(chat.chatId, pane);
+        pane.store.subscribe((state, prevState) => {
+          const tab = this.stores.zone3.getState().chats.find((c) => c.chatId === chat.chatId);
+          const current = tab?.kind === "agent" ? tab.statusBadge : undefined;
+          const badge = nextAgentBadge(badgeInputs(prevState), badgeInputs(state), current);
+          if (badge !== current) this.stores.setChatStatusBadge(chat.chatId, badge);
+        });
       }
       if (pane.element.parentElement !== cell.el) cell.el.append(pane.element);
       cell.messages.hidden = true;
@@ -554,6 +599,15 @@ export class ChatGrid {
     const mark = sessionIcon(chat) ?? "";
     if (cell.titleIcon.innerHTML !== mark) cell.titleIcon.innerHTML = mark;
     cell.titleIcon.hidden = mark === "";
+    const statusDot = sessionStatusDot(chat);
+    cell.titleStatusDot.hidden = !statusDot;
+    if (statusDot) {
+      cell.titleStatusDot.dataset.status = statusDot;
+      cell.titleStatusDot.innerHTML = statusDot === "running" ? SPINNER_ICON : "";
+    } else {
+      delete cell.titleStatusDot.dataset.status;
+      cell.titleStatusDot.innerHTML = "";
+    }
     this.messageRenderer.renderInto(cell.messages, z3.messagesByChatId[chat.chatId] ?? [], 0, 400);
     const logs = z3.terminalLogsByChatId[chat.chatId] ?? [];
     cell.logs.dataset.logCount = String(logs.length);
@@ -595,12 +649,19 @@ export class ChatGrid {
     header.addEventListener("pointercancel", () => this.panelDrag.cancel());
     const title = doc.createElement("span");
     title.className = "hilo-chat-cell-title";
+    const titleIconWrap = doc.createElement("span");
+    titleIconWrap.className = "hilo-chat-cell-title-icon-wrap";
     const titleIcon = doc.createElement("span");
     titleIcon.className = "hilo-chat-cell-title-icon";
     titleIcon.setAttribute("aria-hidden", "true");
     titleIcon.hidden = true;
+    const titleStatusDot = doc.createElement("span");
+    titleStatusDot.className = "hilo-chat-cell-status-dot";
+    titleStatusDot.setAttribute("aria-hidden", "true");
+    titleStatusDot.hidden = true;
+    titleIconWrap.append(titleIcon, titleStatusDot);
     const titleText = doc.createElement("span");
-    title.append(titleIcon, titleText);
+    title.append(titleIconWrap, titleText);
     const actions = doc.createElement("div");
     actions.className = "hilo-chat-cell-actions";
     const action = (className: string, icon: string, label: string, run: () => void) => {
@@ -670,6 +731,7 @@ export class ChatGrid {
       header,
       title,
       titleIcon,
+      titleStatusDot,
       titleText,
       splitRight,
       splitDown,

@@ -16,6 +16,7 @@ export interface SidebarPanelsOptions {
   readonly onboarding: OnboardingModalController;
   readonly openWorkspace?: () => Promise<readonly CockpitFileTreeNode[] | null>;
   readonly switchWorkspace?: (path: string) => Promise<readonly CockpitFileTreeNode[] | null>;
+  readonly closeWorkspaceSessions?: (path: string) => Promise<void>;
   readonly searchWorkspace?: (query: string) => Promise<readonly CockpitSearchResultItem[]>;
   readonly openFile: (path: string, onError: (message: string) => void) => void;
   /** What a new session opens from the sidebar: a terminal panel, or an agent session. */
@@ -121,10 +122,18 @@ export class SidebarPanels {
       stores,
       ...(options.openWorkspace ? { openWorkspace: options.openWorkspace } : {}),
       ...(options.switchWorkspace ? { switchWorkspace: options.switchWorkspace } : {}),
+      ...(options.closeWorkspaceSessions
+        ? { closeWorkspaceSessions: options.closeWorkspaceSessions }
+        : {}),
       ...(options.newSessionKind ? { newSessionKind: options.newSessionKind } : {}),
       ...(options.agentRegistryHost ? { agentRegistryHost: options.agentRegistryHost } : {}),
       ...(options.openSettings ? { openSettings: options.openSettings } : {}),
     });
+  }
+
+  /** Opens the project picker, as the sidebar's "Open project" button does. */
+  openProject(): Promise<void> {
+    return this.workspaceSidebar.openProject();
   }
 
   update(): void {
