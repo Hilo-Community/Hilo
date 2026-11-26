@@ -18,7 +18,7 @@ Prerequisites: Rust (`>= 1.80`), Node.js (`>= 22`), and pnpm (`>= 10`).
 
 ```bash
 git clone https://github.com/Hilo-Community/hilo.git
-cd Hilo
+cd hilo
 
 pnpm install
 pnpm dev

@@ -14,7 +14,7 @@ name = "hilo_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "hilo-desktop"
+name = "Hilo"
 path = "src/main.rs"
 
 [dependencies]
