@@ -1,4 +1,4 @@
-name: Coloride CI (3-OS Matrix)
+name: Hilo CI (3-OS Matrix)
 
 on:
   push:
@@ -103,14 +103,14 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 install -y bubblewrap
-          sudo tee /etc/apparmor.d/coloride-bwrap >/dev/null <<'PROFILE'
+          sudo tee /etc/apparmor.d/hilo-bwrap >/dev/null <<'PROFILE'
           abi <abi/4.0>,
           include <tunables/global>
-          profile coloride-bwrap /usr/bin/bwrap flags=(unconfined) {
+          profile hilo-bwrap /usr/bin/bwrap flags=(unconfined) {
             userns,
           }
           PROFILE
-          sudo apparmor_parser -r /etc/apparmor.d/coloride-bwrap
+          sudo apparmor_parser -r /etc/apparmor.d/hilo-bwrap
           cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns || true
           bwrap --unshare-user --unshare-net --unshare-pid --ro-bind / / /bin/true
 

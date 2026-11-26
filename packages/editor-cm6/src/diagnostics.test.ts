@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import type { DiagnosticEntry, DocumentDiagnostics } from "@coloride/protocol-types";
+import type { DiagnosticEntry, DocumentDiagnostics } from "@hilo/protocol-types";
 import { describe, expect, it } from "vitest";
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "./index.js";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "./index.js";
 
 const DOCUMENT_ID = "src/main.ts";
 /** "𝄞" is two UTF-16 units: offsets after it only work if nothing counts code points. */
@@ -9,7 +9,7 @@ const LINES = ['const clef = "𝄞";', "const total = count + 1;", "export { tot
 
 /** An editor brought to revision 4 by four real edits, as after a few keystrokes. */
 function editorAtRevision4() {
-  const editor = new ColorideEditorView({
+  const editor = new HiloEditorView({
     initialDocumentId: DOCUMENT_ID,
     initialContent: "",
     ipcChannel: new InMemoryBinaryHostBridge(),
@@ -63,9 +63,9 @@ function batchFor(
 }
 
 /** The text under each squiggle actually drawn in the editor DOM. */
-function underlined(editor: ColorideEditorView): string[] {
+function underlined(editor: HiloEditorView): string[] {
   return Array.from(
-    editor.getEditorView().contentDOM.querySelectorAll(".cm-coloride-diagnostic"),
+    editor.getEditorView().contentDOM.querySelectorAll(".cm-hilo-diagnostic"),
     (mark) => mark.textContent ?? "",
   );
 }

@@ -170,7 +170,7 @@ pub(super) fn write_file_atomic(
         )));
     }
     let tmp = parent.join(format!(
-        ".{}.coloride-restore-{}-{}",
+        ".{}.hilo-restore-{}-{}",
         target
             .file_name()
             .map(|name| name.to_string_lossy())

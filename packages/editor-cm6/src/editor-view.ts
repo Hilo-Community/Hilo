@@ -14,7 +14,7 @@ import {
   type EditorTransaction,
   type TextChange,
   type TransactionOrigin,
-} from "@coloride/protocol-types";
+} from "@hilo/protocol-types";
 import {
   type BinaryIpcChannel,
   decodeEditorSnapshotBinary,
@@ -23,8 +23,8 @@ import {
 import { breakpointLines, breakpointsField, setBreakpointsEffect } from "./breakpoints.js";
 import {
   type EditorRangeDecoration,
-  colorideStateField,
-  setColorideDecorationsEffect,
+  hiloStateField,
+  setHiloDecorationsEffect,
   suppressLocalInvalidationAnnotation,
 } from "./decorations.js";
 import {
@@ -45,7 +45,7 @@ import {
 import { createLezerHighlightingExtensions, detectLanguageFromPath } from "./languages.js";
 import {
   type Cm6TranslatedKeybinding,
-  DEFAULT_COLORIDE_CM6_THEME,
+  DEFAULT_HILO_CM6_THEME,
   type DeclarativeVsixBundle,
   type DeclarativeVsixSnippet,
   type DeclarativeVsixTheme,
@@ -59,7 +59,7 @@ import {
 const documentSwitchAnnotation = Annotation.define<boolean>();
 const transactionOriginAnnotation = Annotation.define<TransactionOrigin>();
 
-export interface ColorideEditorStoreSnapshot {
+export interface HiloEditorStoreSnapshot {
   readonly documentId: string;
   readonly sessionGeneration: number;
   readonly revision: number;
@@ -77,7 +77,7 @@ export interface ColorideEditorStoreSnapshot {
   readonly lastIpcError: string | null;
 }
 
-export interface ColorideEditorOptions {
+export interface HiloEditorOptions {
   readonly initialDocumentId: string;
   readonly initialContent: string;
   readonly ipcChannel: BinaryIpcChannel;
@@ -90,7 +90,7 @@ export interface ColorideEditorOptions {
  * Imperatively mounted CodeMirror 6 Editor controller strictly isolated from React re-renders.
  * Never unmounts/remounts `EditorView` on state updates or tab switches (`mountCount === 1`).
  */
-export class ColorideEditorView {
+export class HiloEditorView {
   private view: EditorView | null = null;
   private documentId: string;
   private sessionGeneration = 1;
@@ -135,11 +135,11 @@ export class ColorideEditorView {
   private readonly storeListeners = new Set<() => void>();
   private readonly ipcChannel: BinaryIpcChannel;
 
-  constructor(options: ColorideEditorOptions) {
+  constructor(options: HiloEditorOptions) {
     this.documentId = options.initialDocumentId;
     this.ipcChannel = options.ipcChannel;
     this.activeKeymapPreset = options.initialKeymapPreset ?? "VsCode";
-    this.activeTheme = options.initialTheme ?? DEFAULT_COLORIDE_CM6_THEME;
+    this.activeTheme = options.initialTheme ?? DEFAULT_HILO_CM6_THEME;
     this.trackIpcOperation(
       this.ipcChannel.openDocument(this.documentId, this.sessionGeneration, options.initialContent),
     );
@@ -176,7 +176,7 @@ export class ColorideEditorView {
    */
   mount(container: HTMLElement): EditorView {
     if (!this.view) {
-      throw new Error("ColorideEditorView has been destroyed");
+      throw new Error("HiloEditorView has been destroyed");
     }
     if (this.view.dom.parentElement !== container) {
       container.appendChild(this.view.dom);
@@ -188,7 +188,7 @@ export class ColorideEditorView {
 
   getEditorView(): EditorView {
     if (!this.view) {
-      throw new Error("ColorideEditorView has been destroyed");
+      throw new Error("HiloEditorView has been destroyed");
     }
     return this.view;
   }
@@ -198,13 +198,13 @@ export class ColorideEditorView {
   }
 
   getDecorations(): readonly EditorRangeDecoration[] {
-    return this.getEditorView().state.field(colorideStateField).ranges;
+    return this.getEditorView().state.field(hiloStateField).ranges;
   }
 
   setValidationDecorations(decorations: readonly EditorRangeDecoration[]): void {
     const view = this.getEditorView();
     view.dispatch({
-      effects: setColorideDecorationsEffect.of(decorations),
+      effects: setHiloDecorationsEffect.of(decorations),
     });
   }
 
@@ -322,7 +322,7 @@ export class ColorideEditorView {
         clearDiagnosticsEffect.of(null),
         // Breakpoints belong to the previous file (the cockpit restores this one's).
         setBreakpointsEffect.of([]),
-        setColorideDecorationsEffect.of(decorations),
+        setHiloDecorationsEffect.of(decorations),
         suppressLocalInvalidationAnnotation.of(true),
       ],
       annotations: [documentSwitchAnnotation.of(true), Transaction.addToHistory.of(false)],
@@ -434,7 +434,7 @@ export class ColorideEditorView {
     return decoded;
   }
 
-  getStoreSnapshot(): ColorideEditorStoreSnapshot {
+  getStoreSnapshot(): HiloEditorStoreSnapshot {
     return {
       documentId: this.documentId,
       sessionGeneration: this.sessionGeneration,
@@ -548,14 +548,14 @@ export class ColorideEditorView {
   }
 
   /**
-   * 1-click reset to Coloride default theme, `VS Code` keymap preset, and clean custom bindings/snippets.
+   * 1-click reset to Hilo default theme, `VS Code` keymap preset, and clean custom bindings/snippets.
    */
-  resetToColorideDefaults(): void {
+  resetToHiloDefaults(): void {
     this.customKeybindings = [];
     this.registeredSnippets = [];
     this.loadedVsixBundles = [];
     this.setKeymapPreset("VsCode", []);
-    this.setTheme(DEFAULT_COLORIDE_CM6_THEME);
+    this.setTheme(DEFAULT_HILO_CM6_THEME);
   }
 
   subscribe(listener: () => void): () => void {

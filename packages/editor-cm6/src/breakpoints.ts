@@ -14,7 +14,7 @@ const toggleBreakpointEffect = StateEffect.define<number>();
 class BreakpointMarker extends GutterMarker {
   override toDOM(view: EditorView): Node {
     const dot = view.dom.ownerDocument.createElement("span");
-    dot.className = "cm-coloride-breakpoint";
+    dot.className = "cm-hilo-breakpoint";
     dot.setAttribute("aria-label", "Breakpoint");
     return dot;
   }
@@ -68,24 +68,24 @@ export const breakpointKeyBindings: readonly KeyBinding[] = [
 ];
 
 /** The breakpoint gutter: a click toggles the line's breakpoint. */
-export function colorideBreakpoints(): Extension {
+export function hiloBreakpoints(): Extension {
   return [
     breakpointsField,
     EditorView.baseTheme({
-      ".cm-coloride-breakpoint-gutter .cm-gutterElement": { cursor: "pointer", width: "12px" },
-      ".cm-coloride-breakpoint": {
+      ".cm-hilo-breakpoint-gutter .cm-gutterElement": { cursor: "pointer", width: "12px" },
+      ".cm-hilo-breakpoint": {
         display: "inline-block",
         width: "8px",
         height: "8px",
         borderRadius: "50%",
         background: "#e51400",
       },
-      ".cm-coloride-breakpoint-gutter .cm-gutterElement:hover .cm-coloride-breakpoint": {
+      ".cm-hilo-breakpoint-gutter .cm-gutterElement:hover .cm-hilo-breakpoint": {
         opacity: "0.8",
       },
     }),
     gutter({
-      class: "cm-coloride-breakpoint-gutter",
+      class: "cm-hilo-breakpoint-gutter",
       markers: (view) => view.state.field(breakpointsField),
       initialSpacer: () => marker,
       domEventHandlers: {

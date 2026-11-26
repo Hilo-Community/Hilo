@@ -4,7 +4,7 @@
  */
 export const UI_STRINGS = {
   shell: {
-    cockpit: "Coloride 4-Zone Multi-Chat Cockpit",
+    cockpit: "Hilo 4-Zone Multi-Chat Cockpit",
     activityBar: "Activity bar",
     sidebar: "Sidebar",
     chatGrid: "Multi-chat grid",
@@ -173,7 +173,7 @@ export const UI_STRINGS = {
     rejected: "Rejected",
     approve: "Approve",
     reject: "Reject",
-    resetDefaults: "Reset to Coloride defaults",
+    resetDefaults: "Reset to Hilo defaults",
   },
   agent: {
     connecting: "Connecting…",

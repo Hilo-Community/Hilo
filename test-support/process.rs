@@ -34,11 +34,15 @@ pub fn is_alive(pid: u32) -> bool {
                     .output()
                     .expect("query process state with ps");
                 let state = String::from_utf8_lossy(&output.stdout);
+                assert!(
+                    output.status.success()
+                        || (output.status.code() == Some(1) && output.stderr.is_empty()),
+                    "ps failed: {output:?}"
+                );
                 // A process that disappeared between kill(0) and ps is also dead.
                 if state.trim().is_empty() || state.trim_start().starts_with('Z') {
                     return false;
                 }
-                assert!(output.status.success(), "ps failed: {output:?}");
             }
             true
         }

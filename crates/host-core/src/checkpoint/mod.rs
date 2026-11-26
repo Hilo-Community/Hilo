@@ -2,9 +2,9 @@
 //!
 //! Before an agent acts, the Host records the workspace exactly as the user sees it (tracked
 //! files, untracked files that `.gitignore` does not exclude, unsaved `ropey` buffers) as a
-//! commit under `refs/coloride/checkpoints/<task_id>/<seq>`. When the agent is done, the Host
+//! commit under `refs/hilo/checkpoints/<task_id>/<seq>`. When the agent is done, the Host
 //! records its result the same way. Nothing else of the repository changes: not `HEAD`, not
-//! the branch, not `.git/index` (the tree is built in Coloride's own index file), not
+//! the branch, not `.git/index` (the tree is built in Hilo's own index file), not
 //! `git log` of any branch.
 //!
 //! [`CheckpointManager::rollback_to_checkpoint`] undoes what the agent did since a checkpoint
@@ -38,15 +38,15 @@ pub use rollback::{RollbackConflict, RollbackFailure, RollbackOptions, RollbackR
 pub use worktree::TaskWorktree;
 
 /// Namespace of every checkpoint reference.
-pub const CHECKPOINT_REF_PREFIX: &str = "refs/coloride/checkpoints";
-/// Coloride's own index file, inside the Git directory, next to (never instead of) `index`.
-pub const CHECKPOINT_INDEX_FILENAME: &str = "coloride_tmp_index";
+pub const CHECKPOINT_REF_PREFIX: &str = "refs/hilo/checkpoints";
+/// Hilo's own index file, inside the Git directory, next to (never instead of) `index`.
+pub const CHECKPOINT_INDEX_FILENAME: &str = "hilo_tmp_index";
 /// Untracked files larger than this are left out of checkpoints (and reported as skipped).
 pub const MAX_UNTRACKED_FILE_BYTES: u64 = 32 * 1024 * 1024;
 
-const KIND_TRAILER: &str = "Coloride-Checkpoint-Kind";
-const AUTHOR_NAME: &str = "Coloride";
-const AUTHOR_EMAIL: &str = "checkpoints@coloride.invalid";
+const KIND_TRAILER: &str = "Hilo-Checkpoint-Kind";
+const AUTHOR_NAME: &str = "Hilo";
+const AUTHOR_EMAIL: &str = "checkpoints@hilo.invalid";
 const MAX_TASK_ID_LEN: usize = 64;
 
 /// When a checkpoint was taken, relative to an agent action.
@@ -108,7 +108,7 @@ pub struct Checkpoint {
     pub task_id: String,
     pub seq: u32,
     pub kind: CheckpointKind,
-    /// `refs/coloride/checkpoints/<task_id>/<seq>`.
+    /// `refs/hilo/checkpoints/<task_id>/<seq>`.
     pub reference: String,
     /// Hex id of the checkpoint commit.
     pub commit: String,
@@ -358,14 +358,14 @@ impl CheckpointManager {
             .unwrap_or(0);
         let signature = Signature::new(AUTHOR_NAME, AUTHOR_EMAIL, &Time::new(now as i64, 0))?;
         let message = format!(
-            "Coloride checkpoint {task_id}/{seq}\n\n{KIND_TRAILER}: {}\n",
+            "Hilo checkpoint {task_id}/{seq}\n\n{KIND_TRAILER}: {}\n",
             kind.trailer_value()
         );
         let parents: Vec<_> = parent.iter().collect();
         let commit = repo.commit(None, &signature, &signature, &message, &tree, &parents)?;
         let reference = checkpoint_ref(task_id, seq);
         // `force = false`: an existing reference (another process won the race) is an error.
-        repo.reference(&reference, commit, false, "coloride: checkpoint")?;
+        repo.reference(&reference, commit, false, "hilo: checkpoint")?;
         Ok(Checkpoint {
             task_id: task_id.to_string(),
             seq,

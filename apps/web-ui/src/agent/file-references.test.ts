@@ -38,7 +38,7 @@ describe("files the agent mentions", () => {
         },
       },
     });
-    const ref = panel.element.querySelector<HTMLElement>(".coloride-agent-ref");
+    const ref = panel.element.querySelector<HTMLElement>(".hilo-agent-ref");
     expect(ref?.textContent).toBe("App.jsx");
     // It is text inside the paragraph, not a box of its own: same line, same flow.
     expect(ref?.tagName).toBe("SPAN");
@@ -52,21 +52,21 @@ describe("files the agent mentions", () => {
     await settle();
     expect(open).toHaveBeenCalledTimes(2);
     // A web address is only shown: clicking it opens nothing.
-    panel.element.querySelector<HTMLElement>(".coloride-agent-link")?.click();
+    panel.element.querySelector<HTMLElement>(".hilo-agent-link")?.click();
     // The panel checks again what it is about to open.
     for (const path of ["/etc/passwd", "../secret", "C:\\x"]) {
       const forged = document.createElement("button");
-      forged.className = "coloride-agent-ref";
+      forged.className = "hilo-agent-ref";
       forged.dataset.path = path;
       forged.dataset.line = "1";
-      panel.element.querySelector(".coloride-agent-output")?.append(forged);
+      panel.element.querySelector(".hilo-agent-output")?.append(forged);
       forged.click();
     }
     const bad = document.createElement("button");
-    bad.className = "coloride-agent-ref";
+    bad.className = "hilo-agent-ref";
     bad.dataset.path = "src/a.ts";
     bad.dataset.line = "-3";
-    panel.element.querySelector(".coloride-agent-output")?.append(bad);
+    panel.element.querySelector(".hilo-agent-output")?.append(bad);
     bad.click();
     await settle();
     expect(open).toHaveBeenCalledTimes(2);

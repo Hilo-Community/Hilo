@@ -17,13 +17,13 @@
   [contenteditable="true"],
   .cm-editor,
   .cm-editor .cm-content,
-  .coloride-zone-4-preview-host,
-  .coloride-chat-cell-messages,
-  .coloride-chat-cell-logs,
-  .coloride-debug-stack,
-  .coloride-debug-variables,
-  .coloride-debug-output,
-  .coloride-global-search-results {
+  .hilo-zone-4-preview-host,
+  .hilo-chat-cell-messages,
+  .hilo-chat-cell-logs,
+  .hilo-debug-stack,
+  .hilo-debug-variables,
+  .hilo-debug-output,
+  .hilo-global-search-results {
     -webkit-user-select: text;
     user-select: text;
   }

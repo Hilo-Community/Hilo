@@ -76,13 +76,13 @@ export class FileTreePanel {
     private readonly options: FileTreePanelOptions,
   ) {
     this.element = doc.createElement("div");
-    this.element.className = `coloride-file-tree-panel ${options.className}`;
+    this.element.className = `hilo-file-tree-panel ${options.className}`;
     this.element.setAttribute("aria-label", UI_STRINGS.files.tree);
 
     if (options.withFilter) {
       const filterEl = doc.createElement("input");
       filterEl.type = "search";
-      filterEl.className = "coloride-file-tree-filter";
+      filterEl.className = "hilo-file-tree-filter";
       filterEl.placeholder = UI_STRINGS.files.filter;
       filterEl.setAttribute("aria-label", UI_STRINGS.files.filterLabel);
       filterEl.addEventListener("input", () => {
@@ -99,10 +99,10 @@ export class FileTreePanel {
       this.filterEl = filterEl;
       if (options.headerAction) {
         const row = doc.createElement("div");
-        row.className = "coloride-file-tree-header";
+        row.className = "hilo-file-tree-header";
         const action = doc.createElement("button");
         action.type = "button";
-        action.className = "coloride-file-tree-action";
+        action.className = "hilo-file-tree-action";
         action.addEventListener("click", options.headerAction.run);
         this.actionButton = action;
         row.append(filterEl, action);
@@ -113,14 +113,14 @@ export class FileTreePanel {
     }
 
     const viewport = doc.createElement("div");
-    viewport.className = "coloride-file-tree-viewport";
+    viewport.className = "hilo-file-tree-viewport";
     this.scrollEl = doc.createElement("div");
-    this.scrollEl.className = "coloride-file-tree-scroll";
+    this.scrollEl.className = "hilo-file-tree-scroll";
     this.treeEl = doc.createElement("div");
-    this.treeEl.className = "coloride-file-tree";
+    this.treeEl.className = "hilo-file-tree";
     this.scrollEl.append(this.treeEl);
     this.stickyEl = doc.createElement("div");
-    this.stickyEl.className = "coloride-file-tree-sticky";
+    this.stickyEl.className = "hilo-file-tree-sticky";
     this.stickyEl.hidden = true;
     viewport.append(this.scrollEl, this.stickyEl);
     this.element.append(viewport);
@@ -197,7 +197,7 @@ export class FileTreePanel {
     if (this.nodes.length === 0 && action) {
       const button = doc.createElement("button");
       button.type = "button";
-      button.className = "coloride-open-workspace-btn";
+      button.className = "hilo-open-workspace-btn";
       button.textContent = action.label;
       button.addEventListener("click", () => {
         button.disabled = true;
@@ -217,7 +217,7 @@ export class FileTreePanel {
       this.treeEl.replaceChildren(button);
     } else {
       const empty = doc.createElement("p");
-      empty.className = "coloride-file-tree-empty";
+      empty.className = "hilo-file-tree-empty";
       empty.textContent = text;
       this.treeEl.replaceChildren(empty);
     }

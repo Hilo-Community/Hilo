@@ -28,7 +28,7 @@ export class TerminalLoginView {
   ) {
     const text = UI_STRINGS.agent;
     this.element = doc.createElement("section");
-    this.element.className = "coloride-agent-terminal-login";
+    this.element.className = "hilo-agent-terminal-login";
     this.element.setAttribute("aria-label", "Isolated account sign-in terminal");
     const title = doc.createElement("strong");
     title.textContent = text.signInTitle;
@@ -37,7 +37,7 @@ export class TerminalLoginView {
     this.details = doc.createElement("pre");
     this.details.hidden = true;
     this.screen = doc.createElement("div");
-    this.screen.className = "coloride-agent-login-screen";
+    this.screen.className = "hilo-agent-login-screen";
     this.start = doc.createElement("button");
     this.start.type = "button";
     this.start.textContent = text.signInStart;
@@ -51,7 +51,7 @@ export class TerminalLoginView {
       }),
     );
     const actions = doc.createElement("div");
-    actions.className = "coloride-agent-terminal-login-actions";
+    actions.className = "hilo-agent-terminal-login-actions";
     this.again = doc.createElement("button");
     this.again.type = "button";
     this.again.textContent = text.signInOpenAgainShort;

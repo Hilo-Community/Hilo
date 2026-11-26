@@ -139,10 +139,10 @@ impl DocumentSession {
         )
     }
 
-    /// Register or replace Coloride validation ranges on this document session.
+    /// Register or replace Hilo validation ranges on this document session.
     pub fn set_validation_ranges(
         &mut self,
-        ranges_utf16: Vec<(Utf16Span, ColorideValidationState)>,
+        ranges_utf16: Vec<(Utf16Span, HiloValidationState)>,
     ) -> Result<(), DocumentError> {
         let mut validated = Vec::with_capacity(ranges_utf16.len());
         for (span_utf16, state) in ranges_utf16 {

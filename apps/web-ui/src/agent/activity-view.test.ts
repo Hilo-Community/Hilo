@@ -69,24 +69,24 @@ describe("exploration activities", () => {
   });
   it("shows accurate call counts, opens while active, and collapses when done", () => {
     const { root, state, render } = setup([tool("a", "read"), tool("b", "search", "running")]);
-    const header = root.querySelector(".coloride-agent-exploration > button") as HTMLButtonElement;
+    const header = root.querySelector(".hilo-agent-exploration > button") as HTMLButtonElement;
     expect(header.textContent).toContain("Exploring…");
     expect(header.textContent).toContain("1 read, 1 search");
     expect(header.getAttribute("aria-expanded")).toBe("true");
     render({ ...state, tools: state.tools.map((t) => ({ ...t, status: "done" })) });
     expect(header.textContent).toContain("Explored");
     expect(header.getAttribute("aria-expanded")).toBe("false");
-    expect(root.querySelector(".coloride-agent-exploration [role=list]")?.children).toHaveLength(2);
+    expect(root.querySelector(".hilo-agent-exploration [role=list]")?.children).toHaveLength(2);
     root.remove();
   });
   it("preserves manual disclosure, nested tool focus and scroll as a group grows", () => {
     const { root, state, render } = setup([tool("a", "search", "running")]);
-    const header = root.querySelector(".coloride-agent-exploration > button") as HTMLButtonElement;
+    const header = root.querySelector(".hilo-agent-exploration > button") as HTMLButtonElement;
     header.click();
     render({ ...state, tools: [tool("a", "search")] });
     expect(header.getAttribute("aria-expanded")).toBe("false");
     header.click();
-    const nested = root.querySelector(".coloride-agent-tool > button") as HTMLButtonElement;
+    const nested = root.querySelector(".hilo-agent-tool > button") as HTMLButtonElement;
     // Search has a bounded output body to expand.
     render({ ...state, tools: [{ ...tool("a", "search"), output: "one\ntwo" }] });
     nested.focus();
@@ -97,8 +97,8 @@ describe("exploration activities", () => {
       tools: [{ ...tool("a", "search"), output: "one\ntwo\nthree" }, read],
       timeline: [...state.timeline, ...timeline([read])],
     });
-    expect(root.querySelector(".coloride-agent-exploration > button")).toBe(header);
-    expect(root.querySelector(".coloride-agent-tool > button")).toBe(nested);
+    expect(root.querySelector(".hilo-agent-exploration > button")).toBe(header);
+    expect(root.querySelector(".hilo-agent-tool > button")).toBe(nested);
     expect(document.activeElement).toBe(nested);
     expect(nested.getAttribute("aria-expanded")).toBe("true");
     expect(header.getAttribute("aria-expanded")).toBe("true");
@@ -110,7 +110,7 @@ describe("exploration activities", () => {
     ["pending", "Waiting to explore"],
   ] as const)("retains the %s state and details", (status, label) => {
     const { root } = setup([tool("a", "read", status)]);
-    const group = root.querySelector(".coloride-agent-exploration");
+    const group = root.querySelector(".hilo-agent-exploration");
     expect(group?.getAttribute("data-status")).toBe(status);
     expect(group?.querySelector("button")?.getAttribute("aria-label")).toContain(label);
     expect(group?.querySelector("button")?.getAttribute("aria-expanded")).toBe("true");
@@ -152,7 +152,7 @@ describe("ACP thinking tools", () => {
     };
     const element = view.update(thinking, vi.fn());
     expect(toolLabel(thinking)).toEqual({ verb: "Thinking…", target: "Guardian Review" });
-    expect(element.classList.contains("coloride-agent-activity")).toBe(true);
+    expect(element.classList.contains("hilo-agent-activity")).toBe(true);
     expect(element.textContent).not.toContain("Calling");
     expect(element.querySelector("script")).toBeNull();
     expect(view.card.header.getAttribute("aria-expanded")).toBe("true");

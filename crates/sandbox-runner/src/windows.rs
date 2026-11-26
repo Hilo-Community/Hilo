@@ -10,7 +10,7 @@
 //!   run; a toolchain installed under the user's profile is not readable and fails to start.
 //! * **Links:** a worktree containing a junction, a symbolic link or a hard link is refused
 //!   before any permission changes, since the access granted would follow the link outside.
-//! * **Crash safety:** each run is recorded in a journal (`%LOCALAPPDATA%\Coloride\sandbox-runs`)
+//! * **Crash safety:** each run is recorded in a journal (`%LOCALAPPDATA%\Hilo\sandbox-runs`)
 //!   until it has undone its changes; the self-test first undoes the runs of a Host that died.
 //! * **Read-only worktrees and shares:** read/execute ACLs grant access to the unique run SID;
 //!   shares are split around forbidden content so it receives no inherited grants. All changed
@@ -115,12 +115,12 @@ pub struct AppContainerEngine {
 }
 
 impl AppContainerEngine {
-    /// Keeps its journal in `%LOCALAPPDATA%\Coloride\sandbox-runs`.
+    /// Keeps its journal in `%LOCALAPPDATA%\Hilo\sandbox-runs`.
     pub fn for_current_user() -> Result<Self, SandboxError> {
         let local = std::env::var_os("LOCALAPPDATA")
             .ok_or_else(|| SandboxError::unavailable("the LOCALAPPDATA variable is not set"))?;
         Ok(Self::with_journal_dir(
-            Path::new(&local).join("Coloride").join("sandbox-runs"),
+            Path::new(&local).join("Hilo").join("sandbox-runs"),
         ))
     }
 
@@ -177,7 +177,7 @@ impl AppContainerEngine {
                 max_memory_bytes: spec.limits.max_memory_bytes,
                 max_cpu_time: spec.limits.max_cpu_time,
             },
-            container_name: format!("coloride-{}", spec.run_id),
+            container_name: format!("hilo-{}", spec.run_id),
             stdin_piped: false,
         })
     }
@@ -239,7 +239,7 @@ impl Probe {
     fn new(journal_dir: &Path) -> Result<Self, SandboxError> {
         let system_root = std::env::var_os("SystemRoot")
             .ok_or_else(|| SandboxError::unavailable("the SystemRoot variable is not set"))?;
-        let base = std::env::temp_dir().join(format!("coloride-selftest-{}", new_run_id()));
+        let base = std::env::temp_dir().join(format!("hilo-selftest-{}", new_run_id()));
         let cleanup = ProbeDir(base.clone());
         let (work, outside) = (base.join("work"), base.join("outside"));
         fs::create_dir_all(&work)?;
@@ -268,7 +268,7 @@ impl Probe {
             denied_read_paths: Vec::new(),
             journal_dir: self.journal_dir.clone(),
             limits: JobLimits::default(),
-            container_name: format!("coloride-selftest-{}", new_run_id()),
+            container_name: format!("hilo-selftest-{}", new_run_id()),
             stdin_piped: false,
         };
         let mut child = SandboxedChild::spawn_prepared(
@@ -284,7 +284,7 @@ impl Probe {
 }
 
 const SECRET_FILE: &str = "secret.txt";
-const SECRET: &str = "COLORIDE-SELF-TEST-SECRET";
+const SECRET: &str = "HILO-SELF-TEST-SECRET";
 
 const PROBE_LIMITS: ResourceLimits = ResourceLimits {
     wall_timeout: Duration::from_secs(30),

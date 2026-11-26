@@ -1,4 +1,4 @@
-import type { ExcerptFreshness } from "@coloride/protocol-types";
+import type { ExcerptFreshness } from "@hilo/protocol-types";
 import { isSecretBearingPath, redactSecretsInLine } from "../security/secrets.js";
 import type { StoreContext } from "./context.js";
 import type { DocumentBuffer } from "./documents.js";

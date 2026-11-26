@@ -1,4 +1,4 @@
-import { COLORIDE_DESIGN_TOKENS, type CockpitFileTreeNode } from "../stores/index.js";
+import { type CockpitFileTreeNode, HILO_DESIGN_TOKENS } from "../stores/index.js";
 import {
   TREE_CHEVRON_SVG,
   TREE_FOLDER_CLOSED_SVG,
@@ -106,7 +106,7 @@ export class ExplorerTreeRenderer {
   ): HTMLElement {
     const expanded = node.isDirectory && !options.collapsed.has(node.path);
     const row = doc.createElement("div");
-    row.className = "explorer-row cm-coloride-virtual-tree-row";
+    row.className = "explorer-row cm-hilo-virtual-tree-row";
     row.setAttribute("role", "treeitem");
     row.setAttribute("aria-level", String(node.depth + 1));
     row.setAttribute(
@@ -150,17 +150,17 @@ export class ExplorerTreeRenderer {
     }
 
     const name = doc.createElement("span");
-    name.className = "explorer-name cm-coloride-tree-label";
+    name.className = "explorer-name cm-hilo-tree-label";
     name.textContent = node.name;
 
     if (node.isDirectory) row.append(chevron);
     row.append(icon, name);
 
-    // Coloride state stays visible, but only when it says something (not "unchanged").
+    // Hilo state stays visible, but only when it says something (not "unchanged").
     if (node.validationState !== "UnchangedBlue") {
-      const token = COLORIDE_DESIGN_TOKENS[node.validationState];
+      const token = HILO_DESIGN_TOKENS[node.validationState];
       const badge = doc.createElement("span");
-      badge.className = "explorer-state cm-coloride-tree-state-badge";
+      badge.className = "explorer-state cm-hilo-tree-state-badge";
       badge.textContent = token.icon;
       badge.style.color = token.darkText;
       badge.setAttribute("role", "img");

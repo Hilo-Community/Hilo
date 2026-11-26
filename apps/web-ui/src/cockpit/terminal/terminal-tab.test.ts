@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CockpitDomController,
@@ -78,7 +78,7 @@ function setup(refuse?: string) {
       return handle;
     },
   };
-  const editorView = new ColorideEditorView({
+  const editorView = new HiloEditorView({
     initialDocumentId: "src/main.ts",
     initialContent: "",
     ipcChannel: new InMemoryBinaryHostBridge(),
@@ -125,10 +125,10 @@ function setup(refuse?: string) {
   const pressKey = (init: KeyboardEventInit) =>
     document.dispatchEvent(new KeyboardEvent("keydown", init));
   const terminals = () => stores.zone3.getState().chats.filter((chat) => chat.kind === "terminal");
-  const panes = () => root.querySelectorAll<HTMLElement>(".coloride-terminal-pane");
-  const plus = () => root.querySelector<HTMLButtonElement>(".coloride-header-tab-add");
+  const panes = () => root.querySelectorAll<HTMLElement>(".hilo-terminal-pane");
+  const plus = () => root.querySelector<HTMLButtonElement>(".hilo-header-tab-add");
   const menuItems = () =>
-    Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"));
+    Array.from(document.querySelectorAll<HTMLButtonElement>(".hilo-new-panel-item"));
   const item = (label: string) =>
     menuItems().find((candidate) => candidate.textContent?.trim().startsWith(label));
   return { controller, stores, views, opened, press, pressKey, terminals, panes, plus, item };
@@ -179,7 +179,7 @@ describe("terminal as a Zone 3 panel", () => {
     expect(stores.zone3.getState().chats).toHaveLength(sessionsBefore + 1);
     expect(terminals()).toHaveLength(0);
     expect(opened).toHaveLength(0);
-    expect(document.querySelector(".coloride-new-panel-menu")).toBeNull();
+    expect(document.querySelector(".hilo-new-panel-menu")).toBeNull();
   });
 
   it("choosing Terminal in the + menu adds a terminal tab and starts a shell", async () => {
@@ -234,11 +234,11 @@ describe("terminal as a Zone 3 panel", () => {
     await settle();
     const chatId = exited.terminals()[0]?.chatId ?? "";
     const tab = () =>
-      document.querySelector<HTMLElement>(`.coloride-header-tab[data-chat-id="${chatId}"]`);
-    const dot = () => tab()?.querySelector<HTMLElement>(".coloride-header-tab-status-dot");
+      document.querySelector<HTMLElement>(`.hilo-header-tab[data-chat-id="${chatId}"]`);
+    const dot = () => tab()?.querySelector<HTMLElement>(".hilo-header-tab-status-dot");
     expect(dot()?.hidden).toBe(true);
     exited.opened[0]?.exit();
-    expect(exited.panes()[0]?.querySelector(".coloride-terminal-status")?.textContent).toBe(
+    expect(exited.panes()[0]?.querySelector(".hilo-terminal-status")?.textContent).toBe(
       "Process exited",
     );
     expect(dot()?.hidden).toBe(false);
@@ -247,7 +247,7 @@ describe("terminal as a Zone 3 panel", () => {
     const refused = setup("workspace is not trusted: Terminal is blocked");
     refused.press();
     await settle();
-    expect(refused.panes()[0]?.querySelector(".coloride-terminal-status")?.textContent).toContain(
+    expect(refused.panes()[0]?.querySelector(".hilo-terminal-status")?.textContent).toContain(
       "not trusted",
     );
   });
@@ -291,7 +291,7 @@ describe("terminal as a Zone 3 panel", () => {
     await settle();
     expect(stores.zone3.getState().activeChatId).toBe(terminalId);
     const selected = document.querySelector<HTMLElement>(
-      `.coloride-zone-3-header [data-chat-id="${terminalId}"]`,
+      `.hilo-zone-3-header [data-chat-id="${terminalId}"]`,
     );
     expect(selected?.getAttribute("aria-selected")).toBe("true");
     expect(opened).toHaveLength(1);
@@ -322,7 +322,7 @@ describe("terminal as a Zone 3 panel", () => {
       ?.click();
     // The sidebar's "+" offers the same menu as the panels' one: Terminal or Codex.
     const entries = () =>
-      Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"));
+      Array.from(document.querySelectorAll<HTMLButtonElement>(".hilo-new-panel-item"));
     expect(entries().map((item) => item.textContent)).toEqual([
       expect.stringMatching(/Terminal/),
       expect.stringMatching(/Codex/),
@@ -332,17 +332,17 @@ describe("terminal as a Zone 3 panel", () => {
     await settle();
     expect(terminals()).toHaveLength(1);
     expect(opened).toHaveLength(1);
-    expect(document.querySelector(".coloride-new-panel-menu")).toBeNull();
+    expect(document.querySelector(".hilo-new-panel-menu")).toBeNull();
 
     stores.createWorkGroup("Other");
-    document.querySelector<HTMLButtonElement>(".coloride-group-empty-add")?.click();
+    document.querySelector<HTMLButtonElement>(".hilo-group-empty-add")?.click();
     await settle();
     expect(terminals()).toHaveLength(2);
     expect(opened).toHaveLength(2);
     // The + menu of the header still offers both: Codex > Interface makes an agent session.
     const before = stores.zone3.getState().chats.length;
-    document.querySelector<HTMLButtonElement>(".coloride-header-tab-add")?.click();
-    Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"))
+    document.querySelector<HTMLButtonElement>(".hilo-header-tab-add")?.click();
+    Array.from(document.querySelectorAll<HTMLButtonElement>(".hilo-new-panel-item"))
       .find((item) => item.textContent?.trim().startsWith("Codex"))
       ?.click();
     expect(stores.zone3.getState().chats).toHaveLength(before + 1);

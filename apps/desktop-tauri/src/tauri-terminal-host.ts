@@ -1,4 +1,4 @@
-import type { TerminalAgentStatus, TerminalHost } from "@coloride/web-ui";
+import type { TerminalAgentStatus, TerminalHost } from "@hilo/web-ui";
 
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 

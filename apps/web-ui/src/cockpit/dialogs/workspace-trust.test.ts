@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CockpitDomController,
@@ -27,7 +27,7 @@ function setup(answer: "trust" | "decline" = "trust") {
     state: openRoot !== null && trusted.has(openRoot) ? "Trusted" : "Untrusted",
     workspaceRoot: openRoot,
   });
-  const editorView = new ColorideEditorView({
+  const editorView = new HiloEditorView({
     initialDocumentId: "src/main.ts",
     initialContent: "const ready = true;\n",
     ipcChannel: new InMemoryBinaryHostBridge(),
@@ -94,7 +94,7 @@ describe("workspace trust — asked for when a folder is used, not announced", (
     await settle();
     expect(controller.getWorkspaceTrust()).toEqual({ state: "Untrusted", workspaceRoot: null });
     await openFolder("/work/unknown-repo");
-    expect(root.querySelector(".coloride-trust-banner")).toBeNull();
+    expect(root.querySelector(".hilo-trust-banner")).toBeNull();
     expect(controller.getWorkspaceTrust()?.state).toBe("Untrusted");
   });
 

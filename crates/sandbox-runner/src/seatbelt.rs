@@ -223,7 +223,7 @@ pub(crate) fn render_profile(spec: &ValidatedSpec, home: &Path) -> Result<Profil
     let text = &mut profile.text;
     text.push_str("(version 1)\n");
     text.push_str(&format!(
-        "(deny default (with message \"coloride-run-{}\"))\n",
+        "(deny default (with message \"hilo-run-{}\"))\n",
         spec.run_id
     ));
     text.push_str("(allow process-exec)\n(allow process-fork)\n");
@@ -291,7 +291,7 @@ pub(crate) fn render_profile(spec: &ValidatedSpec, home: &Path) -> Result<Profil
     // Last, so that they win over everything above.
     // Tagged like the default rule: the log query filters on the tag.
     profile.text.push_str(&format!(
-        "(deny file-read* file-write* {} (with message \"coloride-run-{}\"))\n",
+        "(deny file-read* file-write* {} (with message \"hilo-run-{}\"))\n",
         secrets.join(" "),
         spec.run_id
     ));
@@ -365,7 +365,7 @@ impl OsSandboxEngine for SeatbeltEngine {
         if !cfg!(target_os = "macos") {
             return;
         }
-        let tag = format!("coloride-run-{}", run.run_id);
+        let tag = format!("hilo-run-{}", run.run_id);
         let started = run.started;
         thread::spawn(move || {
             thread::sleep(LOG_SETTLE);
@@ -441,10 +441,10 @@ mod tests {
             terminal_device: None,
             mediate_worktree_reads: false,
             worktree_read_only: false,
-            worktree_root: "/Users/u/Library/Caches/Coloride/wt".into(),
+            worktree_root: "/Users/u/Library/Caches/Hilo/wt".into(),
             program: "/usr/bin/true".into(),
             args: vec![],
-            cwd: "/Users/u/Library/Caches/Coloride/wt".into(),
+            cwd: "/Users/u/Library/Caches/Hilo/wt".into(),
             env: BTreeMap::new(),
             read_only_paths: vec!["/Users/u/project/node_modules".into()],
             writable_paths: Vec::new(),
@@ -453,7 +453,7 @@ mod tests {
             loopback_listen_ports: Vec::new(),
             network: NetworkPolicy::Denied,
             limits: ResourceLimits::default(),
-            tmp_dir: "/Users/u/Library/Caches/Coloride/wt/.coloride-tmp/x".into(),
+            tmp_dir: "/Users/u/Library/Caches/Hilo/wt/.hilo-tmp/x".into(),
             run_id: "123-1-abc".into(),
         }
     }
@@ -463,7 +463,7 @@ mod tests {
         let profile = render_profile(&spec(), Path::new("/Users/u")).unwrap();
         assert!(profile
             .text
-            .contains("(deny default (with message \"coloride-run-123-1-abc\"))"));
+            .contains("(deny default (with message \"hilo-run-123-1-abc\"))"));
         assert!(!profile.text.contains("(allow default"));
         assert!(!profile.text.contains("network"), "{}", profile.text);
         assert!(
@@ -555,10 +555,7 @@ mod tests {
             .iter()
             .find(|(name, _)| name.starts_with("WT"))
             .unwrap();
-        assert_eq!(
-            worktree.1,
-            PathBuf::from("/Users/u/Library/Caches/Coloride/wt")
-        );
+        assert_eq!(worktree.1, PathBuf::from("/Users/u/Library/Caches/Hilo/wt"));
         // The read-only path is readable but appears in no write rule.
         assert!(profile
             .params
@@ -599,13 +596,13 @@ mod tests {
     fn kernel_denials_become_distinct_audit_events() {
         let log = "\
 2026-11-15 00:48:29.128 E  kernel[0:23b972] (Sandbox) Sandbox: cat(87225) deny(1) file-read-data /Users/u/.ssh/id_rsa
-coloride-run-1
+hilo-run-1
 2026-11-15 00:48:29.129 E  kernel[0:23bc08] (Sandbox) Sandbox: cat(87225) deny(1) file-read-data /Users/u/.ssh/id_rsa
-coloride-run-1
+hilo-run-1
 2026-11-15 00:48:29.130 E  kernel[0:23bccc] (Sandbox) Sandbox: nc(87226) deny(1) network-outbound 127.0.0.1:9
-coloride-run-1
+hilo-run-1
 2026-11-15 00:48:29.131 E  kernel[0:23bccc] (Sandbox) Sandbox: kill(87227) deny(1) signal target:87000
-coloride-run-1
+hilo-run-1
 Filtering the log data using \"eventMessage CONTAINS x\"
 ";
         let events = parse_denials(log, 10);

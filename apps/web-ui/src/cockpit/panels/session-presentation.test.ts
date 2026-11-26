@@ -14,19 +14,19 @@ const terminal = (overrides: Partial<CockpitTerminalSession> = {}): CockpitTermi
 describe("a terminal with a recognized agent CLI typed into it", () => {
   it("shows the plain terminal icon and no dot by default", () => {
     const chat = terminal();
-    expect(sessionIcon(chat)).toContain("coloride-terminal-icon");
+    expect(sessionIcon(chat)).toContain("hilo-terminal-icon");
     expect(sessionStatusDot(chat)).toBeNull();
   });
 
   it("swaps to the agent's mark and a running spinner while it looks busy", () => {
     const busy = terminal({ detectedAgentId: "codex", detectedAgentBusy: true });
-    expect(sessionIcon(busy)).not.toContain("coloride-terminal-icon");
+    expect(sessionIcon(busy)).not.toContain("hilo-terminal-icon");
     expect(sessionStatusDot(busy)).toBe("running");
   });
 
   it("keeps the agent's mark but no dot once it's idle at its own prompt", () => {
     const idle = terminal({ detectedAgentId: "codex", detectedAgentBusy: false });
-    expect(sessionIcon(idle)).not.toContain("coloride-terminal-icon");
+    expect(sessionIcon(idle)).not.toContain("hilo-terminal-icon");
     expect(sessionStatusDot(idle)).toBeNull();
   });
 
@@ -41,7 +41,7 @@ describe("a terminal with a recognized agent CLI typed into it", () => {
 
   it("falls back to the terminal icon for an unrecognized detected id", () => {
     const unknown = terminal({ detectedAgentId: "some-other-cli", detectedAgentBusy: true });
-    expect(sessionIcon(unknown)).toContain("coloride-terminal-icon");
+    expect(sessionIcon(unknown)).toContain("hilo-terminal-icon");
   });
 
   it("still reports an exited shell when no agent was ever detected", () => {

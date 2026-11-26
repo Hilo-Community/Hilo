@@ -435,7 +435,7 @@ impl SqliteWalContextEngine {
 
     /// Index or re-index a single file after running `AclAndSecretScanner` prior to any SQLite insert.
     /// Appends a durable frame to `.sqlite-wal` without rewriting the full `.sqlite` snapshot on every file.
-    /// Returns `Ok(None)` if the file path is excluded by ACL / `.gitignore` / `.colorideignore` / `.env` rules.
+    /// Returns `Ok(None)` if the file path is excluded by ACL / `.gitignore` / `.hiloignore` / `.env` rules.
     pub fn index_file(
         &mut self,
         relative_path: &str,

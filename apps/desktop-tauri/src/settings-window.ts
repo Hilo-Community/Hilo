@@ -1,11 +1,11 @@
-import { SettingsPage } from "@coloride/web-ui";
+import { SettingsPage } from "@hilo/web-ui";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { createTauriAgentRegistryHost } from "./tauri-agent-registry-host.js";
 
 /** Entry point for the independent native Settings window; never boots another editor. */
 export function mountSettingsWindow(root: HTMLElement): void {
-  root.className = "coloride-standalone-settings";
+  root.className = "hilo-standalone-settings";
   const page = new SettingsPage(document, {
     agentRegistry: createTauriAgentRegistryHost(invoke),
   });

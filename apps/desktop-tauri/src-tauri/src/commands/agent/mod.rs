@@ -24,7 +24,7 @@ const CPU_ALLOWANCE: Duration = Duration::from_secs(120);
 const MAX_LAUNCH_ARGS: usize = 64;
 const MAX_LAUNCH_BYTES: usize = 24 * 1024;
 /// Never readable by the agent, whatever the task.
-const FORBIDDEN_PATHS: [&str; 5] = [".git", ".env", ".ssh", ".aws", ".coloride-tmp"];
+const FORBIDDEN_PATHS: [&str; 5] = [".git", ".env", ".ssh", ".aws", ".hilo-tmp"];
 
 fn gate(state: &DesktopAppState) -> Result<WorkspaceTrustGate, String> {
     let gate = state

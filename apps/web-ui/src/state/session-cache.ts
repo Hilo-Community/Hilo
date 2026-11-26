@@ -1,5 +1,5 @@
 import type { CockpitChatTab } from "../stores/types.js";
-import { COLORIDE_DESIGN_TOKENS } from "../ui/design-state-tokens.js";
+import { HILO_DESIGN_TOKENS } from "../ui/design-state-tokens.js";
 
 /** Upgrade old JSON sessions once; live stores never infer kind from a model label. */
 export function restoreCachedSession(value: unknown): CockpitChatTab {
@@ -9,7 +9,7 @@ export function restoreCachedSession(value: unknown): CockpitChatTab {
     typeof legacy.chatId !== "string" ||
     typeof legacy.title !== "string" ||
     typeof legacy.validationState !== "string" ||
-    !Object.hasOwn(COLORIDE_DESIGN_TOKENS, legacy.validationState)
+    !Object.hasOwn(HILO_DESIGN_TOKENS, legacy.validationState)
   ) {
     throw new Error("Invalid cached session identity");
   }

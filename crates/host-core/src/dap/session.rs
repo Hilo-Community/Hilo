@@ -134,8 +134,8 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 fn initialize_arguments() -> Value {
     json!({
-        "clientID": "coloride",
-        "clientName": "Coloride",
+        "clientID": "hilo",
+        "clientName": "Hilo",
         "adapterID": "pwa-node",
         "locale": "en",
         "linesStartAt1": true,
@@ -257,7 +257,7 @@ impl DebugSession {
                 json!({
                     "type": "pwa-node",
                     "request": "launch",
-                    "name": "Coloride",
+                    "name": "Hilo",
                     "program": program,
                     "runtimeExecutable": runtime,
                     "args": args,

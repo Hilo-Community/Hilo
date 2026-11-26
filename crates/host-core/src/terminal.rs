@@ -147,7 +147,7 @@ impl TerminalSession {
         command.cwd(plain_cwd(gate.workspace_root()));
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
-        command.env("TERM_PROGRAM", "Coloride");
+        command.env("TERM_PROGRAM", "Hilo");
         #[cfg(unix)]
         let agent_status = agent_status::AgentStatusSetup::prepare(
             status_sink,

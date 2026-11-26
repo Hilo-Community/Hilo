@@ -6,7 +6,7 @@ import { SETTINGS_SECTIONS, type SettingsSectionId } from "./settings-content.js
 
 const CHEVRON =
   '<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 4 8 8-8 8"/></svg>';
-const SECTION_KEY = "coloride.settings.section.v1";
+const SECTION_KEY = "hilo.settings.section.v1";
 
 /** The Settings screen. Hiding it never removes or reparents the singleton code editor. */
 export class SettingsPage {
@@ -35,13 +35,13 @@ export class SettingsPage {
     }
     this.expanded.add(this.active);
     this.element = doc.createElement("section");
-    this.element.className = "coloride-settings-page";
+    this.element.className = "hilo-settings-page";
     this.element.setAttribute("aria-label", "Settings");
     this.element.hidden = true;
     const aside = doc.createElement("aside");
-    aside.className = "coloride-settings-navigation";
+    aside.className = "hilo-settings-navigation";
     const label = doc.createElement("label");
-    label.className = "coloride-settings-search";
+    label.className = "hilo-settings-search";
     label.innerHTML =
       '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10.5" cy="10.5" r="8.5"/><path d="m17 17 5 5"/></svg>';
     this.search = doc.createElement("input");
@@ -51,16 +51,16 @@ export class SettingsPage {
     this.search.addEventListener("input", () => this.render());
     label.append(this.search);
     this.nav = doc.createElement("nav");
-    this.nav.className = "coloride-settings-categories";
+    this.nav.className = "hilo-settings-categories";
     this.nav.setAttribute("aria-label", "Settings sections");
     const navViewport = doc.createElement("div");
-    navViewport.className = "coloride-settings-viewport coloride-settings-viewport--nav";
+    navViewport.className = "hilo-settings-viewport hilo-settings-viewport--nav";
     navViewport.append(this.nav);
     aside.append(label, navViewport);
     const mainViewport = doc.createElement("div");
-    mainViewport.className = "coloride-settings-viewport";
+    mainViewport.className = "hilo-settings-viewport";
     this.scroller = doc.createElement("div");
-    this.scroller.className = "coloride-settings-main";
+    this.scroller.className = "hilo-settings-main";
     this.scroller.tabIndex = 0;
     this.main = doc.createElement("div");
     this.scroller.append(this.main);
@@ -129,13 +129,11 @@ export class SettingsPage {
     this.render();
     this.scroller.scrollTop = 0;
     const selected = group
-      ? this.nav.querySelector<HTMLButtonElement>('.coloride-settings-subnav [aria-current="page"]')
-      : this.nav.querySelector<HTMLButtonElement>(
-          '.coloride-settings-nav-label[aria-current="page"]',
-        );
+      ? this.nav.querySelector<HTMLButtonElement>('.hilo-settings-subnav [aria-current="page"]')
+      : this.nav.querySelector<HTMLButtonElement>('.hilo-settings-nav-label[aria-current="page"]');
     selected?.focus();
     if (group)
-      [...this.main.querySelectorAll<HTMLElement>(".coloride-settings-group")]
+      [...this.main.querySelectorAll<HTMLElement>(".hilo-settings-group")]
         .find((el) => el.dataset.group === group)
         ?.scrollIntoView?.({ block: "start" });
   }
@@ -161,10 +159,10 @@ export class SettingsPage {
       )
         continue;
       const content = this.doc.createElement("div");
-      content.className = "coloride-settings-category is-wide";
+      content.className = "hilo-settings-category is-wide";
       for (const groupName of section.groups) {
         const group = this.doc.createElement("section");
-        group.className = "coloride-settings-group";
+        group.className = "hilo-settings-group";
         group.dataset.group = groupName;
         this.panel ??= new AgentRegistryPanel(this.doc, this.options.agentRegistry);
         group.append(this.panel.element);
@@ -173,7 +171,7 @@ export class SettingsPage {
       }
       if (needle) {
         const title = this.doc.createElement("h3");
-        title.className = "coloride-settings-result-title";
+        title.className = "hilo-settings-result-title";
         title.textContent = section.label;
         content.prepend(title);
       }
@@ -181,7 +179,7 @@ export class SettingsPage {
     }
     if (!matches) {
       const empty = this.doc.createElement("div");
-      empty.className = "coloride-settings-empty";
+      empty.className = "hilo-settings-empty";
       empty.setAttribute("role", "status");
       const title = this.doc.createElement("h2");
       title.textContent = "No settings found";
@@ -210,9 +208,9 @@ export class SettingsPage {
     this.nav.replaceChildren();
     for (const section of SETTINGS_SECTIONS) {
       const item = this.doc.createElement("div");
-      item.className = "coloride-settings-nav-item";
+      item.className = "hilo-settings-nav-item";
       const row = this.doc.createElement("div");
-      row.className = "coloride-settings-nav-row";
+      row.className = "hilo-settings-nav-row";
       const open = !searching && this.expanded.has(section.id);
       const toggle = this.button(
         "",
@@ -222,7 +220,7 @@ export class SettingsPage {
           this.renderNavigation(searching);
           this.nav.querySelector<HTMLButtonElement>(`[data-toggle="${section.id}"]`)?.focus();
         },
-        "coloride-settings-nav-toggle",
+        "hilo-settings-nav-toggle",
       );
       toggle.innerHTML = CHEVRON;
       toggle.dataset.toggle = section.id;
@@ -231,7 +229,7 @@ export class SettingsPage {
       const label = this.button(
         section.label,
         () => this.select(section.id),
-        "coloride-settings-nav-label",
+        "hilo-settings-nav-label",
       );
       if (!searching && this.active === section.id && !this.activeGroup)
         row.dataset.selected = "true";
@@ -240,7 +238,7 @@ export class SettingsPage {
       item.append(row);
       if (open) {
         const children = this.doc.createElement("div");
-        children.className = "coloride-settings-subnav";
+        children.className = "hilo-settings-subnav";
         for (const group of section.groups) {
           const child = this.button(group, () => this.select(section.id, group));
           if (this.active === section.id && this.activeGroup === group)

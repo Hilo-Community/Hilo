@@ -1,4 +1,4 @@
-import type { KeymapPresetId } from "@coloride/editor-cm6";
+import type { KeymapPresetId } from "@hilo/editor-cm6";
 import { UI_STRINGS } from "../ui/ui-strings.js";
 import type { NativeMigrationReport, OnboardingState, QuarantinedMcpServerEntry } from "./types.js";
 
@@ -40,7 +40,7 @@ function renderImportButton(
 ) {
   const importButton = button(
     doc,
-    "coloride-onboarding-import-btn",
+    "hilo-onboarding-import-btn",
     UI_STRINGS.onboarding.importDetected,
     () => {
       importButton.disabled = true;
@@ -67,7 +67,7 @@ function renderMcpServer(
   actions: OnboardingModalActions,
 ) {
   const item = doc.createElement("div");
-  item.className = "coloride-quarantined-mcp-item";
+  item.className = "hilo-quarantined-mcp-item";
   item.dataset.serverName = server.serverName;
   item.dataset.status = server.status;
   item.dataset.enabled = String(server.enabled);
@@ -77,7 +77,7 @@ function renderMcpServer(
   item.appendChild(labelSpan);
 
   for (const action of ["approve", "reject"] as const) {
-    const btn = button(doc, `coloride-mcp-${action}-btn`, UI_STRINGS.onboarding[action], () =>
+    const btn = button(doc, `hilo-mcp-${action}-btn`, UI_STRINGS.onboarding[action], () =>
       (action === "approve" ? actions.approveServer : actions.rejectServer)(server.serverName),
     );
     btn.dataset.action = action;
@@ -106,11 +106,11 @@ export function renderOnboardingModal(
   modalEl.appendChild(title);
 
   const presetBar = doc.createElement("div");
-  presetBar.className = "coloride-onboarding-keymap-presets";
+  presetBar.className = "hilo-onboarding-keymap-presets";
   for (const preset of KEYMAP_PRESETS) {
     const btn = button(
       doc,
-      "coloride-keymap-preset-btn",
+      "hilo-keymap-preset-btn",
       preset === "VsCode" ? "VS Code" : preset,
       () => actions.selectKeymapPreset(preset),
     );
@@ -125,7 +125,7 @@ export function renderOnboardingModal(
   }
 
   const mcpSection = doc.createElement("section");
-  mcpSection.className = "coloride-onboarding-mcp-quarantine";
+  mcpSection.className = "hilo-onboarding-mcp-quarantine";
   mcpSection.setAttribute("aria-label", UI_STRINGS.onboarding.quarantine);
   for (const server of state.quarantinedMcpServers) {
     mcpSection.appendChild(renderMcpServer(doc, server, actions));
@@ -135,7 +135,7 @@ export function renderOnboardingModal(
   modalEl.appendChild(
     button(
       doc,
-      "coloride-reset-defaults-btn",
+      "hilo-reset-defaults-btn",
       UI_STRINGS.onboarding.resetDefaults,
       actions.resetToDefaults,
     ),

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Coloride ACP agent registry: reads the public catalog, installs and removes agents on the Host with verified downloads"
+description = "Hilo ACP agent registry: reads the public catalog, installs and removes agents on the Host with verified downloads"
 
 [lints]
 workspace = true

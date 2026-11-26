@@ -1,4 +1,4 @@
-//! The nine Coloride technical contracts and their codecs (`LOT-002`).
+//! The nine Hilo technical contracts and their codecs (`LOT-002`).
 //!
 //! One submodule per concern; everything is re-exported here so paths such as
 //! `host_core::EditorTransaction` do not depend on the split.
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ts_rs::TS;
 
-/// Canonical schema version for all Coloride technical contracts (`LOT-002`).
+/// Canonical schema version for all Hilo technical contracts (`LOT-002`).
 pub const CONTRACT_SCHEMA_VERSION: u16 = 1;
 
 mod approval;

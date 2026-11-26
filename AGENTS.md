@@ -16,7 +16,7 @@
 3. **Strict Isolation of CodeMirror 6 (`packages/editor-cm6`):**
    - The CodeMirror 6 `EditorView` must **never** be unmounted/remounted by a React re-render (use isolated atomic stores and `16 ms` `requestAnimationFrame` stream batching).
    - Keystroke latency target: **p95 <= 16 ms**; local Lezer highlighting: **< 2 ms**.
-4. **Coloride 5-State Semantics Bound to the Exact Revision Hash:**
+4. **Hilo 5-State Semantics Bound to the Exact Revision Hash:**
    - `Validated` (`ValidatedGreen` / `✓`): requires a valid `Evidence` struct (build + `vtsls`/Biome 0 errors + 100% impacted tests passed + `Preview Service` 0 crashes/`console.error`) matching the exact `content_blake3_hash`.
    - Editing a single character inside a `ValidatedGreen` range synchronously downgrades it to `Stale Validation` (`StaleOrange` / `⟳`).
 5. **Fail-Closed Sandbox Policy:**
@@ -38,7 +38,7 @@
 3. **Isolation stricte de CodeMirror 6 (`packages/editor-cm6`) :**
    - La vue `EditorView` de CodeMirror 6 ne doit **jamais** être démontée/remontée par un re-rendu React (utiliser des stores atomiques séparés et un cadencement `requestAnimationFrame` à 16 ms pour le streaming).
    - Cible de latence de frappe : **p95 <= 16 ms** ; coloration locale Lezer : **< 2 ms**.
-4. **Sémantique des 5 états Coloride liée au hash exact de la révision :**
+4. **Sémantique des 5 états Hilo liée au hash exact de la révision :**
    - `Validé` (`ValidatedGreen` / `✓`) : exige une preuve `Evidence` valide (compilation + `vtsls`/Biome 0 erreur + 100 % tests impactés passés + `Preview Service` 0 crash/`console.error`) correspondant exactement au `content_blake3_hash` courant.
    - Dès qu'un caractère d'une plage `ValidatedGreen` est modifié localement, elle passe synchroniquement à `Validation périmée` (`StaleOrange` / `⟳`).
 5. **Politique Sandbox *Fail-Closed* :**

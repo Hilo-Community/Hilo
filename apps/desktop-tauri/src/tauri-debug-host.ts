@@ -1,4 +1,4 @@
-import type { DebugEventMessage, DebugHost } from "@coloride/web-ui";
+import type { DebugEventMessage, DebugHost } from "@hilo/web-ui";
 import type { RawChannel } from "./tauri-terminal-host.js";
 
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;

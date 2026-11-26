@@ -14,16 +14,16 @@ use thiserror::Error;
 /// Redaction mask applied to sensitive environment variables in imported MCP configs.
 pub const REDACTED_ENV_VALUE: &str = "•••••••• [REDACTED]";
 
-/// Default Coloride theme name used on clean install or 1-click reset.
-pub const DEFAULT_COLORIDE_THEME: &str = "Coloride Dark (WCAG AAA)";
-/// Default Coloride icon theme name.
-pub const DEFAULT_COLORIDE_ICON_THEME: &str = "Coloride Geometric Icons";
-/// Default Coloride monospace font family.
-pub const DEFAULT_COLORIDE_FONT_FAMILY: &str = "JetBrains Mono, SF Mono, Cascadia Code, monospace";
-/// Default Coloride editor font size in pixels.
-pub const DEFAULT_COLORIDE_FONT_SIZE: u16 = 14;
-/// Default Coloride editor tab size.
-pub const DEFAULT_COLORIDE_TAB_SIZE: u8 = 2;
+/// Default Hilo theme name used on clean install or 1-click reset.
+pub const DEFAULT_HILO_THEME: &str = "Hilo Dark (WCAG AAA)";
+/// Default Hilo icon theme name.
+pub const DEFAULT_HILO_ICON_THEME: &str = "Hilo Geometric Icons";
+/// Default Hilo monospace font family.
+pub const DEFAULT_HILO_FONT_FAMILY: &str = "JetBrains Mono, SF Mono, Cascadia Code, monospace";
+/// Default Hilo editor font size in pixels.
+pub const DEFAULT_HILO_FONT_SIZE: u16 = 14;
+/// Default Hilo editor tab size.
+pub const DEFAULT_HILO_TAB_SIZE: u8 = 2;
 
 #[derive(Debug, Error)]
 pub enum MigrationError {

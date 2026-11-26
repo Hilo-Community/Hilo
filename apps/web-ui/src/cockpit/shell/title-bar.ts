@@ -26,44 +26,39 @@ export class TitleBar {
     rootContainer: HTMLElement,
     private readonly stores: CockpitStoreBundle,
   ) {
-    // Reuse the `.coloride-macos-titlebar` of the host page if present.
-    const existing = doc.querySelector<HTMLElement>(".coloride-macos-titlebar");
+    // Reuse the `.hilo-macos-titlebar` of the host page if present.
+    const existing = doc.querySelector<HTMLElement>(".hilo-macos-titlebar");
     if (existing) {
       this.element = existing;
       this.element.replaceChildren();
     } else {
       this.element = doc.createElement("header");
-      this.element.className = "coloride-macos-titlebar";
+      this.element.className = "hilo-macos-titlebar";
       rootContainer.append(this.element);
     }
     this.element.setAttribute("data-tauri-drag-region", "");
 
     const spacer = doc.createElement("div");
-    spacer.className = "coloride-top-header-spacer";
+    spacer.className = "hilo-top-header-spacer";
     spacer.setAttribute("data-tauri-drag-region", "");
 
     this.zone3Header = doc.createElement("div");
-    this.zone3Header.className = "coloride-zone-3-header";
+    this.zone3Header.className = "hilo-zone-3-header";
     this.zone3Header.setAttribute("data-tauri-drag-region", "");
     this.zone3Header.setAttribute("aria-label", UI_STRINGS.shell.openSessions);
 
     this.zone4Header = doc.createElement("div");
-    this.zone4Header.className = "coloride-zone-4-header";
+    this.zone4Header.className = "hilo-zone-4-header";
     this.zone4Header.setAttribute("data-tauri-drag-region", "");
     this.zone4Header.setAttribute("aria-label", UI_STRINGS.shell.openFiles);
 
     // Pinned to the corners so they stay reachable when the side panels collapse.
-    this.inspectorToggle = this.button(doc, "coloride-inspector-toggle", () =>
+    this.inspectorToggle = this.button(doc, "hilo-inspector-toggle", () =>
       stores.toggleInspector(),
     );
-    this.back = this.historyButton(doc, "coloride-history-back", UI_STRINGS.titleBar.back, -1);
-    this.forward = this.historyButton(
-      doc,
-      "coloride-history-forward",
-      UI_STRINGS.titleBar.forward,
-      1,
-    );
-    this.sidebarToggle = this.button(doc, "coloride-sidebar-toggle", () => stores.toggleSidebar());
+    this.back = this.historyButton(doc, "hilo-history-back", UI_STRINGS.titleBar.back, -1);
+    this.forward = this.historyButton(doc, "hilo-history-forward", UI_STRINGS.titleBar.forward, 1);
+    this.sidebarToggle = this.button(doc, "hilo-sidebar-toggle", () => stores.toggleSidebar());
 
     this.element.append(
       spacer,
@@ -126,7 +121,7 @@ export class TitleBar {
     label: string,
     delta: -1 | 1,
   ): HTMLButtonElement {
-    const el = this.button(doc, `coloride-history-btn ${className}`, () => this.navigate(delta));
+    const el = this.button(doc, `hilo-history-btn ${className}`, () => this.navigate(delta));
     el.setAttribute("aria-label", label);
     el.title = label;
     el.innerHTML = NAV_BACK_ICON;

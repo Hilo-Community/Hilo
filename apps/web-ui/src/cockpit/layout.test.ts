@@ -1,28 +1,28 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { describe, expect, it } from "vitest";
 import {
-  COLORIDE_DESIGN_TOKENS,
   CockpitDomController,
+  HILO_DESIGN_TOKENS,
   createCockpitStoreBundle,
   createInitialCockpitShellState,
 } from "../index.js";
 
-describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
+describe("@hilo/web-ui — cockpit layout, panels and keyboard", () => {
   it("collapses the right inspector and its header without remounting the editor", () => {
     const rootContainer = document.createElement("div");
     document.body.appendChild(rootContainer);
     const stores = createCockpitStoreBundle();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
     });
     const controller = new CockpitDomController({ rootContainer, stores, editorView });
     const editorDom = editorView.getEditorView().dom;
-    const toggle = document.querySelector<HTMLButtonElement>(".coloride-inspector-toggle");
-    const shell = rootContainer.querySelector<HTMLElement>(".coloride-cockpit-shell");
-    const header = document.querySelector<HTMLElement>(".coloride-zone-4-header");
+    const toggle = document.querySelector<HTMLButtonElement>(".hilo-inspector-toggle");
+    const shell = rootContainer.querySelector<HTMLElement>(".hilo-cockpit-shell");
+    const header = document.querySelector<HTMLElement>(".hilo-zone-4-header");
     // The right panel starts closed (the editor stays mounted, only hidden).
     expect(stores.zone1.getState().inspectorOpen).toBe(false);
     expect(shell?.style.gridTemplateColumns.endsWith(" 0px")).toBe(true);
@@ -38,7 +38,7 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     expect(stores.zone1.getState().inspectorOpen).toBe(false);
     expect(editorView.getEditorView().dom).toBe(editorDom);
     toggle?.click();
-    const sidebarToggle = document.querySelector<HTMLButtonElement>(".coloride-sidebar-toggle");
+    const sidebarToggle = document.querySelector<HTMLButtonElement>(".hilo-sidebar-toggle");
     expect(sidebarToggle?.getAttribute("aria-label")).toBe("Hide sidebar");
     sidebarToggle?.click();
     expect(stores.zone1.getState().sidebarOpen).toBe(false);
@@ -122,7 +122,7 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     });
 
     const ipcChannel = new InMemoryBinaryHostBridge();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/login.ts",
       initialContent: "export const login = true;\n",
       ipcChannel,
@@ -166,11 +166,11 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     // one sample here would only measure CI scheduler noise.
     expect(editorView.getStoreSnapshot().mountCount).toBe(1);
 
-    // Check 2px Coloride border tokens on Zone 3 chat cells
-    const cells = zone3.querySelectorAll<HTMLElement>(".coloride-chat-cell");
+    // Check 2px Hilo border tokens on Zone 3 chat cells
+    const cells = zone3.querySelectorAll<HTMLElement>(".hilo-chat-cell");
     expect(cells).toHaveLength(2);
-    expect(cells[0]?.style.border).toContain(COLORIDE_DESIGN_TOKENS.ValidatedGreen.darkBorder);
-    expect(cells[1]?.style.border).toContain(COLORIDE_DESIGN_TOKENS.ReviewYellow.darkBorder);
+    expect(cells[0]?.style.border).toContain(HILO_DESIGN_TOKENS.ValidatedGreen.darkBorder);
+    expect(cells[1]?.style.border).toContain(HILO_DESIGN_TOKENS.ReviewYellow.darkBorder);
 
     // Zoom support from 75% to 175% keeps all 4 zones mounted and non-truncated
     for (const zoom of [75, 125, 150, 200]) {
@@ -190,7 +190,7 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     const rootContainer = document.createElement("div");
     document.body.appendChild(rootContainer);
     const stores = createCockpitStoreBundle();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -222,7 +222,7 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     const rootContainer = document.createElement("div");
     document.body.appendChild(rootContainer);
     const stores = createCockpitStoreBundle();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -230,17 +230,17 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     const controller = new CockpitDomController({ rootContainer, stores, editorView });
     // Tauri only drags when the pressed element itself has the attribute: the tab strip fills the
     // whole Zone 4 header, so it must carry it too (tabs and buttons inside it stay clickable).
-    for (const zone of [".coloride-zone-3-header", ".coloride-zone-4-header"]) {
+    for (const zone of [".hilo-zone-3-header", ".hilo-zone-4-header"]) {
       const header = document.querySelector<HTMLElement>(zone);
-      const track = header?.querySelector<HTMLElement>(".coloride-header-tab-track");
+      const track = header?.querySelector<HTMLElement>(".hilo-header-tab-track");
       expect(header?.hasAttribute("data-tauri-drag-region")).toBe(true);
       expect(track?.hasAttribute("data-tauri-drag-region")).toBe(true);
     }
     expect(
       document
-        .querySelector(".coloride-header-tab")
+        .querySelector(".hilo-header-tab")
         ?.closest("[data-tauri-drag-region]")
-        ?.matches(".coloride-header-tab"),
+        ?.matches(".hilo-header-tab"),
     ).not.toBe(true);
     controller.destroy();
     rootContainer.remove();
@@ -266,7 +266,7 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
         },
       ],
     });
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -302,7 +302,7 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     const rootContainer = document.createElement("div");
     document.body.appendChild(rootContainer);
     const stores = createCockpitStoreBundle();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -312,7 +312,7 @@ describe("@coloride/web-ui — cockpit layout, panels and keyboard", () => {
     stores.setActivitySection("search");
     stores.runGlobalSearch("needleValue");
     expect(stores.zone1.getState().inspectorOpen).toBe(false);
-    rootContainer.querySelector<HTMLElement>(".coloride-search-result-item")?.click();
+    rootContainer.querySelector<HTMLElement>(".hilo-search-result-item")?.click();
     expect(stores.zone1.getState().inspectorOpen).toBe(true);
     expect(stores.zone4.getState().activeDocumentId).toBe("src/found.ts");
     controller.destroy();

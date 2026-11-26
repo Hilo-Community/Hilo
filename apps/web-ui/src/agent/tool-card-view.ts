@@ -58,24 +58,24 @@ export class CardView {
   private readonly state: HTMLElement;
   private userOpen: boolean | undefined;
   constructor(doc: Document) {
-    this.element = el(doc, "article", "coloride-agent-card");
-    this.header = el(doc, "button", "coloride-agent-card-header");
+    this.element = el(doc, "article", "hilo-agent-card");
+    this.header = el(doc, "button", "hilo-agent-card-header");
     this.header.type = "button";
-    this.icon = el(doc, "span", "coloride-agent-card-icon");
+    this.icon = el(doc, "span", "hilo-agent-card-icon");
     this.icon.setAttribute("aria-hidden", "true");
-    const copy = el(doc, "span", "coloride-agent-card-copy");
-    this.label = el(doc, "span", "coloride-agent-card-verb");
-    this.target = el(doc, "span", "coloride-agent-card-target");
+    const copy = el(doc, "span", "hilo-agent-card-copy");
+    this.label = el(doc, "span", "hilo-agent-card-verb");
+    this.target = el(doc, "span", "hilo-agent-card-target");
     copy.append(this.label, this.target);
-    this.extra = el(doc, "span", "coloride-agent-card-extra");
-    this.state = el(doc, "span", "coloride-agent-card-state");
-    this.chevron = el(doc, "span", "coloride-agent-card-chevron");
+    this.extra = el(doc, "span", "hilo-agent-card-extra");
+    this.state = el(doc, "span", "hilo-agent-card-state");
+    this.chevron = el(doc, "span", "hilo-agent-card-chevron");
     this.chevron.setAttribute("aria-hidden", "true");
     this.chevron.innerHTML = TOOL_CHEVRON_ICON;
     this.header.append(this.icon, copy, this.extra, this.state, this.chevron);
-    this.disclosure = el(doc, "div", "coloride-agent-card-disclosure");
-    const clip = el(doc, "div", "coloride-agent-card-clip");
-    this.body = el(doc, "div", "coloride-agent-card-body");
+    this.disclosure = el(doc, "div", "hilo-agent-card-disclosure");
+    const clip = el(doc, "div", "hilo-agent-card-clip");
+    this.body = el(doc, "div", "hilo-agent-card-body");
     clip.append(this.body);
     this.disclosure.append(clip);
     this.element.append(this.header, this.disclosure);
@@ -95,7 +95,7 @@ export class CardView {
     file?: string,
   ): void {
     this.element.dataset.status = status;
-    this.icon.className = `coloride-agent-card-icon${file ? ` explorer-icon ${fileTreeIconColor(file)}` : ""}`;
+    this.icon.className = `hilo-agent-card-icon${file ? ` explorer-icon ${fileTreeIconColor(file)}` : ""}`;
     this.icon.innerHTML = file
       ? fileTreeIconSvg(file)
       : ((Object.hasOwn(TOOL_KIND_ICONS, kind) ? TOOL_KIND_ICONS[kind] : TOOL_KIND_ICONS.other) ??
@@ -134,14 +134,14 @@ export class ToolCardView {
   private readonly expanded = new Set<string>();
   constructor(private readonly doc: Document) {
     this.card = new CardView(doc);
-    this.card.element.classList.add("coloride-agent-tool");
+    this.card.element.classList.add("hilo-agent-tool");
   }
   update(tool: ToolCard, openLocation: (path: string, line: number) => void): HTMLElement {
     if (tool === this.previous) return this.card.element;
     const variant = toolVariant(tool.kind);
     const thinking = tool.kind === "think";
-    this.card.element.classList.toggle("coloride-agent-activity", thinking);
-    this.card.element.classList.toggle("coloride-agent-thinking", thinking);
+    this.card.element.classList.toggle("hilo-agent-activity", thinking);
+    this.card.element.classList.toggle("hilo-agent-thinking", thinking);
     this.card.element.dataset.variant = variant;
     let { verb, target } = toolLabel(tool);
     const changes = (variant === "diff" ? toolDiffs(tool) : []).map((file) => {
@@ -172,17 +172,17 @@ export class ToolCardView {
       // A tool that took a while says so; the quick ones need no number.
       if (tool.durationMs !== undefined && tool.durationMs >= 1000)
         this.card.extra.append(
-          el(this.doc, "span", "coloride-agent-card-time", formatDuration(tool.durationMs)),
+          el(this.doc, "span", "hilo-agent-card-time", formatDuration(tool.durationMs)),
         );
     }
-    this.card.element.querySelector(".coloride-agent-locations.is-inline")?.remove();
+    this.card.element.querySelector(".hilo-agent-locations.is-inline")?.remove();
     const body: HTMLElement[] = [];
     if (variant === "command") body.push(this.command(tool));
     else if (thinking && tool.output)
-      body.push(el(this.doc, "p", "coloride-agent-thought-text", tool.output));
+      body.push(el(this.doc, "p", "hilo-agent-thought-text", tool.output));
     else if (changes.length) {
       if (tool.edit && !tool.diffs?.length) {
-        const note = el(this.doc, "p", "coloride-agent-card-note", UI_STRINGS.agent.proposal);
+        const note = el(this.doc, "p", "hilo-agent-card-note", UI_STRINGS.agent.proposal);
         note.title = `${UI_STRINGS.agent.baseRevision}: ${tool.edit.baseContentHash}`;
         body.push(note);
       }
@@ -192,26 +192,26 @@ export class ToolCardView {
         body.push(...this.preview(change.file, change.lines));
       }
     }
-    if (tool.reason) body.push(el(this.doc, "p", "coloride-agent-card-note", tool.reason));
+    if (tool.reason) body.push(el(this.doc, "p", "hilo-agent-card-note", tool.reason));
     if (
       tool.arguments?.length &&
       variant === "simple" &&
       !["read", "fetch", "move", "think"].includes(tool.kind)
     ) {
-      const args = el(this.doc, "dl", "coloride-agent-arguments");
+      const args = el(this.doc, "dl", "hilo-agent-arguments");
       for (const [key, value] of tool.arguments)
         args.append(el(this.doc, "dt", "", key), el(this.doc, "dd", "", value));
       body.push(args);
     }
     if (tool.kind === "search" && tool.output)
-      body.push(el(this.doc, "pre", "coloride-agent-list", tool.output));
+      body.push(el(this.doc, "pre", "hilo-agent-list", tool.output));
     if (tool.locations.length) {
-      const list = el(this.doc, "div", "coloride-agent-locations");
+      const list = el(this.doc, "div", "hilo-agent-locations");
       for (const location of tool.locations) {
         const link = el(
           this.doc,
           "button",
-          "coloride-agent-location",
+          "hilo-agent-location",
           variant === "diff" ? baseName(location.path) : `${location.path}:${location.line}`,
         );
         link.type = "button";
@@ -221,7 +221,7 @@ export class ToolCardView {
       }
       // Simple reads remain single rows; the file opens from a separate, adjacent action.
       if (variant === "simple" && tool.kind !== "search" && body.length === 0) {
-        this.card.element.querySelector(".coloride-agent-locations")?.remove();
+        this.card.element.querySelector(".hilo-agent-locations")?.remove();
         list.classList.add("is-inline");
         for (const link of list.querySelectorAll("button")) {
           link.setAttribute("aria-label", link.textContent ?? "");
@@ -232,13 +232,13 @@ export class ToolCardView {
       } else body.push(list);
     }
     if (tool.truncated)
-      body.push(el(this.doc, "p", "coloride-agent-card-note", UI_STRINGS.agent.truncated));
-    const scroll = this.card.body.querySelector(".coloride-agent-command-output");
+      body.push(el(this.doc, "p", "hilo-agent-card-note", UI_STRINGS.agent.truncated));
+    const scroll = this.card.body.querySelector(".hilo-agent-command-output");
     const scrollTop = scroll?.scrollTop ?? 0;
     // Output follows the command while the reader is at the bottom, and stays put once they scroll up.
     const atEnd = !scroll || scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 4;
     this.card.body.replaceChildren(...body);
-    const nextScroll = this.card.body.querySelector(".coloride-agent-command-output");
+    const nextScroll = this.card.body.querySelector(".hilo-agent-command-output");
     if (nextScroll) {
       nextScroll.scrollTop =
         tool.status === "running" && atEnd ? nextScroll.scrollHeight : scrollTop;
@@ -267,23 +267,23 @@ export class ToolCardView {
   }
   private counts(added: number, removed: number): HTMLElement[] {
     return [
-      el(this.doc, "span", "coloride-agent-diff-added", `+${added}`),
-      el(this.doc, "span", "coloride-agent-diff-removed", `−${removed}`),
+      el(this.doc, "span", "hilo-agent-diff-added", `+${added}`),
+      el(this.doc, "span", "hilo-agent-diff-removed", `−${removed}`),
     ];
   }
   /** The row naming one of several files in a card, with its own counts. */
   private fileHead(path: string, added: number, removed: number): HTMLElement {
-    const head = el(this.doc, "div", "coloride-agent-file-head");
+    const head = el(this.doc, "div", "hilo-agent-file-head");
     const icon = el(
       this.doc,
       "span",
-      `coloride-agent-card-icon explorer-icon ${fileTreeIconColor(baseName(path))}`,
+      `hilo-agent-card-icon explorer-icon ${fileTreeIconColor(baseName(path))}`,
     );
     icon.innerHTML = fileTreeIconSvg(baseName(path));
     icon.setAttribute("aria-hidden", "true");
-    const name = el(this.doc, "span", "coloride-agent-file-name", baseName(path));
+    const name = el(this.doc, "span", "hilo-agent-file-name", baseName(path));
     name.title = path;
-    head.append(icon, name, el(this.doc, "span", "coloride-agent-card-extra"));
+    head.append(icon, name, el(this.doc, "span", "hilo-agent-card-extra"));
     head.lastElementChild?.append(...this.counts(added, removed));
     return head;
   }
@@ -292,7 +292,7 @@ export class ToolCardView {
     const pre = diffView(this.doc, lines, file.path, file);
     const out: HTMLElement[] = [pre];
     if (lines.length > PREVIEW_ROWS) {
-      const more = el(this.doc, "button", "coloride-agent-diff-more");
+      const more = el(this.doc, "button", "hilo-agent-diff-more");
       more.type = "button";
       more.innerHTML = TOOL_CHEVRON_ICON;
       const show = (expanded: boolean) => {
@@ -310,21 +310,21 @@ export class ToolCardView {
       out.push(more);
     }
     if (file.truncated)
-      out.push(el(this.doc, "p", "coloride-agent-card-note", UI_STRINGS.agent.truncated));
+      out.push(el(this.doc, "p", "hilo-agent-card-note", UI_STRINGS.agent.truncated));
     return out;
   }
   private command(tool: ToolCard): HTMLElement {
-    const block = el(this.doc, "div", "coloride-agent-command");
-    const source = el(this.doc, "pre", "coloride-agent-command-source");
+    const block = el(this.doc, "div", "hilo-agent-command");
+    const source = el(this.doc, "pre", "hilo-agent-command-source");
     source.setAttribute("aria-label", UI_STRINGS.agent.command);
     source.append(
-      el(this.doc, "span", "coloride-agent-command-prompt", "$ "),
+      el(this.doc, "span", "hilo-agent-command-prompt", "$ "),
       this.doc.createTextNode(tool.command ?? tool.title),
     );
     block.append(source);
     if (tool.output) {
-      const fade = el(this.doc, "div", "coloride-agent-output-fades");
-      const output = el(this.doc, "pre", "coloride-agent-command-output", tool.output);
+      const fade = el(this.doc, "div", "hilo-agent-output-fades");
+      const output = el(this.doc, "pre", "hilo-agent-command-output", tool.output);
       output.tabIndex = 0;
       output.setAttribute("aria-label", UI_STRINGS.agent.output);
       fade.append(output);
@@ -339,7 +339,7 @@ export class ToolCardView {
           : tool.status === "failed"
             ? UI_STRINGS.agent.toolStates.failed
             : "";
-    if (result) block.append(el(this.doc, "p", "coloride-agent-command-result", result));
+    if (result) block.append(el(this.doc, "p", "hilo-agent-command-result", result));
     return block;
   }
 }
@@ -351,7 +351,7 @@ export function diffView(
   path: string,
   source?: Pick<FileDiff, "oldText" | "newText">,
 ): HTMLElement {
-  const pre = el(doc, "pre", "coloride-agent-diff");
+  const pre = el(doc, "pre", "hilo-agent-diff");
   pre.tabIndex = 0;
   pre.setAttribute("aria-label", uiText.proposedDiff(path));
   let oldLine = 1;
@@ -361,23 +361,23 @@ export function diffView(
   const after = source ? highlightedDiffSource(source.newText, path) : [];
   if (!lines.length) pre.textContent = UI_STRINGS.agent.noChange;
   for (const line of lines) {
-    const row = el(doc, "span", "coloride-agent-diff-line");
+    const row = el(doc, "span", "hilo-agent-diff-line");
     row.dataset.kind = line.kind;
     if (line.kind === "…") {
       oldLine += line.skipped;
       newLine += line.skipped;
-      row.append(el(doc, "span", "coloride-agent-diff-gap", uiText.unchangedLines(line.skipped)));
+      row.append(el(doc, "span", "hilo-agent-diff-gap", uiText.unchangedLines(line.skipped)));
     } else {
       // One number per row: a removed line has its old number, any other its new one.
       const number = el(
         doc,
         "span",
-        "coloride-agent-line-number",
+        "hilo-agent-line-number",
         String(line.kind === "-" ? oldLine : newLine),
       );
       number.setAttribute("aria-hidden", "true");
-      const prefix = el(doc, "span", "coloride-agent-diff-prefix", line.kind);
-      const code = el(doc, "span", "coloride-agent-diff-text");
+      const prefix = el(doc, "span", "hilo-agent-diff-prefix", line.kind);
+      const code = el(doc, "span", "hilo-agent-diff-text");
       const parts = line.kind === "-" ? before[oldLine - 1] : after[newLine - 1];
       if (parts?.length) {
         for (const part of parts) code.append(el(doc, "span", part.classes, part.text));

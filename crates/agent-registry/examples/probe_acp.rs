@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(
         input,
         "{}",
-        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientInfo":{"name":"Coloride probe","version":"0.1.0"},"clientCapabilities":capabilities}})
+        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientInfo":{"name":"Hilo probe","version":"0.1.0"},"clientCapabilities":capabilities}})
     )?;
     input.flush()?;
     let mut output = BufReader::new(output);

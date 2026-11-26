@@ -58,16 +58,14 @@ describe("installed agents in the new panel menu", () => {
     const s = setup([installed]);
     await settle();
     s.show();
-    const entries = document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-menu button");
+    const entries = document.querySelectorAll<HTMLButtonElement>(".hilo-new-panel-menu button");
     expect(entries).toHaveLength(2);
-    expect(entries[0]?.querySelector(".coloride-new-panel-label")?.lastChild?.textContent).toBe(
+    expect(entries[0]?.querySelector(".hilo-new-panel-label")?.lastChild?.textContent).toBe(
       "Codex",
     );
-    expect(entries[0]?.querySelector(".coloride-registry-mark")).not.toBeNull();
+    expect(entries[0]?.querySelector(".hilo-registry-mark")).not.toBeNull();
     expect(entries[1]?.textContent).toBe("Add more agents");
-    expect(document.querySelector(".coloride-new-panel-heading")?.textContent).toBe(
-      "External Agents",
-    );
+    expect(document.querySelector(".hilo-new-panel-heading")?.textContent).toBe("External Agents");
     entries[0]?.click();
     expect(s.openAgentInterface).toHaveBeenCalledWith(installed);
     expect(s.host.list).toHaveBeenCalledWith(false);
@@ -80,10 +78,10 @@ describe("installed agents in the new panel menu", () => {
     await settle();
     s.show();
     const entries = () => [
-      ...document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-menu button"),
+      ...document.querySelectorAll<HTMLButtonElement>(".hilo-new-panel-menu button"),
     ];
     expect(entries().map((b) => b.textContent)).toEqual(["Install an agent…"]);
-    expect(document.querySelector<HTMLElement>(".coloride-new-panel-heading")?.hidden).toBe(true);
+    expect(document.querySelector<HTMLElement>(".hilo-new-panel-heading")?.hidden).toBe(true);
     s.change([installed]);
     await settle();
     expect(entries()).toHaveLength(2);

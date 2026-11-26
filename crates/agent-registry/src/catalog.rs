@@ -12,7 +12,7 @@ use crate::node::NodeStatus;
 pub const REGISTRY_URL: &str =
     "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
 
-/// Agents Coloride does not offer, whatever the catalog says.
+/// Agents Hilo does not offer, whatever the catalog says.
 pub const HIDDEN_AGENT_IDS: &[&str] = &[
     "agoragentic-acp",
     "amp-acp",

@@ -93,7 +93,7 @@
     width: 12px;
     height: 12px;
   }
-  .sidebar-row-icon svg.coloride-codex-icon {
+  .sidebar-row-icon svg.hilo-codex-icon {
     width: 14px;
     height: 14px;
   }
@@ -313,7 +313,7 @@
   }
   /* Bars on the inner edge of the side panels (sidebar and inspector): a 9px grab area, with the
      line shown on hover, focus and drag (the same look as the bars between panels). */
-  .coloride-shell-handle {
+  .hilo-shell-handle {
     position: absolute;
     z-index: 8;
     top: 0;
@@ -325,19 +325,19 @@
     outline: none;
     -webkit-app-region: no-drag;
   }
-  .coloride-shell-handle[data-panel="sidebar"] {
-    left: calc(48px + var(--coloride-sidebar-width, 240px));
+  .hilo-shell-handle[data-panel="sidebar"] {
+    left: calc(48px + var(--hilo-sidebar-width, 240px));
   }
   /* The inspector is the last column: its bar is measured from the right edge of the shell. */
-  .coloride-shell-handle[data-panel="inspector"] {
-    right: var(--coloride-inspector-width, 480px);
+  .hilo-shell-handle[data-panel="inspector"] {
+    right: var(--hilo-inspector-width, 480px);
     margin-left: 0;
     margin-right: -4.5px;
   }
-  .coloride-shell-handle[hidden] {
+  .hilo-shell-handle[hidden] {
     display: none;
   }
-  .coloride-shell-handle::after {
+  .hilo-shell-handle::after {
     content: "";
     position: absolute;
     top: 0;
@@ -347,20 +347,20 @@
     background: transparent;
     transition: background 120ms ease;
   }
-  .coloride-shell-handle:hover::after,
-  .coloride-shell-handle:focus-visible::after,
-  .coloride-shell-handle[data-dragging="true"]::after {
+  .hilo-shell-handle:hover::after,
+  .hilo-shell-handle:focus-visible::after,
+  .hilo-shell-handle[data-dragging="true"]::after {
     background: rgba(255, 255, 255, 0.4);
   }
   /* The panel's scroller: native scrollbar hidden, a thin overlay one is drawn instead. */
-  .coloride-zone-2-viewport {
+  .hilo-zone-2-viewport {
     position: relative;
     flex: 1;
     min-height: 0;
     /* Reaches over the panel's right padding (p-2.5 = 10px) so the scrollbar sits on the edge. */
     margin-right: -10px;
   }
-  .coloride-zone-2-scroll {
+  .hilo-zone-2-scroll {
     /* Filling the viewport with inset rather than height: 100%, which a flex item may not
        resolve, leaving the list as tall as its content and clipped instead of scrollable. */
     position: absolute;
@@ -369,7 +369,7 @@
     overflow: auto;
     scrollbar-width: none;
   }
-  .coloride-zone-2-scroll::-webkit-scrollbar {
+  .hilo-zone-2-scroll::-webkit-scrollbar {
     display: none;
   }
   /* The three-dots menu shares the look of the menu of the + button (see terminal.css) */

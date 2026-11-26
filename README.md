@@ -1,14 +1,14 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./.github/assets/logo-dark.svg">
-  <img src="./.github/assets/logo-light.svg" alt="Coloride" width="80" height="80">
+  <img src="./.github/assets/logo-light.svg" alt="Hilo" width="80" height="80">
 </picture>
 
-# Coloride
+# Hilo
 
-[![CI](https://github.com/Color-IDE/Coloride/actions/workflows/ci.yml/badge.svg)](https://github.com/Color-IDE/Coloride/actions/workflows/ci.yml)
+[![CI](https://github.com/Color-IDE/Hilo/actions/workflows/ci.yml/badge.svg)](https://github.com/Color-IDE/Hilo/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-gray.svg)](./LICENSE)
 
-Coloride is a native code-editor foundation built with [Tauri v2](https://v2.tauri.app/), a Rust host, and [CodeMirror 6](https://codemirror.net/). The current implementation covers the desktop shell, authoritative `ropey`/WAL documents, binary editor IPC, workspace navigation, migration, AST analysis, filtered local context search, and a read-only local MCP server with token-budgeted context assembly and optional vector retrieval. Agent execution, the operational `PolicyEngine`, and OS sandbox runners belong to later lots and remain disabled until their fail-closed implementations are complete.
+Hilo is a native code-editor foundation built with [Tauri v2](https://v2.tauri.app/), a Rust host, and [CodeMirror 6](https://codemirror.net/). The current implementation covers the desktop shell, authoritative `ropey`/WAL documents, binary editor IPC, workspace navigation, migration, AST analysis, filtered local context search, and a read-only local MCP server with token-budgeted context assembly and optional vector retrieval. Agent execution, the operational `PolicyEngine`, and OS sandbox runners belong to later lots and remain disabled until their fail-closed implementations are complete.
 
 ---
 
@@ -17,8 +17,8 @@ Coloride is a native code-editor foundation built with [Tauri v2](https://v2.tau
 Prerequisites: Rust (`>= 1.80`), Node.js (`>= 22`), and pnpm (`>= 10`).
 
 ```bash
-git clone https://github.com/Color-IDE/Coloride.git
-cd Coloride
+git clone https://github.com/Color-IDE/Hilo.git
+cd Hilo
 
 pnpm install
 pnpm dev
@@ -85,7 +85,7 @@ Run the read-only JSON-RPC 2.0 server over newline-delimited stdio with an exist
 workspace and an index path whose parent exists inside that workspace:
 
 ```bash
-cargo run -p context-engine --bin coloride-context-mcp -- /absolute/workspace /absolute/workspace/context.sqlite main
+cargo run -p context-engine --bin hilo-context-mcp -- /absolute/workspace /absolute/workspace/context.sqlite main
 ```
 
 The server exposes `search_codebase`, `get_symbol_definition`, `get_impact_graph`,
@@ -141,4 +141,4 @@ cargo test -p context-engine --features vector --test lot009_vectors -- --includ
 
 ### Licensing
 
-Coloride source code is licensed under the [Apache License, Version 2.0](./LICENSE).
+Hilo source code is licensed under the [Apache License, Version 2.0](./LICENSE).

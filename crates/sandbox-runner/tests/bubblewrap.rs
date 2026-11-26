@@ -25,7 +25,7 @@ mod common;
 use common::world::{lines, sh, sh_in, World, TRY};
 
 fn world() -> World {
-    common::world::world(".cache/coloride/worktrees/task")
+    common::world::world(".cache/hilo/worktrees/task")
 }
 
 fn runner(world: &World, sink: &Arc<MemoryAuditSink>) -> OsNativeSandbox<BubblewrapEngine> {
@@ -190,7 +190,7 @@ fn blocking_scenario_2_network_cloud_metadata_and_sockets_are_refused() {
     let path_socket = socket_dir.path().join("docker.sock");
     let path_listener = UnixListener::bind(&path_socket).unwrap();
     path_listener.set_nonblocking(true).unwrap();
-    let abstract_name = format!("coloride-test-{}", std::process::id());
+    let abstract_name = format!("hilo-test-{}", std::process::id());
     let abstract_listener =
         UnixListener::bind_addr(&SocketAddr::from_abstract_name(&abstract_name).unwrap()).unwrap();
     abstract_listener.set_nonblocking(true).unwrap();
@@ -399,11 +399,11 @@ fn the_private_tmpdir_is_writable_in_the_sandbox_and_purged_afterwards() {
     assert!(output.termination.success(), "{output:?}");
     let lines = lines(&output);
     assert_eq!(lines[0], "x");
-    assert!(Path::new(&lines[1]).starts_with(world.worktree.join(".coloride-tmp")));
+    assert!(Path::new(&lines[1]).starts_with(world.worktree.join(".hilo-tmp")));
     // The worktree is under /tmp here, so there is no private /tmp: the root stays read-only.
     assert_eq!(lines[2], "tmp-readonly");
     assert!(!Path::new(&lines[1]).exists());
-    assert!(!world.worktree.join(".coloride-tmp").exists());
+    assert!(!world.worktree.join(".hilo-tmp").exists());
     assert!(
         !Path::new("/tmp/scratch").exists(),
         "the sandbox's /tmp is not the host's"
@@ -565,7 +565,7 @@ fn a_private_tmp_exists_when_the_worktree_is_in_a_cache_directory() {
     let cache = home.join(".cache");
     fs::create_dir_all(&cache).unwrap();
     let dir = tempfile::Builder::new()
-        .prefix("coloride-test-")
+        .prefix("hilo-test-")
         .tempdir_in(&cache)
         .unwrap();
     let worktree = dir.path().canonicalize().unwrap().join("wt");

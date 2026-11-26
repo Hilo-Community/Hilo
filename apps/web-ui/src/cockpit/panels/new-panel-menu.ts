@@ -74,13 +74,13 @@ export class NewPanelMenu {
   ): HTMLButtonElement {
     const item = this.doc.createElement("button");
     item.type = "button";
-    item.className = "coloride-new-panel-item";
+    item.className = "hilo-new-panel-item";
     item.setAttribute("role", "menuitem");
     const text = this.doc.createElement("span");
-    text.className = "coloride-new-panel-label";
+    text.className = "hilo-new-panel-label";
     if (icon) {
       const glyph = this.doc.createElement("span");
-      glyph.className = "coloride-new-panel-icon";
+      glyph.className = "hilo-new-panel-icon";
       glyph.innerHTML = icon;
       text.append(glyph);
     }
@@ -88,7 +88,7 @@ export class NewPanelMenu {
     item.append(text);
     if (hint) {
       const tag = this.doc.createElement("span");
-      tag.className = "coloride-new-panel-hint";
+      tag.className = "hilo-new-panel-hint";
       tag.textContent = hint;
       item.append(tag);
     }
@@ -105,7 +105,7 @@ export class NewPanelMenu {
 
   private panel(label: string): HTMLElement {
     const panel = this.doc.createElement("div");
-    panel.className = "coloride-new-panel-menu";
+    panel.className = "hilo-new-panel-menu";
     panel.setAttribute("role", "menu");
     panel.setAttribute("aria-label", label);
     return panel;
@@ -113,7 +113,7 @@ export class NewPanelMenu {
 
   private separator(): HTMLElement {
     const line = this.doc.createElement("div");
-    line.className = "coloride-new-panel-separator";
+    line.className = "hilo-new-panel-separator";
     line.setAttribute("role", "separator");
     return line;
   }
@@ -130,19 +130,19 @@ export class NewPanelMenu {
       );
     }
     const heading = this.doc.createElement("div");
-    heading.className = "coloride-new-panel-heading";
+    heading.className = "hilo-new-panel-heading";
     heading.textContent = text.externalAgents;
     const agents = this.doc.createElement("div");
     agents.setAttribute("role", "group");
     agents.setAttribute("aria-label", text.externalAgents);
     const install = this.doc.createElement("div");
-    install.className = "coloride-new-panel-install";
+    install.className = "hilo-new-panel-install";
     const populate = () => {
       agents.replaceChildren(
         ...this.installed.map((installed) => {
           const entry = this.item(installed.name, () => actions.openAgentInterface(installed));
           entry
-            .querySelector(".coloride-new-panel-label")
+            .querySelector(".hilo-new-panel-label")
             ?.prepend(agentMark(this.doc, installed.agentId, installed.name));
           return entry;
         }),

@@ -94,7 +94,7 @@ pub async fn request_workspace_trust_command(
                 .dialog()
                 .message(format!(
                     "Do you trust the authors of the files in this folder?\n\n{}\n\n\
-                     Trusting it lets Coloride run programs from the folder: language servers, \
+                     Trusting it lets Hilo run programs from the folder: language servers, \
                      linters, Git hooks, tasks and debuggers. Only trust folders whose content \
                      you know.",
                     gate.workspace_root().display()

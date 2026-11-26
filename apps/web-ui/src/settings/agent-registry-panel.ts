@@ -38,24 +38,24 @@ export class AgentRegistryPanel {
     this.store = store;
     const text = UI_STRINGS.settings;
     this.element = doc.createElement("section");
-    this.element.className = "coloride-registry";
+    this.element.className = "hilo-registry";
     this.element.setAttribute("aria-label", text.registryTitle);
 
     const title = doc.createElement("h2");
     title.textContent = text.registryTitle;
     const intro = doc.createElement("p");
-    intro.className = "coloride-registry-intro";
+    intro.className = "hilo-registry-intro";
     intro.textContent = text.registryIntro;
 
     const toolbar = doc.createElement("div");
-    toolbar.className = "coloride-registry-toolbar";
+    toolbar.className = "hilo-registry-toolbar";
     this.search = doc.createElement("input");
     this.search.type = "search";
     this.search.placeholder = text.searchPlaceholder;
     this.search.setAttribute("aria-label", text.search);
     this.search.addEventListener("input", () => store.setQuery(this.search.value));
     const group = doc.createElement("div");
-    group.className = "coloride-registry-filters";
+    group.className = "hilo-registry-filters";
     group.setAttribute("role", "group");
     group.setAttribute("aria-label", text.filters);
     for (const [filter, label] of FILTERS) {
@@ -67,19 +67,19 @@ export class AgentRegistryPanel {
       group.append(button);
     }
     const searchBox = doc.createElement("label");
-    searchBox.className = "coloride-registry-search";
+    searchBox.className = "hilo-registry-search";
     searchBox.insertAdjacentHTML("afterbegin", SEARCH_ICON);
     searchBox.append(this.search);
     toolbar.append(searchBox, group);
 
     this.status = doc.createElement("p");
-    this.status.className = "coloride-registry-status";
+    this.status.className = "hilo-registry-status";
     this.status.setAttribute("role", "status");
     this.alert = doc.createElement("div");
-    this.alert.className = "coloride-registry-alert";
+    this.alert.className = "hilo-registry-alert";
     this.alert.setAttribute("role", "alert");
     this.list = doc.createElement("div");
-    this.list.className = "coloride-registry-list";
+    this.list.className = "hilo-registry-list";
 
     this.element.append(title, intro, toolbar, this.alert, this.status, this.list);
     this.unsubscribe = store.subscribe(() => this.render());
@@ -109,11 +109,11 @@ export class AgentRegistryPanel {
     // A running operation shows only the spinner, so the button keeps its width.
     if (options.busy) button.title = label;
     else button.append(label);
-    if (options.ghost) button.classList.add("coloride-registry-ghost");
+    if (options.ghost) button.classList.add("hilo-registry-ghost");
     button.setAttribute("aria-label", ariaLabel);
     button.dataset.key = key;
     button.disabled = options.disabled;
-    if (options.primary) button.classList.add("coloride-registry-primary");
+    if (options.primary) button.classList.add("hilo-registry-primary");
     button.addEventListener("click", click);
     return button;
   }
@@ -126,36 +126,36 @@ export class AgentRegistryPanel {
     const pending = state.pending[agent.id];
 
     const card = doc.createElement("article");
-    card.className = "coloride-registry-card";
+    card.className = "hilo-registry-card";
     card.setAttribute("aria-label", agent.name);
     card.dataset.agent = agent.id;
     card.dataset.installed = String(installed !== null);
 
     const heading = doc.createElement("div");
-    heading.className = "coloride-registry-title";
+    heading.className = "hilo-registry-title";
     // Name and version are one line of text: "Claude Agent v0.107.0".
     const name = doc.createElement("h3");
     const version = doc.createElement("span");
-    version.className = "coloride-registry-version";
+    version.className = "hilo-registry-version";
     version.textContent = uiText.agentVersion(installed?.version ?? agent.version);
     if (updatable && installed) {
       // An update shows as the new version, in green; the button below becomes Update.
       version.textContent = uiText.agentVersion(agent.version);
-      version.classList.add("coloride-registry-version--update");
+      version.classList.add("hilo-registry-version--update");
       version.title = uiText.agentUpdateAvailable(installed.version, agent.version);
     }
     name.append(`${agent.name} `, version);
     heading.append(agentMark(doc, agent.id, agent.name), name);
     if (agent.license) {
       const license = doc.createElement("span");
-      license.className = "coloride-registry-license";
+      license.className = "hilo-registry-license";
       license.textContent = agent.license;
       heading.append(license);
     }
     card.append(heading);
 
     const description = doc.createElement("p");
-    description.className = "coloride-registry-description";
+    description.className = "hilo-registry-description";
     description.textContent = agent.description;
     description.title = agent.description;
     card.append(description);
@@ -163,21 +163,21 @@ export class AgentRegistryPanel {
     // A blocked agent that is not installed says why; one that is installed can still be removed.
     if (agent.blocked) {
       const blocked = doc.createElement("p");
-      blocked.className = "coloride-registry-blocked";
+      blocked.className = "hilo-registry-blocked";
       blocked.textContent = `${text.notInstallable}: ${agent.blocked}`;
       card.append(blocked);
     }
     const failure = state.failures[agent.id];
     if (failure) {
       const error = doc.createElement("p");
-      error.className = "coloride-registry-failure";
+      error.className = "hilo-registry-failure";
       error.setAttribute("role", "alert");
       error.textContent = failure;
       card.append(error);
     }
 
     const actions = doc.createElement("div");
-    actions.className = "coloride-registry-actions";
+    actions.className = "hilo-registry-actions";
     const busy = pending !== undefined;
     if (busy) {
       card.dataset.pending = pending;
@@ -308,7 +308,7 @@ export class AgentRegistryPanel {
     const children: Node[] = rows.map((row) => this.card(row));
     if (!state.loading && rows.length === 0 && !state.error) {
       const empty = doc.createElement("p");
-      empty.className = "coloride-registry-empty";
+      empty.className = "hilo-registry-empty";
       empty.textContent = state.query
         ? text.emptySearch
         : state.filter === "installed"

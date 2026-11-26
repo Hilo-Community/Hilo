@@ -38,7 +38,7 @@ impl SecretRuleKind {
 pub enum AclDenialReason {
     SensitiveFilePattern { matched_rule: String },
     GitignoreRule { pattern: String },
-    ColorideignoreRule { pattern: String },
+    HiloignoreRule { pattern: String },
     ExplicitForbiddenPath { pattern: String },
     OutsideAllowedPaths { path: String },
 }
@@ -83,7 +83,7 @@ pub const REDACTED_SECRET_MARKER: &str = "[REDACTED_SECRET:";
 #[derive(Debug, Clone)]
 pub struct AclAndSecretScanner {
     gitignore_rules: Vec<IgnoreRule>,
-    colorideignore_rules: Vec<IgnoreRule>,
+    hiloignore_rules: Vec<IgnoreRule>,
     allowed_paths: Vec<String>,
     forbidden_paths: Vec<String>,
     entropy_threshold_bits: f64,
@@ -104,7 +104,7 @@ impl AclAndSecretScanner {
     pub fn new() -> Self {
         Self {
             gitignore_rules: Vec::new(),
-            colorideignore_rules: Vec::new(),
+            hiloignore_rules: Vec::new(),
             allowed_paths: Vec::new(),
             forbidden_paths: Vec::new(),
             entropy_threshold_bits: Self::DEFAULT_ENTROPY_THRESHOLD_BITS,
@@ -112,7 +112,7 @@ impl AclAndSecretScanner {
         }
     }
 
-    /// Load `.gitignore` and `.colorideignore` directly from `workspace_root` if present.
+    /// Load `.gitignore` and `.hiloignore` directly from `workspace_root` if present.
     #[must_use]
     pub fn from_workspace_root(workspace_root: &Path) -> Self {
         let mut scanner = Self::new();
@@ -120,9 +120,9 @@ impl AclAndSecretScanner {
         if let Ok(content) = std::fs::read_to_string(&gitignore_path) {
             scanner.add_gitignore_rules(&content);
         }
-        let colorideignore_path = workspace_root.join(".colorideignore");
-        if let Ok(content) = std::fs::read_to_string(&colorideignore_path) {
-            scanner.add_colorideignore_rules(&content);
+        let hiloignore_path = workspace_root.join(".hiloignore");
+        if let Ok(content) = std::fs::read_to_string(&hiloignore_path) {
+            scanner.add_hiloignore_rules(&content);
         }
         scanner
     }
@@ -132,9 +132,9 @@ impl AclAndSecretScanner {
         Self::parse_ignore_lines(content, &mut self.gitignore_rules);
     }
 
-    /// Add `.colorideignore` rules from raw text content.
-    pub fn add_colorideignore_rules(&mut self, content: &str) {
-        Self::parse_ignore_lines(content, &mut self.colorideignore_rules);
+    /// Add `.hiloignore` rules from raw text content.
+    pub fn add_hiloignore_rules(&mut self, content: &str) {
+        Self::parse_ignore_lines(content, &mut self.hiloignore_rules);
     }
 
     /// Configure explicit ACL allowed path prefixes.
@@ -177,7 +177,7 @@ impl AclAndSecretScanner {
         self.audit_log.push(event);
     }
 
-    /// Verify whether a workspace-relative path is permitted by ACL, `.gitignore`, `.colorideignore`,
+    /// Verify whether a workspace-relative path is permitted by ACL, `.gitignore`, `.hiloignore`,
     /// and mandatory sensitive-file rules (`.env`, `.pem`, `.key`, etc.).
     pub fn check_path_acl(&self, relative_path: &str) -> Result<(), AclDenialReason> {
         let norm = normalize_rel_path(relative_path);
@@ -225,11 +225,11 @@ impl AclAndSecretScanner {
             });
         }
 
-        // 5. .colorideignore rules
+        // 5. .hiloignore rules
         if let Some(matched_pattern) =
-            Self::evaluate_ignore_rules(&norm, file_name, &self.colorideignore_rules)
+            Self::evaluate_ignore_rules(&norm, file_name, &self.hiloignore_rules)
         {
-            return Err(AclDenialReason::ColorideignoreRule {
+            return Err(AclDenialReason::HiloignoreRule {
                 pattern: matched_pattern,
             });
         }
@@ -891,10 +891,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn acl_scanner_blocks_dotenv_gitignore_and_colorideignore() {
+    fn acl_scanner_blocks_dotenv_gitignore_and_hiloignore() {
         let mut scanner = AclAndSecretScanner::new();
         scanner.add_gitignore_rules("node_modules/\ndist/\n*.log\n");
-        scanner.add_colorideignore_rules("secrets/**\ninternal_keys.ts\n");
+        scanner.add_hiloignore_rules("secrets/**\ninternal_keys.ts\n");
 
         assert!(scanner.check_path_acl(".env").is_err());
         assert!(scanner.check_path_acl(".env.local").is_err());

@@ -57,7 +57,7 @@ impl Session {
                     true,
                 )
             }
-            "_coloride/query_local_mcp" => (
+            "_hilo/query_local_mcp" => (
                 "query_local_mcp",
                 ToolCapability::QueryLocalMcp,
                 BTreeMap::from([("request".into(), arg("request")?)]),

@@ -34,7 +34,7 @@ export function createSeparator(
 ): HTMLElement {
   const doc = host.grid.ownerDocument;
   const bar = doc.createElement("div");
-  bar.className = "coloride-layout-handle";
+  bar.className = "hilo-layout-handle";
   bar.setAttribute("role", "separator");
   // A row of panels is split by vertical bars, and the other way round.
   bar.setAttribute("aria-orientation", direction === "row" ? "vertical" : "horizontal");
@@ -83,7 +83,7 @@ export function createSeparator(
       return direction === "row" ? rect.left + rect.width / 2 : rect.top + rect.height / 2;
     };
     const orientation = bar.getAttribute("aria-orientation");
-    const targets = Array.from(host.grid.querySelectorAll(".coloride-layout-handle"))
+    const targets = Array.from(host.grid.querySelectorAll(".hilo-layout-handle"))
       .filter(
         (other) =>
           other !== bar &&
@@ -203,6 +203,6 @@ export function applySizes(node: LayoutNode, el: HTMLElement, isRoot: boolean): 
     }
     offset += size;
     const bar = el.children[node.children.length + index] as HTMLElement | undefined;
-    if (bar?.classList.contains("coloride-layout-handle")) bar.style[edge] = `${offset * 100}%`;
+    if (bar?.classList.contains("hilo-layout-handle")) bar.style[edge] = `${offset * 100}%`;
   });
 }

@@ -1,4 +1,4 @@
-import type { ColorideValidationState } from "@coloride/protocol-types";
+import type { HiloValidationState } from "@hilo/protocol-types";
 import type { CockpitChatMessage, CockpitFileTreeNode } from "../stores/index.js";
 
 export interface VirtualWindowSlice<T> {
@@ -61,10 +61,10 @@ export function computeVirtualWindowSlice<T>(
 
 /**
  * Generate a synthetic file tree of `count` entries (e.g., 30,000 or 55,000 nodes)
- * annotated with Coloride validation states for virtualization stress testing.
+ * annotated with Hilo validation states for virtualization stress testing.
  */
 export function generateSyntheticFileTree(count: number): CockpitFileTreeNode[] {
-  const states: readonly ColorideValidationState[] = [
+  const states: readonly HiloValidationState[] = [
     "ValidatedGreen",
     "ReviewYellow",
     "FailedRed",
@@ -117,7 +117,7 @@ export class VirtualChatMessageListRenderer {
     container.innerHTML = "";
 
     const runway = container.ownerDocument.createElement("div");
-    runway.className = "cm-coloride-virtual-messages-runway";
+    runway.className = "cm-hilo-virtual-messages-runway";
     runway.style.position = "relative";
     runway.style.height = `${slice.totalHeightPx}px`;
 
@@ -129,7 +129,7 @@ export class VirtualChatMessageListRenderer {
       const absoluteIndex = slice.startIndex + i;
 
       const row = container.ownerDocument.createElement("article");
-      row.className = "cm-coloride-virtual-message-row";
+      row.className = "cm-hilo-virtual-message-row";
       row.dataset.index = String(absoluteIndex);
       row.dataset.messageId = msg.messageId;
       row.dataset.streaming = String(msg.streaming);

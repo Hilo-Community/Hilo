@@ -100,7 +100,7 @@ fn blocking_checkpoints_do_not_pollute_git_and_rollback_restores_the_workspace()
     let manager = CheckpointManager::open(root).unwrap();
     let c1 = manager.create_checkpoint("task-001", BEFORE, &[]).unwrap();
     assert_eq!(c1.seq, 1);
-    assert_eq!(c1.reference, "refs/coloride/checkpoints/task-001/1");
+    assert_eq!(c1.reference, "refs/hilo/checkpoints/task-001/1");
     assert!(c1.skipped.is_empty(), "{:?}", c1.skipped);
 
     // The simulated task modifies 6 files and creates 2.
@@ -126,20 +126,17 @@ fn blocking_checkpoints_do_not_pollute_git_and_rollback_restores_the_workspace()
 
     // Neither checkpoint shows up in the branch, HEAD, or the user's index.
     assert_eq!(git(root, &["log", "-n", "5", "--format=%H %s"]), log_before);
-    assert!(!git(root, &["log", "--format=%s"]).contains("Coloride checkpoint"));
+    assert!(!git(root, &["log", "--format=%s"]).contains("Hilo checkpoint"));
     assert_eq!(git(root, &["rev-parse", "HEAD"]), head_before);
     assert_eq!(
         fs::read(root.join(".git/index")).unwrap(),
         index_before,
         ".git/index changed"
     );
-    let refs = git(
-        root,
-        &["for-each-ref", "--format=%(refname)", "refs/coloride"],
-    );
+    let refs = git(root, &["for-each-ref", "--format=%(refname)", "refs/hilo"]);
     assert_eq!(
         refs,
-        "refs/coloride/checkpoints/task-001/1\nrefs/coloride/checkpoints/task-001/2\n"
+        "refs/hilo/checkpoints/task-001/1\nrefs/hilo/checkpoints/task-001/2\n"
     );
     // The checkpoint holds the untracked note and the staged file, never the ignored secret.
     let captured = git(root, &["ls-tree", "-r", "--name-only", &c1.reference]);
@@ -474,7 +471,7 @@ fn checkpoint_order_task_ids_and_missing_results_are_explicit_errors() {
     assert_eq!(kinds, vec![BEFORE, AFTER]);
     assert_eq!(manager.discard_task("task-order").unwrap(), 2);
     assert!(manager.list_checkpoints("task-order").unwrap().is_empty());
-    assert_eq!(git(root, &["for-each-ref", "refs/coloride"]), "");
+    assert_eq!(git(root, &["for-each-ref", "refs/hilo"]), "");
 
     let not_a_repo = tempfile::tempdir().unwrap();
     // A temporary directory may itself sit inside a repository on some machines; only check
@@ -540,7 +537,7 @@ fn the_worktrees_directory_must_be_absolute_outside_the_repository_and_not_below
     let outside = tempfile::tempdir().unwrap();
     for bad in [
         PathBuf::from("relative/worktrees"),
-        root.join(".git/coloride/worktrees"),
+        root.join(".git/hilo/worktrees"),
         outside.path().join("x/.git/worktrees"),
         root.join("worktrees"),
     ] {

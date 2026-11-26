@@ -248,7 +248,7 @@ impl LocalMcpServer {
                     return Some(error(id, -32602, "Unsupported protocol version"));
                 }
                 self.initialized = true;
-                json!({"protocolVersion":version,"capabilities":{"tools":{}},"serverInfo":{"name":"coloride-context","version":env!("CARGO_PKG_VERSION")}})
+                json!({"protocolVersion":version,"capabilities":{"tools":{}},"serverInfo":{"name":"hilo-context","version":env!("CARGO_PKG_VERSION")}})
             }
             "ping" => json!({}),
             _ if !self.initialized => return Some(error(id, -32002, "Initialize first")),

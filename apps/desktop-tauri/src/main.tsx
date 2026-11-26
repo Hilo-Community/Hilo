@@ -1,11 +1,11 @@
-import type { DocumentDiagnostics, LanguageFeatureResponse } from "@coloride/protocol-types";
+import type { DocumentDiagnostics, LanguageFeatureResponse } from "@hilo/protocol-types";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import "@coloride/web-ui/theme.css";
-import type { NativeMigrationReport, WorkspaceTrustReport } from "@coloride/web-ui";
+import "@hilo/web-ui/theme.css";
+import type { NativeMigrationReport, WorkspaceTrustReport } from "@hilo/web-ui";
 import {
   type BackgroundServicesState,
   decodeWorkspaceSessionCacheBinary,
@@ -13,7 +13,7 @@ import {
   lazyBootDesktopCockpit,
 } from "./index.js";
 import "./shell.css";
-import type { AcpEvent } from "@coloride/web-ui";
+import type { AcpEvent } from "@hilo/web-ui";
 import { createAgentFinishedAlert } from "./agent-alert.js";
 import { createTauriAgentHost } from "./tauri-agent-host.js";
 import { createTauriAgentRegistryHost } from "./tauri-agent-registry-host.js";
@@ -55,10 +55,10 @@ interface NativeAstAnalysis {
 }
 
 /** Carries one tool's diagnostics for one revision of one document (see `lsp/session.rs`). */
-const DOCUMENT_DIAGNOSTICS_EVENT = "coloride-document-diagnostics";
+const DOCUMENT_DIAGNOSTICS_EVENT = "hilo-document-diagnostics";
 
 /** Sent by the Rust side when closing or quitting was held back because of unsaved changes. */
-const CLOSE_REQUESTED_EVENT = "coloride-close-requested";
+const CLOSE_REQUESTED_EVENT = "hilo-close-requested";
 
 function mapWorkspaceNodes(nodes: readonly NativeWorkspaceNode[]) {
   return nodes.map((node) => ({
@@ -67,7 +67,7 @@ function mapWorkspaceNodes(nodes: readonly NativeWorkspaceNode[]) {
   }));
 }
 
-function ColorideDesktopApp() {
+function HiloDesktopApp() {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -95,7 +95,7 @@ function ColorideDesktopApp() {
           try {
             const snapshot = decodeWorkspaceSessionCacheBinary(candidate);
             validCachedBytes = candidate;
-            if (snapshot.workspaceRoot && snapshot.workspaceRoot !== "/workspace/coloride") {
+            if (snapshot.workspaceRoot && snapshot.workspaceRoot !== "/workspace/hilo") {
               const nodes = await invoke<NativeWorkspaceNode[]>("load_workspace_command", {
                 root: snapshot.workspaceRoot,
               }).catch(() => []);
@@ -230,7 +230,7 @@ function ColorideDesktopApp() {
     };
   }, []);
 
-  return <div ref={hostRef} className="coloride-desktop-root" />;
+  return <div ref={hostRef} className="hilo-desktop-root" />;
 }
 
 const rootElement = document.getElementById("root");
@@ -241,7 +241,7 @@ if (new URLSearchParams(window.location.search).get("view") === "settings") {
 } else {
   createRoot(rootElement).render(
     <StrictMode>
-      <ColorideDesktopApp />
+      <HiloDesktopApp />
     </StrictMode>,
   );
 }

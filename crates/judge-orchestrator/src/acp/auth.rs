@@ -235,7 +235,7 @@ pub(crate) fn terminal_spec(
     spec.args.drain(start..end);
     spec.args.extend(method.args.iter().map(Into::into));
     spec.env.insert("TERM".into(), "xterm-256color".into());
-    spec.env.insert("TERM_PROGRAM".into(), "Coloride".into());
+    spec.env.insert("TERM_PROGRAM".into(), "Hilo".into());
     Ok(spec)
 }
 
@@ -254,11 +254,21 @@ mod tests {
             } else {
                 vec![]
             };
-            for tail in [
-                vec!["--acp", "--experimental-acp", "--label", "--acp"],
-                vec!["--acp", "--", "--experimental-acp"],
-                vec!["--label", "--experimental-acp"],
-                vec!["prompt", "--acp"],
+            for (tail, kept) in [
+                (
+                    vec!["--acp", "--experimental-acp", "--label", "--acp"],
+                    vec!["--label", "--acp"],
+                ),
+                (
+                    vec!["--acp", "--", "--experimental-acp"],
+                    vec!["--", "--experimental-acp"],
+                ),
+                (
+                    vec!["--label", "--experimental-acp"],
+                    vec!["--label", "--experimental-acp"],
+                ),
+                (vec!["prompt", "--acp"], vec!["prompt", "--acp"]),
+                (vec![], vec![]),
             ] {
                 base.args = entry
                     .iter()
@@ -268,11 +278,7 @@ mod tests {
                 let expected: Vec<std::ffi::OsString> = entry
                     .iter()
                     .cloned()
-                    .chain(
-                        tail.iter()
-                            .skip_while(|arg| matches!(**arg, "--acp" | "--experimental-acp"))
-                            .map(Into::into),
-                    )
+                    .chain(kept.iter().map(Into::into))
                     .chain(["login".into()])
                     .collect();
                 assert_eq!(terminal_spec(&base, &method).unwrap().args, expected);
@@ -289,7 +295,7 @@ mod tests {
         let credentials = AgentCredentials::Gateway {
             protocol: "openai".into(),
             base_url: "http://127.0.0.1:123/openai".into(),
-            headers: BTreeMap::from([("x-coloride-session".into(), "session-only".into())]),
+            headers: BTreeMap::from([("x-hilo-session".into(), "session-only".into())]),
             provider_name: "Provider".into(),
             environment_fallback: false,
         };
@@ -299,7 +305,7 @@ mod tests {
         };
         assert_eq!(request["methodId"], "custom-name");
         assert_eq!(
-            request["_meta"]["gateway"]["headers"]["x-coloride-session"],
+            request["_meta"]["gateway"]["headers"]["x-hilo-session"],
             "session-only"
         );
         assert!(authentication(&credentials, &[]).is_err());

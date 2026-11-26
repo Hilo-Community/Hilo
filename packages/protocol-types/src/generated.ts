@@ -23,7 +23,7 @@ export type Utf16Span = {
   end: Utf16CodeUnitOffset;
 };
 
-export type ColorideValidationState =
+export type HiloValidationState =
   | "ValidatedGreen"
   | "ReviewYellow"
   | "FailedRed"
@@ -162,7 +162,7 @@ export type ModelProviderKind =
   | "LocalLlamaCpp"
   | "LocalOllama"
   | "ByokCloud"
-  | "ManagedColorideCloud"
+  | "ManagedHiloCloud"
   | "PrivateVllm"
   | "AcpExternalAgent";
 
@@ -400,7 +400,7 @@ export type Evidence = {
   diagnostics: QualityDiagnosticsSummary;
   preview_report: PreviewRuntimeReport;
   artifacts: Array<EvidenceArtifact>;
-  verdict: ColorideValidationState;
+  verdict: HiloValidationState;
 };
 
 export type ApprovalActionKind =

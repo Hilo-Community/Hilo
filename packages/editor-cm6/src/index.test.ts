@@ -4,30 +4,30 @@ import { language } from "@codemirror/language";
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import {
-  COLORIDE_STATE_VISUAL_TOKENS,
-  ColorideEditorView,
   type EditorRangeDecoration,
+  HILO_STATE_VISUAL_TOKENS,
+  HiloEditorView,
   InMemoryBinaryHostBridge,
-  colorideStateDecorations,
-  colorideStateField,
   decodeEditorSnapshotBinary,
   decodeEditorTransactionBinary,
   describeDecorationAccessibleLabel,
   encodeEditorSnapshotBinary,
   encodeEditorTransactionBinary,
   highlightSnippetWithLezer,
+  hiloStateDecorations,
+  hiloStateField,
   invalidateRangeOnLocalEdit,
-  setColorideDecorationsEffect,
+  setHiloDecorationsEffect,
 } from "./index.js";
 
-describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
+describe("@hilo/editor-cm6 — LOT-004 Blocking Suite", () => {
   it("synchronously invalidates ValidatedGreen (🟢) to StaleOrange (🟠) in < 1 ms on local edit and exposes color + icon + aria-label", () => {
     const lines = Array.from(
       { length: 30 },
       (_, i) => `export const line_${i + 1} = ${i + 1};`,
     ).join("\n");
     const bridge = new InMemoryBinaryHostBridge();
-    const editor = new ColorideEditorView({
+    const editor = new HiloEditorView({
       initialDocumentId: "src/module.ts",
       initialContent: lines,
       ipcChannel: bridge,
@@ -60,7 +60,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
       "StaleOrange",
       "UnchangedBlue",
     ] as const) {
-      const tokens = COLORIDE_STATE_VISUAL_TOKENS[state];
+      const tokens = HILO_STATE_VISUAL_TOKENS[state];
       expect(tokens.icon.length).toBeGreaterThan(0);
       expect(tokens.dark.background).toMatch(/^#[0-9a-f]{6}$/i);
       expect(tokens.dark.border).toMatch(/^#[0-9a-f]{6}$/i);
@@ -76,12 +76,12 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     }
     expect(seenIcons.size).toBe(5);
 
-    // Measure synchronous colorideStateField transition (< 1 ms) isolated from Lezer parser overhead
+    // Measure synchronous hiloStateField transition (< 1 ms) isolated from Lezer parser overhead
     const decoratedState = EditorState.create({
       doc: lines,
-      extensions: [colorideStateDecorations()],
+      extensions: [hiloStateDecorations()],
     }).update({
-      effects: setColorideDecorationsEffect.of([
+      effects: setHiloDecorationsEffect.of([
         {
           fromLine: 10,
           toLine: 20,
@@ -98,7 +98,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     }).state;
 
     const line15 = decoratedState.doc.line(15);
-    // Warm up V8 JIT for colorideStateField.update
+    // Warm up V8 JIT for hiloStateField.update
     for (let w = 0; w < 20; w += 1) {
       decoratedState.update({
         changes: { from: line15.from, to: line15.from, insert: " " },
@@ -111,7 +111,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
       const nextState = decoratedState.update({
         changes: { from: line15.from, to: line15.from, insert: " " },
       }).state;
-      const nextField = nextState.field(colorideStateField);
+      const nextField = nextState.field(hiloStateField);
       transitionSamples.push(performance.now() - t0);
       expect(nextField.ranges[0]?.state).toBe("StaleOrange");
     }
@@ -119,7 +119,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     const medianElapsedMs = transitionSamples[Math.floor(transitionSamples.length / 2)] ?? 0;
     expect(medianElapsedMs).toBeLessThan(1);
 
-    // Also verify on the mounted ColorideEditorView instance
+    // Also verify on the mounted HiloEditorView instance
     const viewLine15 = editor.getEditorView().state.doc.line(15);
     editor.dispatchUserEdit(viewLine15.from, viewLine15.from, " ");
 
@@ -145,13 +145,13 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     ).join("\n");
 
     const collectDecoratedLines = (state: EditorState) => {
-      const field = state.field(colorideStateField);
+      const field = state.field(hiloStateField);
       const found: { line: number; coloridState: unknown }[] = [];
       field.lineDecorations.between(0, state.doc.length, (from, _to, deco) => {
         found.push({
           line: state.doc.lineAt(from).number,
           coloridState: (deco.spec as { attributes?: Record<string, string> }).attributes?.[
-            "data-coloride-state"
+            "data-hilo-state"
           ],
         });
       });
@@ -161,9 +161,9 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
 
     const baseState = EditorState.create({
       doc: lines,
-      extensions: [colorideStateDecorations()],
+      extensions: [hiloStateDecorations()],
     }).update({
-      effects: setColorideDecorationsEffect.of([
+      effects: setHiloDecorationsEffect.of([
         { fromLine: 10, toLine: 12, state: "ValidatedGreen", snapshotHash: "H1" },
         { fromLine: 20, toLine: 22, state: "ReviewYellow", snapshotHash: "H1" },
       ]),
@@ -175,7 +175,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     const shifted = baseState.update({
       changes: { from: line1.from, to: line1.from, insert: "// header\n" },
     }).state;
-    const shiftedField = shifted.field(colorideStateField);
+    const shiftedField = shifted.field(hiloStateField);
     expect(shiftedField.ranges[0]).toMatchObject({
       fromLine: 11,
       toLine: 13,
@@ -201,7 +201,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     const edited = shifted.update({
       changes: { from: editLine.from, to: editLine.from, insert: "x" },
     }).state;
-    const editedField = edited.field(colorideStateField);
+    const editedField = edited.field(hiloStateField);
     expect(editedField.ranges[0]?.state).toBe("StaleOrange");
     expect(editedField.ranges[1]).toMatchObject({
       fromLine: 21,
@@ -223,7 +223,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     // Artificially delay IPC snapshots from file-1.ts by 50 ms
     bridge.setArtificialDelayMs("file-1.ts", 50);
 
-    const editor = new ColorideEditorView({
+    const editor = new HiloEditorView({
       initialDocumentId: "file-1.ts",
       initialContent: "const greeting = '';",
       ipcChannel: bridge,
@@ -322,7 +322,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     lezerSamplesMs.sort((a, b) => a - b);
     expect(tokens.length).toBeGreaterThan(5);
     console.info(
-      "COLORIDE_PERFORMANCE",
+      "HILO_PERFORMANCE",
       JSON.stringify({
         scenario: "lezer-highlight",
         medianMs: lezerSamplesMs[Math.floor(lezerSamplesMs.length / 2)],
@@ -341,7 +341,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     ).join("\n");
 
     const bridge = new InMemoryBinaryHostBridge();
-    const editor = new ColorideEditorView({
+    const editor = new HiloEditorView({
       initialDocumentId: "src/large-metrics.ts",
       initialContent: twoThousandLines,
       ipcChannel: bridge,
@@ -365,7 +365,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     keystrokeSamplesMs.sort((a, b) => a - b);
     const p95KeystrokeMs = keystrokeSamplesMs[Math.floor(keystrokeSamplesMs.length * 0.95)] ?? 0;
     console.info(
-      "COLORIDE_PERFORMANCE",
+      "HILO_PERFORMANCE",
       JSON.stringify({
         scenario: "editor-typing-2000-lines",
         p95Ms: p95KeystrokeMs,
@@ -378,7 +378,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
 
     // 3. Open and render a 1 MB local file in p95 <= 150 ms
     const lineChunk =
-      "export const row_東京_👩‍💻 = { id: 1024, status: 'ValidatedGreen', payload: 'Coloride CM6' };\n";
+      "export const row_東京_👩‍💻 = { id: 1024, status: 'ValidatedGreen', payload: 'Hilo CM6' };\n";
     const repeatCount = Math.ceil((1024 * 1024) / lineChunk.length);
     const oneMegabyteContent = lineChunk.repeat(repeatCount).slice(0, 1024 * 1024);
 
@@ -391,7 +391,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
     openSamplesMs.sort((a, b) => a - b);
     const p95OpenMs = openSamplesMs[Math.floor(openSamplesMs.length * 0.95)] ?? 0;
     console.info(
-      "COLORIDE_PERFORMANCE",
+      "HILO_PERFORMANCE",
       JSON.stringify({
         scenario: "editor-open-1mb",
         p95Ms: p95OpenMs,
@@ -450,7 +450,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
   });
   it("sends multi-cursor edits in the sequential coordinates host-core applies them in", () => {
     const ipcChannel = new InMemoryBinaryHostBridge();
-    const editor = new ColorideEditorView({
+    const editor = new HiloEditorView({
       initialDocumentId: "src/multi.ts",
       initialContent: "a\nbb\nccc\n",
       ipcChannel,
@@ -479,7 +479,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
 
   it("never lets undo carry one document's text into the next after a switch", () => {
     const ipcChannel = new InMemoryBinaryHostBridge();
-    const editor = new ColorideEditorView({
+    const editor = new HiloEditorView({
       initialDocumentId: "src/a.ts",
       initialContent: "const a = 1;\n",
       ipcChannel,
@@ -499,7 +499,7 @@ describe("@coloride/editor-cm6 — LOT-004 Blocking Suite", () => {
   });
 
   it("highlights each file with its own grammar when another file is opened in place", () => {
-    const editor = new ColorideEditorView({
+    const editor = new HiloEditorView({
       initialDocumentId: "notes.md",
       initialContent: "# notes\n",
       ipcChannel: new InMemoryBinaryHostBridge(),

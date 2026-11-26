@@ -47,10 +47,7 @@ impl PendingDiskSave {
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("document");
-        let tmp_name = format!(
-            ".{file_name}.coloride-atomic-{}-{seq}.tmp",
-            std::process::id()
-        );
+        let tmp_name = format!(".{file_name}.hilo-atomic-{}-{seq}.tmp", std::process::id());
         let tmp_path = self.disk_path.with_file_name(tmp_name);
 
         // Keep the file's permissions (an executable script stays executable).
@@ -152,7 +149,7 @@ mod tests {
         std::fs::read_dir(dir)
             .unwrap()
             .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
-            .filter(|name| name.contains(".coloride-atomic-"))
+            .filter(|name| name.contains(".hilo-atomic-"))
             .collect()
     }
 

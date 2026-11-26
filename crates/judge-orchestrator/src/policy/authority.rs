@@ -4,8 +4,8 @@ use host_core::{Approval, TaskSpec};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-const TASK_DOMAIN: &[u8] = b"coloride.host.task.v1\0";
-const APPROVAL_DOMAIN: &[u8] = b"coloride.host.approval.v1\0";
+const TASK_DOMAIN: &[u8] = b"hilo.host.task.v1\0";
+const APPROVAL_DOMAIN: &[u8] = b"hilo.host.approval.v1\0";
 
 #[derive(Debug, Error)]
 pub enum AuthorityError {

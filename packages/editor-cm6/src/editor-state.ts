@@ -18,13 +18,13 @@ import {
   rectangularSelection,
 } from "@codemirror/view";
 
-import { breakpointKeyBindings, colorideBreakpoints } from "./breakpoints.js";
+import { breakpointKeyBindings, hiloBreakpoints } from "./breakpoints.js";
 import {
   type EditorRangeDecoration,
-  colorideStateDecorations,
-  setColorideDecorationsEffect,
+  hiloStateDecorations,
+  setHiloDecorationsEffect,
 } from "./decorations.js";
-import { colorideDiagnostics } from "./diagnostics.js";
+import { hiloDiagnostics } from "./diagnostics.js";
 import type { LanguageFeatureClient } from "./language-features.js";
 import { createLezerHighlightingExtensions } from "./languages.js";
 import {
@@ -61,9 +61,9 @@ export function createEditorState(
     extensions: [
       EditorState.tabSize.of(2),
       indentUnit.of("  "),
-      ...colorideStateDecorations(),
-      colorideDiagnostics(),
-      colorideBreakpoints(),
+      ...hiloStateDecorations(),
+      hiloDiagnostics(),
+      hiloBreakpoints(),
       highlightSelectedLineGutter(),
       scopeGuides(),
       textOnlySelection(),
@@ -108,6 +108,6 @@ export function createEditorState(
   }
 
   return baseState.update({
-    effects: setColorideDecorationsEffect.of(initialDecorations),
+    effects: setHiloDecorationsEffect.of(initialDecorations),
   }).state;
 }

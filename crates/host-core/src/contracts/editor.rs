@@ -174,7 +174,7 @@ impl EditorSnapshot {
     }
 }
 
-/// Decode the compact little-endian editor transaction format used by `@coloride/editor-cm6`.
+/// Decode the compact little-endian editor transaction format used by `@hilo/editor-cm6`.
 pub fn decode_editor_transaction_ipc(
     bytes: &[u8],
 ) -> Result<EditorTransaction, ContractCodecError> {
@@ -264,7 +264,7 @@ pub fn decode_editor_transaction_ipc(
     })
 }
 
-/// Encode the compact little-endian editor transaction format used by `@coloride/editor-cm6`.
+/// Encode the compact little-endian editor transaction format used by `@hilo/editor-cm6`.
 pub fn encode_editor_transaction_ipc(
     transaction: &EditorTransaction,
 ) -> Result<Vec<u8>, ContractCodecError> {
@@ -320,7 +320,7 @@ pub fn encode_editor_transaction_ipc(
     Ok(output)
 }
 
-/// Encode the compact little-endian editor snapshot format used by `@coloride/editor-cm6`.
+/// Encode the compact little-endian editor snapshot format used by `@hilo/editor-cm6`.
 pub fn encode_editor_snapshot_ipc(
     snapshot: &EditorSnapshot,
 ) -> Result<Vec<u8>, ContractCodecError> {

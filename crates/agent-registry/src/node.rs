@@ -1,4 +1,4 @@
-//! The Node.js of this computer, which npm agents run with. Coloride neither downloads nor
+//! The Node.js of this computer, which npm agents run with. Hilo neither downloads nor
 //! bundles one.
 
 use std::env;
@@ -163,7 +163,7 @@ fn probe(node: &Path) -> Result<u32, String> {
 fn npm_for(node: &Path) -> (Option<PathBuf>, Option<PathBuf>) {
     let real = std::fs::canonicalize(node)
         .map(plain_path)
-        .unwrap_or_else(|_| plain_path(node.to_path_buf()));
+        .unwrap_or_else(|_| plain_path(node));
     let real_dir = real.parent().map(Path::to_path_buf).unwrap_or_default();
     let cli = [
         // Unix: <prefix>/bin/node and <prefix>/lib/node_modules/npm
@@ -185,7 +185,7 @@ fn npm_for(node: &Path) -> (Option<PathBuf>, Option<PathBuf>) {
     .find(|candidate| candidate.is_file())
     .and_then(|candidate| std::fs::canonicalize(candidate).ok())
     .map(plain_path);
-    let dir = plain_path(node.to_path_buf())
+    let dir = plain_path(node)
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_default();
@@ -202,7 +202,7 @@ impl NodeLocator for SystemNode {
     fn locate(&self) -> Result<NodeToolchain, String> {
         let mut candidates: Vec<PathBuf> = Vec::new();
         // An explicit choice wins, and is never replaced by another Node when it is wrong.
-        if let Some(forced) = env::var_os("COLORIDE_NODE").filter(|value| !value.is_empty()) {
+        if let Some(forced) = env::var_os("HILO_NODE").filter(|value| !value.is_empty()) {
             candidates.push(PathBuf::from(forced));
         } else {
             candidates.extend(

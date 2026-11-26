@@ -28,7 +28,7 @@ function setup(openWorkspace?: () => Promise<readonly [] | null>) {
       },
     ],
   });
-  stores.setProjectPath("/projects/Coloride");
+  stores.setProjectPath("/projects/Hilo");
   const root = document.createElement("aside");
   const controlsHost = document.createElement("div");
   const treeHost = document.createElement("div");
@@ -259,7 +259,7 @@ describe("Workspace sidebar", () => {
     stores.createWorkGroup("Landing");
     const projects = Array.from(root.querySelectorAll<HTMLElement>(".sidebar-project"));
     expect(projects.map((project) => project.dataset.projectPath)).toEqual([
-      "/projects/Coloride",
+      "/projects/Hilo",
       "/projects/Website",
     ]);
     const titles = (project: HTMLElement) =>
@@ -299,7 +299,7 @@ describe("Workspace sidebar", () => {
     const { stores, root } = setup();
     stores.setProjectPath("/projects/Website");
     const folder = root.querySelector<HTMLButtonElement>(
-      '.sidebar-project[data-project-path="/projects/Coloride"] .sidebar-row--folder .sidebar-row-select',
+      '.sidebar-project[data-project-path="/projects/Hilo"] .sidebar-row--folder .sidebar-row-select',
     );
     folder?.click();
     const [first, second] = Array.from(root.querySelectorAll<HTMLElement>(".sidebar-group-tree"));
@@ -307,7 +307,7 @@ describe("Workspace sidebar", () => {
     expect(second?.hidden).toBe(false);
     root
       .querySelector<HTMLButtonElement>(
-        '.sidebar-project[data-project-path="/projects/Coloride"] .sidebar-row--folder .sidebar-more',
+        '.sidebar-project[data-project-path="/projects/Hilo"] .sidebar-row--folder .sidebar-more',
       )
       ?.click();
     const remove = Array.from(root.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find(
@@ -373,7 +373,7 @@ describe("Workspace sidebar", () => {
     it("has a + on the project row that creates a group, selects it and asks for its name", () => {
       const { stores, root, get } = setup();
       const add = get(".sidebar-row--folder .sidebar-add");
-      expect(add.getAttribute("aria-label")).toBe("New group in Coloride");
+      expect(add.getAttribute("aria-label")).toBe("New group in Hilo");
       add.click();
 
       const groups = stores.navigation.getState().groups;
@@ -386,7 +386,7 @@ describe("Workspace sidebar", () => {
       if (!input) throw new Error("Missing rename input");
       input.value = "Payments";
       input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-      expect(groupTitles(root, "/projects/Coloride")).toEqual(["Workspace", "Payments"]);
+      expect(groupTitles(root, "/projects/Hilo")).toEqual(["Workspace", "Payments"]);
       expect(stores.navigation.getState().groups[1]?.title).toBe("Payments");
     });
 
@@ -425,13 +425,13 @@ describe("Workspace sidebar", () => {
     it("creates the group in the project whose + was pressed, even if another is active", async () => {
       const { stores, root } = setup();
       stores.setProjectPath("/projects/Website");
-      const coloride = root.querySelector<HTMLElement>(
-        '.sidebar-project[data-project-path="/projects/Coloride"] .sidebar-row--folder .sidebar-add',
+      const hilo = root.querySelector<HTMLElement>(
+        '.sidebar-project[data-project-path="/projects/Hilo"] .sidebar-row--folder .sidebar-add',
       );
-      coloride?.click();
+      hilo?.click();
       await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(stores.navigation.getState().projectPath).toBe("/projects/Coloride");
-      expect(groupTitles(root, "/projects/Coloride")).toEqual(["Workspace", "New group"]);
+      expect(stores.navigation.getState().projectPath).toBe("/projects/Hilo");
+      expect(groupTitles(root, "/projects/Hilo")).toEqual(["Workspace", "New group"]);
       expect(groupTitles(root, "/projects/Website")).toEqual(["Workspace"]);
     });
   });
@@ -476,7 +476,7 @@ describe("Zone 2 option menus", () => {
     });
     get(".sidebar-row--folder .sidebar-more").click();
     menuItem(root, "Copy path").click();
-    expect(writeText).toHaveBeenCalledWith("/projects/Coloride");
+    expect(writeText).toHaveBeenCalledWith("/projects/Hilo");
   });
 
   it("offers every group action; the group with sessions cannot be deleted", () => {

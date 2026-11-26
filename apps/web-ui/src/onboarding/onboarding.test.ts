@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { describe, expect, it } from "vitest";
 import {
   OnboardingModalController,
@@ -8,7 +8,7 @@ import {
 } from "../index.js";
 import { UI_STRINGS } from "../ui/ui-strings.js";
 
-describe("@coloride/web-ui — LOT-006 onboarding and migration", () => {
+describe("@hilo/web-ui — LOT-006 onboarding and migration", () => {
   it("LOT-006 BLOCKING: parses multi-OS JSONC configs, loads declarative .vsix themes/snippets into CM6, and switches VS Code / Vim / JetBrains keymaps with 0 remounts", () => {
     const macPaths = resolveExternalIdePaths("MacOs", "/Users/dev");
     const winPaths = resolveExternalIdePaths(
@@ -32,7 +32,7 @@ describe("@coloride/web-ui — LOT-006 onboarding and migration", () => {
     document.body.appendChild(rootContainer);
 
     const ipcChannel = new InMemoryBinaryHostBridge();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/app.ts",
       initialContent: "",
       ipcChannel,
@@ -63,7 +63,7 @@ describe("@coloride/web-ui — LOT-006 onboarding and migration", () => {
             "name": "catppuccin-vsc",
             "publisher": "catppuccin",
             "version": "3.0.0",
-            "displayName": "Catppuccin for Coloride",
+            "displayName": "Catppuccin for Hilo",
             "main": "./dist/extension.js",
             "contributes": {
               "themes": [
@@ -112,9 +112,9 @@ describe("@coloride/web-ui — LOT-006 onboarding and migration", () => {
       expect(editorView.getStoreSnapshot().mountCount).toBe(1);
     }
 
-    // 1-click reset to Coloride defaults
-    const resetState = onboarding.resetToColorideDefaults();
-    expect(resetState.colorTheme).toBe("Coloride Dark (WCAG AAA)");
+    // 1-click reset to Hilo defaults
+    const resetState = onboarding.resetToHiloDefaults();
+    expect(resetState.colorTheme).toBe("Hilo Dark (WCAG AAA)");
     expect(editorView.getKeymapPreset()).toBe("VsCode");
     expect(editorView.getRegisteredSnippets()).toHaveLength(0);
 
@@ -127,7 +127,7 @@ describe("@coloride/web-ui — LOT-006 onboarding and migration", () => {
     document.body.appendChild(rootContainer);
 
     const ipcChannel = new InMemoryBinaryHostBridge();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/index.ts",
       initialContent: "export const ok = true;\n",
       ipcChannel,
@@ -183,7 +183,7 @@ describe("@coloride/web-ui — LOT-006 onboarding and migration", () => {
   it("imports a redacted native migration report without launching a process", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "untitled:test.ts",
       initialContent: "",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -219,7 +219,7 @@ describe("@coloride/web-ui — LOT-006 onboarding and migration", () => {
       security_permissions_changed: 0,
     }));
     const modal = controller.mountModal(host);
-    modal.querySelector<HTMLButtonElement>(".coloride-onboarding-import-btn")?.click();
+    modal.querySelector<HTMLButtonElement>(".hilo-onboarding-import-btn")?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const state = controller.store.getState();

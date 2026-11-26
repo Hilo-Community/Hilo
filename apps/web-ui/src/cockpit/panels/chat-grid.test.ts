@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { describe, expect, it, vi } from "vitest";
 import type { AcpEvent, AgentHandle, AgentHost } from "../../agent/store.js";
 import {
@@ -34,15 +34,15 @@ function fakeAgentHost() {
 /** The header + offers each locally installed agent. */
 async function addSessionFromMenu(root: HTMLElement): Promise<void> {
   for (let i = 0; i < 10; i++) await Promise.resolve();
-  root.querySelector<HTMLButtonElement>(".coloride-header-tab-add")?.click();
+  root.querySelector<HTMLButtonElement>(".hilo-header-tab-add")?.click();
   const pick = (label: string) =>
-    Array.from(document.querySelectorAll<HTMLButtonElement>(".coloride-new-panel-item"))
+    Array.from(document.querySelectorAll<HTMLButtonElement>(".hilo-new-panel-item"))
       .find((item) => item.textContent?.trim().startsWith(label))
       ?.click();
   pick("Codex");
 }
 
-describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
+describe("@hilo/web-ui — Zone 3 groups and sessions", () => {
   it("keeps work groups separate when changing project folders", () => {
     const stores = createCockpitStoreBundle();
     stores.setProjectPath("/projects/one");
@@ -60,7 +60,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     const rootContainer = document.createElement("div");
     document.body.appendChild(rootContainer);
     const stores = createCockpitStoreBundle();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -80,16 +80,14 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     stores.createWorkGroup("Authentication");
     expect(stores.navigation.getState().groups.at(-1)?.title).toBe("Authentication");
     // The header lists the sessions of the active group; a new, empty group has none.
-    expect(
-      rootContainer.querySelectorAll(".coloride-zone-3-header .coloride-header-tab"),
-    ).toHaveLength(0);
-    expect(rootContainer.querySelector(".coloride-header-tab-add")).not.toBeNull();
-    expect(rootContainer.querySelectorAll(".coloride-chat-cell")).toHaveLength(0);
+    expect(rootContainer.querySelectorAll(".hilo-zone-3-header .hilo-header-tab")).toHaveLength(0);
+    expect(rootContainer.querySelector(".hilo-header-tab-add")).not.toBeNull();
+    expect(rootContainer.querySelectorAll(".hilo-chat-cell")).toHaveLength(0);
     rootContainer
       .querySelector<HTMLButtonElement>('button[data-group-id="initial-group"]')
       ?.click();
-    expect(rootContainer.querySelectorAll(".coloride-chat-cell")).toHaveLength(1);
-    stores.setProjectPath("/projects/Coloride");
+    expect(rootContainer.querySelectorAll(".hilo-chat-cell")).toHaveLength(1);
+    stores.setProjectPath("/projects/Hilo");
     const projectRow = rootContainer.querySelector<HTMLButtonElement>(".sidebar-group-toggle");
     expect(rootContainer.querySelector(".sidebar-row--group .sidebar-row-title")?.textContent).toBe(
       "Workspace",
@@ -130,13 +128,13 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
         },
       ],
     });
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
     });
     const controller = new CockpitDomController({ rootContainer: root, stores, editorView });
-    const cells = () => Array.from(root.querySelectorAll<HTMLElement>(".coloride-chat-cell"));
+    const cells = () => Array.from(root.querySelectorAll<HTMLElement>(".hilo-chat-cell"));
     expect(cells().map((cell) => cell.dataset.chatId)).toEqual(["a", "b"]);
     stores.selectChat("b");
     expect(cells().find((cell) => cell.dataset.active === "true")?.dataset.chatId).toBe("b");
@@ -160,24 +158,24 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
       validationState: "UnchangedBlue" as const,
     }));
     const stores = createCockpitStoreBundle({ initialChats: chats });
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
     });
     const controller = new CockpitDomController({ rootContainer: root, stores, editorView });
-    const cells = () => Array.from(root.querySelectorAll<HTMLElement>(".coloride-chat-cell"));
+    const cells = () => Array.from(root.querySelectorAll<HTMLElement>(".hilo-chat-cell"));
     expect(cells()).toHaveLength(12);
-    const rootLayout = root.querySelector<HTMLElement>(".coloride-layout-root");
+    const rootLayout = root.querySelector<HTMLElement>(".hilo-layout-root");
     const firstCell = cells()[0];
-    expect(rootLayout?.classList.contains("coloride-layout-split")).toBe(true);
+    expect(rootLayout?.classList.contains("hilo-layout-split")).toBe(true);
 
     // Streaming-style state changes update cells in place: same split containers, same cells.
     stores.zone3.setState((prev) => ({
       ...prev,
       terminalLogsByChatId: { ...prev.terminalLogsByChatId, c3: ["[stdout] building…"] },
     }));
-    expect(root.querySelector(".coloride-layout-root")).toBe(rootLayout);
+    expect(root.querySelector(".hilo-layout-root")).toBe(rootLayout);
     expect(cells()[0]).toBe(firstCell);
 
     // Closing a panel changes the shape: the others keep their DOM nodes.
@@ -187,10 +185,10 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     expect(cells().some((cell) => cell.dataset.chatId === "c5")).toBe(false);
 
     // Every split distributes the whole space.
-    for (const split of root.querySelectorAll<HTMLElement>(".coloride-layout-split")) {
+    for (const split of root.querySelectorAll<HTMLElement>(".hilo-layout-split")) {
       // The separators over the boundaries take no room and have no size of their own.
       const total = Array.from(split.children)
-        .filter((child) => !child.classList.contains("coloride-layout-handle"))
+        .filter((child) => !child.classList.contains("hilo-layout-handle"))
         .reduce((sum, child) => sum + Number.parseFloat((child as HTMLElement).style.flex), 0);
       expect(total).toBeCloseTo(1);
     }
@@ -250,7 +248,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
       validationState: "UnchangedBlue" as const,
     });
     const stores = createCockpitStoreBundle({ initialChats: [chat("a"), chat("b")] });
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "const ready = true;",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -278,7 +276,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
         uninstall: async () => {},
       },
     });
-    const cells = () => Array.from(root.querySelectorAll<HTMLElement>(".coloride-chat-cell"));
+    const cells = () => Array.from(root.querySelectorAll<HTMLElement>(".hilo-chat-cell"));
     const cleanup = () => {
       controller.destroy();
       editorView.destroy();
@@ -294,8 +292,8 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     expect(stores.zone3.getState().activeChatId).toBe("chat-3");
 
     const cellA = cells().find((c) => c.dataset.chatId === "a") as HTMLElement;
-    cellA.querySelector<HTMLButtonElement>(".coloride-split-right")?.click();
-    cellA.querySelector<HTMLButtonElement>(".coloride-split-down")?.click();
+    cellA.querySelector<HTMLButtonElement>(".hilo-split-right")?.click();
+    cellA.querySelector<HTMLButtonElement>(".hilo-split-down")?.click();
     expect(cells()).toHaveLength(5);
     // Acting on a panel's button must not also select that panel through its header.
     expect(stores.zone3.getState().activeChatId).toBe("chat-5");
@@ -333,7 +331,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const stores = createCockpitStoreBundle();
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -356,7 +354,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     const chatId = stores.zone3.getState().chats.at(-1)?.chatId ?? "";
     const tabDot = () =>
       root.querySelector<HTMLElement>(
-        `.coloride-header-tab[data-chat-id="${chatId}"] .coloride-header-tab-status-dot`,
+        `.hilo-header-tab[data-chat-id="${chatId}"] .hilo-header-tab-status-dot`,
       );
     expect(tabDot()?.hidden).toBe(true);
 
@@ -373,7 +371,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
 
     // Answering the permission goes back to "running": the turn keeps going, it is not done yet.
     const allow = Array.from(
-      root.querySelectorAll<HTMLButtonElement>(".coloride-agent-permission-actions button"),
+      root.querySelectorAll<HTMLButtonElement>(".hilo-agent-permission-actions button"),
     ).find((b) => b.textContent === UI_STRINGS.agent.allow);
     allow?.click();
     await settle();
@@ -398,7 +396,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const stores = createCockpitStoreBundle({ initialChats: [] });
-    const editorView = new ColorideEditorView({
+    const editorView = new HiloEditorView({
       initialDocumentId: "src/main.ts",
       initialContent: "",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -412,7 +410,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     });
     expect(root.querySelectorAll(".sidebar-project")).toHaveLength(0);
     const visible = Array.from(
-      root.querySelectorAll<HTMLButtonElement>(".coloride-group-empty-add"),
+      root.querySelectorAll<HTMLButtonElement>(".hilo-group-empty-add"),
     ).filter((button) => !button.hidden);
     expect(visible.map((button) => button.textContent)).toEqual(["Open project"]);
     visible[0]?.click();
@@ -422,7 +420,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     stores.setProjectPath("/projects/one");
     expect(root.querySelectorAll(".sidebar-project")).toHaveLength(1);
     expect(
-      Array.from(root.querySelectorAll<HTMLButtonElement>(".coloride-group-empty-add"))
+      Array.from(root.querySelectorAll<HTMLButtonElement>(".hilo-group-empty-add"))
         .filter((button) => !button.hidden)
         .map((button) => button.textContent),
     ).toEqual(["New session"]);
@@ -440,8 +438,8 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
       );
     const cell = (id: string) => cells().find((c) => c.dataset.chatId === id) as HTMLElement;
     const header = (id: string) =>
-      cell(id).querySelector<HTMLElement>(".coloride-chat-cell-header") as HTMLElement;
-    const grid = root.querySelector<HTMLElement>(".coloride-zone-3-grid") as HTMLElement;
+      cell(id).querySelector<HTMLElement>(".hilo-chat-cell-header") as HTMLElement;
+    const grid = root.querySelector<HTMLElement>(".hilo-zone-3-grid") as HTMLElement;
     const pointer = (type: string, target: HTMLElement, x: number, y: number) =>
       target.dispatchEvent(
         Object.assign(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 }), {
@@ -465,11 +463,11 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     pointer("pointermove", header("a"), 50, 95);
     expect(grid.dataset.dragging).toBe("a");
     expect(cell("a").dataset.dragging).toBe("true");
-    const indicator = cell("b").querySelector<HTMLElement>(".coloride-drop-indicator");
+    const indicator = cell("b").querySelector<HTMLElement>(".hilo-drop-indicator");
     expect(indicator?.dataset.zone).toBe("bottom");
     pointer("pointerup", header("a"), 50, 95);
     expect(grid.dataset.dragging).toBeUndefined();
-    expect(root.querySelector(".coloride-drop-indicator")).toBeNull();
+    expect(root.querySelector(".hilo-drop-indicator")).toBeNull();
     const moved = layout();
     expect(moved?.kind).toBe("split");
     expect(moved?.kind === "split" && moved.direction).toBe("column");
@@ -478,7 +476,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     // Dropped in the middle of `b`: the two exchange places.
     pointer("pointerdown", header("a"), 50, 50);
     pointer("pointermove", header("a"), 50, 60);
-    expect(cell("b").querySelector<HTMLElement>(".coloride-drop-indicator")?.dataset.zone).toBe(
+    expect(cell("b").querySelector<HTMLElement>(".hilo-drop-indicator")?.dataset.zone).toBe(
       "center",
     );
     pointer("pointerup", header("a"), 50, 60);
@@ -493,12 +491,12 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     // The three dots open the panel's menu; "Close session" is its last entry.
     const close = (id: string) => {
       const cell = cells().find((c) => c.dataset.chatId === id);
-      cell?.querySelector<HTMLButtonElement>(".coloride-panel-menu")?.click();
+      cell?.querySelector<HTMLButtonElement>(".hilo-panel-menu")?.click();
       return [...(cell?.querySelectorAll<HTMLButtonElement>(".sidebar-menu-item") ?? [])].find(
         (item) => item.querySelector(".sidebar-menu-label")?.textContent === "Close session",
       );
     };
-    expect(cells()[0]?.querySelector(".coloride-close-panel")).toBeNull();
+    expect(cells()[0]?.querySelector(".hilo-close-panel")).toBeNull();
     close("b")?.click();
     expect(cells().map((c) => c.dataset.chatId)).toEqual(["a"]);
     const last = close("a");
@@ -506,14 +504,14 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     last?.click();
     expect(stores.zone3.getState().chats).toHaveLength(0);
     expect(cells()).toHaveLength(0);
-    expect(document.querySelector(".coloride-group-empty")).not.toBeNull();
+    expect(document.querySelector(".hilo-group-empty")).not.toBeNull();
     cleanup();
   });
 
   it("shows the shortcuts in the panel menu, and the close shortcut closes the active panel", () => {
     const { stores, cells, cleanup } = mount();
     const cell = cells().find((c) => c.dataset.chatId === "b");
-    cell?.querySelector<HTMLButtonElement>(".coloride-panel-menu")?.click();
+    cell?.querySelector<HTMLButtonElement>(".hilo-panel-menu")?.click();
     const hints = [...(cell?.querySelectorAll(".sidebar-menu-hint") ?? [])].map(
       (hint) => hint.textContent,
     );
@@ -537,11 +535,11 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     stores.setPanelArea({ widthPx: 440, heightPx: 270 });
     // Any state change refreshes the buttons (in the app the ResizeObserver also does).
     stores.zone3.setState((prev) => ({ ...prev }));
-    const add = root.querySelector<HTMLButtonElement>(".coloride-header-tab-add");
+    const add = root.querySelector<HTMLButtonElement>(".hilo-header-tab-add");
     expect(add?.disabled).toBe(true);
     expect(add?.title).toBe("No room for another panel");
     const cellA = cells()[0] as HTMLElement;
-    expect(cellA.querySelector<HTMLButtonElement>(".coloride-split-down")?.disabled).toBe(true);
+    expect(cellA.querySelector<HTMLButtonElement>(".hilo-split-down")?.disabled).toBe(true);
     add?.click();
     expect(cells()).toHaveLength(2);
 
@@ -549,7 +547,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     stores.zone3.setState((prev) => ({ ...prev }));
     expect(add?.disabled).toBe(false);
     expect(add?.title).toBe("New session");
-    expect(cellA.querySelector<HTMLButtonElement>(".coloride-split-down")?.disabled).toBe(false);
+    expect(cellA.querySelector<HTMLButtonElement>(".hilo-split-down")?.disabled).toBe(false);
     cleanup();
   });
 
@@ -557,7 +555,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     const { root, stores, cells, cleanup } = mount();
     stores.createWorkGroup("Other");
     expect(cells()).toHaveLength(0);
-    root.querySelector<HTMLButtonElement>(".coloride-group-empty-add")?.click();
+    root.querySelector<HTMLButtonElement>(".hilo-group-empty-add")?.click();
     expect(cells()).toHaveLength(1);
     expect(stores.navigation.getState().groups[1]?.chatIds).toHaveLength(1);
 
@@ -574,13 +572,11 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
   it("shows one header tab per session of the active group instead of the group name", async () => {
     const { root, stores, cells, cleanup } = mount();
     const tabs = () =>
-      Array.from(
-        root.querySelectorAll<HTMLElement>(".coloride-zone-3-header .coloride-header-tab"),
-      );
+      Array.from(root.querySelectorAll<HTMLElement>(".hilo-zone-3-header .hilo-header-tab"));
     expect(tabs().map((tab) => tab.dataset.chatId)).toEqual(["a", "b"]);
     expect(tabs()[1]?.textContent).toContain("b");
-    expect(root.querySelector(".coloride-zone-3-header")?.textContent).not.toContain("Workspace");
-    expect(root.querySelector(".coloride-work-group-tab")).toBeNull();
+    expect(root.querySelector(".hilo-zone-3-header")?.textContent).not.toContain("Workspace");
+    expect(root.querySelector(".hilo-work-group-tab")).toBeNull();
 
     tabs()[0]?.click();
     expect(stores.zone3.getState().activeChatId).toBe("a");
@@ -591,7 +587,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     await addSessionFromMenu(root);
     expect(tabs().map((tab) => tab.dataset.chatId)).toEqual(["a", "b", "chat-3"]);
     expect(tabs()[2]?.getAttribute("aria-selected")).toBe("true");
-    tabs()[1]?.querySelector<HTMLButtonElement>(".coloride-header-tab-close")?.click();
+    tabs()[1]?.querySelector<HTMLButtonElement>(".hilo-header-tab-close")?.click();
     expect(tabs().map((tab) => tab.dataset.chatId)).toEqual(["a", "chat-3"]);
     expect(cells().map((cell) => cell.dataset.chatId)).not.toContain("b");
 
@@ -604,12 +600,12 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
   });
   it("places the + right after the strip, outside the part that scrolls", () => {
     const { root, stores, cleanup } = mount();
-    const header = root.querySelector<HTMLElement>(".coloride-zone-3-header") as HTMLElement;
+    const header = root.querySelector<HTMLElement>(".hilo-zone-3-header") as HTMLElement;
     const track = header.querySelector<HTMLElement>('[role="tablist"]') as HTMLElement;
-    const add = header.querySelector<HTMLElement>(".coloride-header-tab-add") as HTMLElement;
+    const add = header.querySelector<HTMLElement>(".hilo-header-tab-add") as HTMLElement;
     expect(track.nextElementSibling).toBe(add);
     for (let i = 0; i < 6; i += 1) stores.createChat();
-    expect(track.querySelectorAll(".coloride-header-tab")).toHaveLength(8);
+    expect(track.querySelectorAll(".hilo-header-tab")).toHaveLength(8);
     expect(track.contains(add)).toBe(false);
     expect(track.nextElementSibling).toBe(add);
     cleanup();
@@ -618,10 +614,8 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
   it("shows what the selected group has, not another project's group with the same name", () => {
     const { root, stores, cells, cleanup } = mount();
     const headerTabs = () =>
-      Array.from(
-        root.querySelectorAll<HTMLElement>(".coloride-zone-3-header .coloride-header-tab"),
-      );
-    const emptyShown = () => root.querySelector<HTMLElement>(".coloride-group-empty") !== null;
+      Array.from(root.querySelectorAll<HTMLElement>(".hilo-zone-3-header .hilo-header-tab"));
+    const emptyShown = () => root.querySelector<HTMLElement>(".hilo-group-empty") !== null;
 
     // Every project starts with a group "Workspace" that has the same id: only its content differs.
     stores.setProjectPath("/projects/videos");
@@ -653,16 +647,15 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
           validationState: "UnchangedBlue" as const,
         })),
       });
-      const editorView = new ColorideEditorView({
+      const editorView = new HiloEditorView({
         initialDocumentId: "src/main.ts",
         initialContent: "const ready = true;",
         ipcChannel: new InMemoryBinaryHostBridge(),
       });
       const controller = new CockpitDomController({ rootContainer: root, stores, editorView });
-      const handles = () =>
-        Array.from(root.querySelectorAll<HTMLElement>(".coloride-layout-handle"));
+      const handles = () => Array.from(root.querySelectorAll<HTMLElement>(".hilo-layout-handle"));
       // The layout has no size in a test DOM: give every split one (1000 x 600).
-      for (const split of root.querySelectorAll<HTMLElement>(".coloride-layout-split")) {
+      for (const split of root.querySelectorAll<HTMLElement>(".hilo-layout-split")) {
         split.getBoundingClientRect = () => ({ width: 1000, height: 600 }) as DOMRect;
       }
       const sizes = () => {
@@ -700,7 +693,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
       const handle = handles()[0] as HTMLElement;
       pointer(handle, "pointerdown", 333);
       pointer(handle, "pointermove", 433); // 100 px of 1000 = 10%
-      const grown = root.querySelectorAll<HTMLElement>(".coloride-chat-cell");
+      const grown = root.querySelectorAll<HTMLElement>(".hilo-chat-cell");
       expect(Number.parseFloat((grown[0] as HTMLElement).style.flex)).toBeCloseTo(
         (before[0] as number) + 0.1,
       );
@@ -764,23 +757,23 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
           validationState: "UnchangedBlue" as const,
         })),
       });
-      const editorView = new ColorideEditorView({
+      const editorView = new HiloEditorView({
         initialDocumentId: "src/main.ts",
         initialContent: "const ready = true;",
         ipcChannel: new InMemoryBinaryHostBridge(),
       });
       const controller = new CockpitDomController({ rootContainer: root, stores, editorView });
       const shown = () =>
-        Array.from(root.querySelectorAll<HTMLElement>(".coloride-zone-3-grid .coloride-chat-cell"))
+        Array.from(root.querySelectorAll<HTMLElement>(".hilo-zone-3-grid .hilo-chat-cell"))
           .map((cell) => cell.dataset.chatId)
           .sort();
       const button = (chatId: string) =>
         root.querySelector<HTMLButtonElement>(
-          `.coloride-chat-cell[data-chat-id="${chatId}"] .coloride-maximize-panel`,
+          `.hilo-chat-cell[data-chat-id="${chatId}"] .hilo-maximize-panel`,
         );
       const tab = (chatId: string) =>
         root.querySelector<HTMLElement>(
-          `.coloride-zone-3-header .coloride-header-tab[data-chat-id="${chatId}"]`,
+          `.hilo-zone-3-header .hilo-header-tab[data-chat-id="${chatId}"]`,
         );
       return { root, stores, controller, shown, button, tab };
     }
@@ -792,11 +785,11 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
       button("b")?.click();
       expect(shown()).toEqual(["b"]);
       // The separators have nothing to separate while one panel fills the tab.
-      expect(root.querySelector(".coloride-layout-handle")).toBeNull();
+      expect(root.querySelector(".hilo-layout-handle")).toBeNull();
       expect(button("b")?.getAttribute("aria-label")).toBe("Restore panels");
       button("b")?.click();
       expect(shown()).toEqual(["a", "b", "c"]);
-      expect(root.querySelectorAll(".coloride-layout-handle").length).toBeGreaterThan(0);
+      expect(root.querySelectorAll(".hilo-layout-handle").length).toBeGreaterThan(0);
       controller.destroy();
       root.remove();
     });
@@ -804,7 +797,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
     it("also toggles with a double click on the panel header, but not on its buttons", () => {
       const { root, controller, shown } = setup();
       const header = root.querySelector<HTMLElement>(
-        '.coloride-chat-cell[data-chat-id="c"] .coloride-chat-cell-header',
+        '.hilo-chat-cell[data-chat-id="c"] .hilo-chat-cell-header',
       ) as HTMLElement;
       header.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
       expect(shown()).toEqual(["c"]);
@@ -812,7 +805,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
       expect(shown()).toHaveLength(3);
       // A double click on a button (it would double-trigger the action) is not a header gesture.
       const close = root.querySelector<HTMLElement>(
-        '.coloride-chat-cell[data-chat-id="c"] .coloride-split-right',
+        '.hilo-chat-cell[data-chat-id="c"] .hilo-split-right',
       ) as HTMLElement;
       close.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
       expect(shown()).toHaveLength(3);
@@ -828,7 +821,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
       expect(shown()).toEqual(["c"]);
       expect(tab("c")?.getAttribute("aria-selected")).toBe("true");
       // All the sessions are still tabs; maximizing never hides them.
-      expect(root.querySelectorAll(".coloride-zone-3-header .coloride-header-tab")).toHaveLength(3);
+      expect(root.querySelectorAll(".hilo-zone-3-header .hilo-header-tab")).toHaveLength(3);
       controller.destroy();
       root.remove();
     });
@@ -851,12 +844,12 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
           ],
         },
       }));
-      const cell = root.querySelector<HTMLElement>('.coloride-chat-cell[data-chat-id="b"]');
+      const cell = root.querySelector<HTMLElement>('.hilo-chat-cell[data-chat-id="b"]');
       button("a")?.click();
       expect(shown()).toEqual(["a"]);
       button("a")?.click();
       // The same element comes back (not a rebuilt one), with its content.
-      expect(root.querySelector('.coloride-chat-cell[data-chat-id="b"]')).toBe(cell);
+      expect(root.querySelector('.hilo-chat-cell[data-chat-id="b"]')).toBe(cell);
       expect(cell?.textContent).toContain("keep me");
       controller.destroy();
       root.remove();
@@ -891,7 +884,7 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
           validationState: "UnchangedBlue" as const,
         })),
       });
-      const editorView = new ColorideEditorView({
+      const editorView = new HiloEditorView({
         initialDocumentId: "src/main.ts",
         initialContent: "const ready = true;",
         ipcChannel: new InMemoryBinaryHostBridge(),
@@ -910,14 +903,12 @@ describe("@coloride/web-ui — Zone 3 groups and sessions", () => {
         sizes: [0.5, 0.5],
         children: [column(["a", "b"], 0.5), column(["c", "d"], 0.51)],
       });
-      for (const split of root.querySelectorAll<HTMLElement>(".coloride-layout-split")) {
+      for (const split of root.querySelectorAll<HTMLElement>(".hilo-layout-split")) {
         split.getBoundingClientRect = () => ({ width: 1000, height: 600 }) as DOMRect;
       }
       // The horizontal bars sit at y = 300 and y = 306 (their centres).
       const bars = Array.from(
-        root.querySelectorAll<HTMLElement>(
-          '.coloride-layout-handle[aria-orientation="horizontal"]',
-        ),
+        root.querySelectorAll<HTMLElement>('.hilo-layout-handle[aria-orientation="horizontal"]'),
       );
       [300, 306].forEach((center, index) => {
         (bars[index] as HTMLElement).getBoundingClientRect = () =>

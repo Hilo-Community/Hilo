@@ -28,9 +28,9 @@ const MAX_LINE_BYTES: usize = 4096;
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Set in a terminal's environment: the hook endpoint's base URL (`http://127.0.0.1:<port>/hook`).
-pub const HOOK_URL_ENV: &str = "COLORIDE_AGENT_HOOK_URL";
+pub const HOOK_URL_ENV: &str = "HILO_AGENT_HOOK_URL";
 /// Set in a terminal's environment: that terminal's bearer token.
-pub const HOOK_TOKEN_ENV: &str = "COLORIDE_AGENT_HOOK_TOKEN";
+pub const HOOK_TOKEN_ENV: &str = "HILO_AGENT_HOOK_TOKEN";
 
 /// What a registration's agent last reported, stored in an `AtomicU8`.
 const REPORTED_NOTHING: u8 = 0;
@@ -286,7 +286,7 @@ fn respond(stream: &TcpStream, registry: &Registry) -> &'static str {
 /// ends it.
 const TURN_BOUNDARY_HOOK_EVENTS: &[&str] = &["UserPromptSubmit", "Stop"];
 
-const MANAGED_HOOK_MARKER: &str = "coloride-managed-hook";
+const MANAGED_HOOK_MARKER: &str = "hilo-managed-hook";
 
 fn turn_boundary_event_path_segment(hook_event_name: &str) -> &'static str {
     match hook_event_name {
@@ -346,7 +346,7 @@ fn write_json_atomically(path: &Path, root: &serde_json::Map<String, Value>) -> 
         std::fs::create_dir_all(parent)?;
     }
     let text = serde_json::to_string_pretty(root).map_err(io::Error::other)?;
-    let tmp_path = path.with_extension("json.coloride-tmp");
+    let tmp_path = path.with_extension("json.hilo-tmp");
     std::fs::write(&tmp_path, text)?;
     std::fs::rename(&tmp_path, path)?;
     Ok(())
@@ -492,7 +492,7 @@ mod tests {
         assert!(status.success());
         assert_eq!(registration.reported_busy(), Some(true));
 
-        // Outside a Coloride terminal it does nothing, and still succeeds.
+        // Outside a Hilo terminal it does nothing, and still succeeds.
         let status = std::process::Command::new("sh")
             .arg("-c")
             .arg(curl_hook_command("claude", "stop"))

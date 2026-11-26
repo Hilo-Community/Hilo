@@ -1,4 +1,4 @@
-import type { AgentCompletionAlert } from "@coloride/web-ui";
+import type { AgentCompletionAlert } from "@hilo/web-ui";
 
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
@@ -48,7 +48,7 @@ export function createAgentFinishedAlert(
     sound ??= createSound(AGENT_DONE_SOUND);
     sound.currentTime = 0;
     void sound.play().catch((error: unknown) => {
-      console.warn("[coloride] agent-finished sound could not play", error);
+      console.warn("[hilo] agent-finished sound could not play", error);
     });
     if (attended) return;
     permission ??= ensureNotificationPermission(invoke);

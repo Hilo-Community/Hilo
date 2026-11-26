@@ -7,9 +7,9 @@ import { MORE_ICON, PLUS_ICON } from "../../sidebar/icons.js";
 import { SidebarMenu, type SidebarMenuAction } from "../../sidebar/sidebar-menu.js";
 import { sessionDisplayTitle } from "../../sidebar/sidebar-row.js";
 import {
-  COLORIDE_DESIGN_TOKENS,
   type CockpitChatTab,
   type CockpitStoreBundle,
+  HILO_DESIGN_TOKENS,
   resolveGroupLayout,
   resolveGroupMaximized,
 } from "../../stores/index.js";
@@ -150,13 +150,13 @@ export class ChatGrid {
     this.stopPanelShortcuts = () => doc.removeEventListener("keydown", onPanelShortcut);
     this.element = doc.createElement("main");
     this.element.className =
-      "coloride-zone-3-multichat bg-main border-t border-b border-l border-white/8 flex flex-col h-full";
+      "hilo-zone-3-multichat bg-main border-t border-b border-l border-white/8 flex flex-col h-full";
     this.element.setAttribute("aria-label", UI_STRINGS.shell.chatGrid);
     this.element.style.minWidth = "0";
     this.element.style.overflow = "hidden";
 
     this.grid = doc.createElement("section");
-    this.grid.className = "coloride-zone-3-grid flex-1 overflow-hidden";
+    this.grid.className = "hilo-zone-3-grid flex-1 overflow-hidden";
     this.grid.style.display = "flex";
     this.element.append(this.grid);
 
@@ -178,19 +178,19 @@ export class ChatGrid {
     });
 
     this.empty = doc.createElement("div");
-    this.empty.className = "coloride-group-empty";
+    this.empty.className = "hilo-group-empty";
     const emptyText = doc.createElement("p");
     emptyText.textContent = UI_STRINGS.chat.emptyGroup;
     this.emptyText = emptyText;
     this.emptyAdd = this.createAddButton(
       doc,
-      "coloride-group-empty-add",
+      "hilo-group-empty-add",
       UI_STRINGS.chat.newSession,
       () => this.stores.createChat(this.terminals ? { kind: "terminal" } : undefined),
     );
     this.emptyOpenProject = this.createAddButton(
       doc,
-      "coloride-group-empty-add",
+      "hilo-group-empty-add",
       UI_STRINGS.sidebar.openProject,
       () => this.openProject?.(),
     );
@@ -198,7 +198,7 @@ export class ChatGrid {
     this.empty.append(emptyText, this.emptyAdd, this.emptyOpenProject);
     this.updateEmptyState();
 
-    this.addButton = this.createAddButton(doc, "coloride-header-tab-add", "", () =>
+    this.addButton = this.createAddButton(doc, "hilo-header-tab-add", "", () =>
       this.newPanelMenu.toggle(this.addButton, {
         ...(this.terminals
           ? {
@@ -220,7 +220,7 @@ export class ChatGrid {
         label === "Settings" ? UI_STRINGS.settings.close : UI_STRINGS.chat.closePanel,
       unsavedLabel: UI_STRINGS.editor.unsaved,
       onSelect: (chatId) => {
-        if (chatId === "coloride:settings") this.settings?.select();
+        if (chatId === "hilo:settings") this.settings?.select();
         else {
           this.settings?.selectWorkspace();
           this.stores.selectChat(chatId);
@@ -228,7 +228,7 @@ export class ChatGrid {
         }
       },
       onClose: (chatId) => {
-        if (chatId === "coloride:settings") this.settings?.close();
+        if (chatId === "hilo:settings") this.settings?.close();
         else this.stores.closeChat(chatId);
       },
       trailing: [this.addButton],
@@ -351,7 +351,7 @@ export class ChatGrid {
     }
     const chats = (activeGroup?.chatIds ?? []).flatMap((id) => chatsById.get(id) ?? []);
     const specs = chats.map((chat): HeaderTabSpec => {
-      const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
+      const token = HILO_DESIGN_TOKENS[chat.validationState];
       return {
         key: chat.chatId,
         label: sessionDisplayTitle(chat.title),
@@ -365,7 +365,7 @@ export class ChatGrid {
     });
     if (this.settingsOpen)
       specs.push({
-        key: "coloride:settings",
+        key: "hilo:settings",
         label: "Settings",
         icon: { svg: SETTINGS_ICON },
         selected: this.settingsActive,
@@ -517,7 +517,7 @@ export class ChatGrid {
       el = (this.cells.get(node.id) as ChatCellNodes).el;
     } else {
       el = this.grid.ownerDocument.createElement("div");
-      el.className = "coloride-layout-split";
+      el.className = "hilo-layout-split";
       el.dataset.direction = node.direction;
       el.append(
         ...node.children.map((child, index) => this.buildLayout(child, false, [...path, index])),
@@ -527,7 +527,7 @@ export class ChatGrid {
         el.append(createSeparator(this.handleHost, node.direction, path, boundary));
       }
     }
-    el.classList.toggle("coloride-layout-root", isRoot);
+    el.classList.toggle("hilo-layout-root", isRoot);
     applySizes(node, el, isRoot);
     return el;
   }
@@ -558,7 +558,7 @@ export class ChatGrid {
       if (cell.titleText.textContent !== chat.title) cell.titleText.textContent = chat.title;
       return cell.el;
     }
-    const token = COLORIDE_DESIGN_TOKENS[chat.validationState];
+    const token = HILO_DESIGN_TOKENS[chat.validationState];
     if (this.agents && chat.agentId) {
       let pane = this.agentPanes.get(chat.chatId);
       if (!pane) {
@@ -586,7 +586,7 @@ export class ChatGrid {
     cell.el.dataset.validationState = chat.validationState;
     cell.el.dataset.active = String(active);
     cell.el.setAttribute("aria-label", uiText.chatCell(chat.title, token.labelEn));
-    // Exact 2px Coloride state border from DESIGN_SYSTEM.md §2
+    // Exact 2px Hilo state border from DESIGN_SYSTEM.md §2
     cell.el.style.border = `2px solid ${token.darkBorder}`;
     cell.el.style.backgroundColor = token.darkBg;
     cell.el.style.color = token.darkText;
@@ -630,7 +630,7 @@ export class ChatGrid {
   private createCell(chatId: string, kind: "agent" | "terminal"): ChatCellNodes {
     const doc = this.grid.ownerDocument;
     const el = doc.createElement("section");
-    el.className = "coloride-chat-cell";
+    el.className = "hilo-chat-cell";
     el.dataset.chatId = chatId;
     // Working inside a panel (clicking its body, or focusing its terminal) selects it, so the
     // header tab and the active panel follow where the user is.
@@ -640,7 +640,7 @@ export class ChatGrid {
     el.addEventListener("pointerdown", selectFromInside);
     el.addEventListener("focusin", selectFromInside);
     const header = doc.createElement("div");
-    header.className = "coloride-chat-cell-header";
+    header.className = "hilo-chat-cell-header";
     header.title = UI_STRINGS.chat.movePanel;
     header.addEventListener("click", () => this.stores.selectChat(chatId));
     header.addEventListener("pointerdown", (event) => this.panelDrag.begin(chatId, header, event));
@@ -648,26 +648,26 @@ export class ChatGrid {
     header.addEventListener("pointerup", (event) => this.panelDrag.end(event));
     header.addEventListener("pointercancel", () => this.panelDrag.cancel());
     const title = doc.createElement("span");
-    title.className = "coloride-chat-cell-title";
+    title.className = "hilo-chat-cell-title";
     const titleIconWrap = doc.createElement("span");
-    titleIconWrap.className = "coloride-chat-cell-title-icon-wrap";
+    titleIconWrap.className = "hilo-chat-cell-title-icon-wrap";
     const titleIcon = doc.createElement("span");
-    titleIcon.className = "coloride-chat-cell-title-icon";
+    titleIcon.className = "hilo-chat-cell-title-icon";
     titleIcon.setAttribute("aria-hidden", "true");
     titleIcon.hidden = true;
     const titleStatusDot = doc.createElement("span");
-    titleStatusDot.className = "coloride-chat-cell-status-dot";
+    titleStatusDot.className = "hilo-chat-cell-status-dot";
     titleStatusDot.setAttribute("aria-hidden", "true");
     titleStatusDot.hidden = true;
     titleIconWrap.append(titleIcon, titleStatusDot);
     const titleText = doc.createElement("span");
     title.append(titleIconWrap, titleText);
     const actions = doc.createElement("div");
-    actions.className = "coloride-chat-cell-actions";
+    actions.className = "hilo-chat-cell-actions";
     const action = (className: string, icon: string, label: string, run: () => void) => {
       const btn = doc.createElement("button");
       btn.type = "button";
-      btn.className = `coloride-chat-cell-action ${className}`;
+      btn.className = `hilo-chat-cell-action ${className}`;
       btn.innerHTML = icon;
       btn.setAttribute("aria-label", label);
       btn.title = label;
@@ -679,7 +679,7 @@ export class ChatGrid {
       return btn;
     };
     const splitRight = action(
-      "coloride-split-right",
+      "hilo-split-right",
       SPLIT_RIGHT_ICON,
       UI_STRINGS.chat.splitRight,
       () =>
@@ -689,19 +689,15 @@ export class ChatGrid {
           ...(kind === "terminal" ? { kind } : {}),
         }),
     );
-    const splitDown = action(
-      "coloride-split-down",
-      SPLIT_DOWN_ICON,
-      UI_STRINGS.chat.splitDown,
-      () =>
-        this.stores.createChat({
-          from: chatId,
-          direction: "column",
-          ...(kind === "terminal" ? { kind } : {}),
-        }),
+    const splitDown = action("hilo-split-down", SPLIT_DOWN_ICON, UI_STRINGS.chat.splitDown, () =>
+      this.stores.createChat({
+        from: chatId,
+        direction: "column",
+        ...(kind === "terminal" ? { kind } : {}),
+      }),
     );
     const maximize = action(
-      "coloride-maximize-panel",
+      "hilo-maximize-panel",
       MAXIMIZE_ICON,
       UI_STRINGS.chat.maximizePanel,
       () => this.stores.toggleMaximizeChat(chatId),
@@ -713,7 +709,7 @@ export class ChatGrid {
     });
     // The panel's menu: closing it, and for an agent reloading and signing in again.
     const menu = new SidebarMenu(el);
-    const more = action("coloride-panel-menu", MORE_ICON, UI_STRINGS.chat.panelMenu, () =>
+    const more = action("hilo-panel-menu", MORE_ICON, UI_STRINGS.chat.panelMenu, () =>
       menu.open(more, this.panelActions(chatId)),
     );
     more.setAttribute("aria-haspopup", "menu");
@@ -721,9 +717,9 @@ export class ChatGrid {
     actions.append(splitRight, splitDown, maximize, more);
     header.append(title, actions);
     const messages = doc.createElement("div");
-    messages.className = "coloride-chat-cell-messages";
+    messages.className = "hilo-chat-cell-messages";
     const logs = doc.createElement("div");
-    logs.className = "coloride-chat-cell-logs";
+    logs.className = "hilo-chat-cell-logs";
     // A shell shows its pane instead of messages and logs.
     if (kind === "terminal") {
       messages.hidden = true;

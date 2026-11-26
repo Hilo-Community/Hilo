@@ -5,7 +5,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args_os().skip(1);
     let root = std::path::PathBuf::from(
         args.next()
-            .ok_or("Usage: coloride-context-mcp WORKSPACE INDEX_PATH BRANCH")?,
+            .ok_or("Usage: hilo-context-mcp WORKSPACE INDEX_PATH BRANCH")?,
     )
     .canonicalize()?;
     let db = std::path::PathBuf::from(args.next().ok_or("Missing INDEX_PATH")?);

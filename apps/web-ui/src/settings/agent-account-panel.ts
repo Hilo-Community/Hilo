@@ -43,7 +43,7 @@ export class AgentUnlinkPanel {
     private readonly onClose: () => void,
   ) {
     this.element = doc.createElement("section");
-    this.element.className = "coloride-agent-account";
+    this.element.className = "hilo-agent-account";
     this.element.setAttribute("aria-label", `Unlink ${agent.name}`);
     this.content = doc.createElement("div");
     this.notice = doc.createElement("p");
@@ -75,11 +75,11 @@ export class AgentUnlinkPanel {
     parts.push("The next time you connect, you will be asked to sign in again.");
     explanation.textContent = parts.join(" ");
     const actions = doc.createElement("div");
-    actions.className = "coloride-registry-actions";
+    actions.className = "hilo-registry-actions";
     const confirm = doc.createElement("button");
     confirm.type = "button";
     confirm.textContent = "Unlink";
-    confirm.className = "coloride-registry-ghost";
+    confirm.className = "hilo-registry-ghost";
     confirm.addEventListener("click", () => this.unlink(saved.map((provider) => provider.id)));
     const cancel = doc.createElement("button");
     cancel.type = "button";

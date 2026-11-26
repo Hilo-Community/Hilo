@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge, promptInputOf } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge, promptInputOf } from "@hilo/editor-cm6";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CockpitDomController, createCockpitStoreBundle } from "../index.js";
 import type { AgentRegistryHost, InstalledAgent } from "../settings/agent-registry.js";
@@ -51,7 +51,7 @@ describe("LOT-014 agent panel", () => {
     const root = document.createElement("div");
     document.body.replaceChildren(root);
     const stores = createCockpitStoreBundle();
-    const editor = new ColorideEditorView({
+    const editor = new HiloEditorView({
       initialDocumentId: "file.ts",
       initialContent: "",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -82,10 +82,10 @@ describe("LOT-014 agent panel", () => {
       agentName: "Claude Agent",
       title: "Claude Agent",
     });
-    const tab = [...root.querySelectorAll<HTMLElement>(".coloride-header-tab")].find((tab) =>
+    const tab = [...root.querySelectorAll<HTMLElement>(".hilo-header-tab")].find((tab) =>
       tab.textContent?.includes("Claude Agent"),
     );
-    expect(tab?.querySelector(".coloride-registry-mark svg")).not.toBeNull();
+    expect(tab?.querySelector(".hilo-registry-mark svg")).not.toBeNull();
     expect(editor.getEditorView()).toBe(view);
     expect(view.dom.parentElement).toBe(parent);
     cockpit.destroy();
@@ -266,7 +266,7 @@ describe("LOT-014 agent panel", () => {
     store.flush();
     expect(panel.element.querySelector("textarea")).toBeNull();
     expect(panel.element.querySelector(".cm-content")?.getAttribute("spellcheck")).toBe("false");
-    promptInputOf(panel.element.querySelector(".coloride-agent-composer .cm-editor"))?.setText(
+    promptInputOf(panel.element.querySelector(".hilo-agent-composer .cm-editor"))?.setText(
       "Repair tests",
     );
     panel.element.querySelector("form")?.dispatchEvent(new Event("submit", { cancelable: true }));
@@ -285,17 +285,15 @@ describe("LOT-014 agent panel", () => {
     fake.emit({ type: "permission", id: "p", reason: "Review exact call", options: [] });
     store.flush();
     expect(
-      [...panel.element.querySelectorAll(".coloride-agent-diff-text")].map(
-        (line) => line.textContent,
-      ),
+      [...panel.element.querySelectorAll(".hilo-agent-diff-text")].map((line) => line.textContent),
     ).toEqual(["old 🦀", "new 🦀"]);
     expect(
-      [...panel.element.querySelectorAll(".coloride-agent-diff-prefix")].map(
+      [...panel.element.querySelectorAll(".hilo-agent-diff-prefix")].map(
         (mark) => mark.textContent,
       ),
     ).toEqual(["-", "+"]);
     // The proposal is read-only; only the prompt (a CodeMirror field) is editable.
-    expect(panel.element.querySelector(".coloride-agent-output [contenteditable]")).toBeNull();
+    expect(panel.element.querySelector(".hilo-agent-output [contenteditable]")).toBeNull();
     // The link shows the file's name; its full place is the tooltip.
     panel.element.querySelector<HTMLButtonElement>('button[title="src/file.ts:1"]')?.click();
     await settle();
@@ -331,7 +329,7 @@ describe("LOT-014 agent panel", () => {
         },
       ],
     });
-    const editor = new ColorideEditorView({
+    const editor = new HiloEditorView({
       initialDocumentId: "src/file.ts",
       initialContent: "const a = 1;",
       ipcChannel: new InMemoryBinaryHostBridge(),
@@ -351,7 +349,7 @@ describe("LOT-014 agent panel", () => {
     await settle();
     for (let i = 0; i < 150; i++) fake.emit(chunk("token "));
     for (const frame of frames.splice(0)) frame(16);
-    expect(root.querySelector(".coloride-agent-output")?.textContent).toContain("token");
+    expect(root.querySelector(".hilo-agent-output")?.textContent).toContain("token");
     expect(editor.getEditorView()).toBe(instance);
     expect(instance.dom.parentElement).toBe(parent);
     expect(editor.getStoreSnapshot().mountCount).toBe(1);

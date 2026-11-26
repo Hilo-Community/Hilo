@@ -27,7 +27,7 @@ fn percentile_95_micros(samples_us: &[u128]) -> u128 {
 fn blocking_unsaved_buffer_priority_over_stale_disk_file() {
     let dir = tempdir().expect("create tempdir");
     let workspace_root = dir.path();
-    let db_path = workspace_root.join(".coloride/context.sqlite");
+    let db_path = workspace_root.join(".hilo/context.sqlite");
     let tax_file_disk_path = workspace_root.join("src/tax.ts");
     std::fs::create_dir_all(tax_file_disk_path.parent().expect("parent")).expect("mkdir src");
 
@@ -135,30 +135,30 @@ fn blocking_unsaved_buffer_priority_over_stale_disk_file() {
 fn blocking_acl_and_secret_filtering_zero_occurrences_in_sqlite_file_and_exports() {
     let dir = tempdir().expect("create tempdir");
     let workspace_root = dir.path();
-    let db_path = workspace_root.join(".coloride/context.sqlite");
+    let db_path = workspace_root.join(".hilo/context.sqlite");
 
-    // 1. Create `.gitignore` and `.colorideignore`
+    // 1. Create `.gitignore` and `.hiloignore`
     std::fs::write(
         workspace_root.join(".gitignore"),
         "ignored_dir/\n*.secret.log\n",
     )
     .expect("write .gitignore");
     std::fs::write(
-        workspace_root.join(".colorideignore"),
+        workspace_root.join(".hiloignore"),
         "private_vault/**\ninternal_only.ts\n",
     )
-    .expect("write .colorideignore");
+    .expect("write .hiloignore");
 
     // 2. Construct test secrets dynamically so literal scanners don't flag test source
     let aws_secret = ["AKIA", "IOSFODNN7EXAMPLE"].concat();
     let gh_secret = ["ghp_", "99887766554433221100aabbccddeeffGGHH"].concat();
     let openai_secret = ["sk-proj-", "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"].concat();
-    let db_url_secret = "postgres://dbadmin:SuperSecretPass99!@prod-db.internal:5432/coloride";
+    let db_url_secret = "postgres://dbadmin:SuperSecretPass99!@prod-db.internal:5432/hilo";
     let pem_begin = ["-----BEGIN ", "RSA PRIVATE KEY-----"].concat();
     let pem_body = "MIIEpAIBAAKCAQEA3Tz2mr7SZiAMfQyuvBjM9OiZ1234567890ABCDEF";
     let pem_end = ["-----END ", "RSA PRIVATE KEY-----"].concat();
 
-    // 3. Create `.env` file and `.colorideignore`-blocked files
+    // 3. Create `.env` file and `.hiloignore`-blocked files
     std::fs::write(
         workspace_root.join(".env"),
         format!("AWS_ACCESS_KEY_ID={aws_secret}\nGITHUB_TOKEN={gh_secret}\n"),
@@ -175,7 +175,7 @@ fn blocking_acl_and_secret_filtering_zero_occurrences_in_sqlite_file_and_exports
     std::fs::write(
         workspace_root.join("src/config.ts"),
         format!(
-            "export const APP_NAME = \"ColorideCockpit\";\n\
+            "export const APP_NAME = \"HiloCockpit\";\n\
              export const AWS_KEY = \"{aws_secret}\";\n\
              export const GITHUB_PAT = \"{gh_secret}\";\n\
              export const AI_KEY = \"{openai_secret}\";\n\
@@ -272,7 +272,7 @@ fn blocking_acl_and_secret_filtering_zero_occurrences_in_sqlite_file_and_exports
 fn blocking_100_hybrid_queries_complete_under_300ms_p95() {
     let dir = tempdir().expect("create tempdir");
     let workspace_root = dir.path();
-    let db_path = workspace_root.join(".coloride/context.sqlite");
+    let db_path = workspace_root.join(".hilo/context.sqlite");
 
     let mut engine = SqliteWalContextEngine::open(&db_path, "main", AclAndSecretScanner::new())
         .expect("open engine");
@@ -335,7 +335,7 @@ fn blocking_100_hybrid_queries_complete_under_300ms_p95() {
 async fn debounced_indexer_branch_switch_and_deterministic_rebuild() {
     let dir = tempdir().expect("create tempdir");
     let workspace_root = dir.path();
-    let db_path = workspace_root.join(".coloride/context.sqlite");
+    let db_path = workspace_root.join(".hilo/context.sqlite");
 
     std::fs::create_dir_all(workspace_root.join("src")).expect("mkdir src");
     std::fs::write(
@@ -400,7 +400,7 @@ async fn debounced_indexer_branch_switch_and_deterministic_rebuild() {
 fn sqlite_wal_replay_file_removal_and_corrupted_store_rebuild() {
     let dir = tempdir().expect("create tempdir");
     let workspace_root = dir.path();
-    let db_path = workspace_root.join(".coloride/context.sqlite");
+    let db_path = workspace_root.join(".hilo/context.sqlite");
 
     std::fs::create_dir_all(workspace_root.join("src")).expect("mkdir src");
     std::fs::write(

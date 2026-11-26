@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ColorideEditorView, InMemoryBinaryHostBridge } from "@coloride/editor-cm6";
+import { HiloEditorView, InMemoryBinaryHostBridge } from "@hilo/editor-cm6";
 import { afterEach, describe, expect, it } from "vitest";
 import { CockpitDomController, createCockpitStoreBundle } from "../../index.js";
 import type { Inspector } from "../inspector/inspector.js";
@@ -21,7 +21,7 @@ function setup() {
     saved.push(documentId);
     return requestSave(documentId, generation);
   };
-  const editorView = new ColorideEditorView({
+  const editorView = new HiloEditorView({
     initialDocumentId: "src/main.ts",
     initialContent: "const ready = true;",
     ipcChannel,
@@ -44,7 +44,7 @@ function setup() {
     await inspector.openFile(path);
     editorView.dispatchUserEdit(0, 0, "// edited\n");
   };
-  const overlay = () => root.querySelector<HTMLElement>(".coloride-unsaved-overlay");
+  const overlay = () => root.querySelector<HTMLElement>(".hilo-unsaved-overlay");
   const choose = (choice: "save" | "discard" | "cancel") =>
     overlay()?.querySelector<HTMLButtonElement>(`[data-choice="${choice}"]`)?.click();
   return { root, stores, editorView, controller, counts, saved, edit, overlay, choose, inspector };
@@ -80,10 +80,8 @@ describe("closing the window with unsaved changes", () => {
     const pending = controller.confirmClose();
     expect(overlay()).not.toBeNull();
     // Not inside Zone 4, which is hidden and inert while closed.
-    expect(root.querySelector(".coloride-zone-4-inspector .coloride-unsaved-overlay")).toBeNull();
-    expect(
-      root.querySelector(".coloride-cockpit-shell > .coloride-unsaved-overlay"),
-    ).not.toBeNull();
+    expect(root.querySelector(".hilo-zone-4-inspector .hilo-unsaved-overlay")).toBeNull();
+    expect(root.querySelector(".hilo-cockpit-shell > .hilo-unsaved-overlay")).not.toBeNull();
     expect(overlay()?.textContent).toContain("2 files");
     choose("cancel");
     expect(await pending).toBe(false);
@@ -156,7 +154,7 @@ describe("closing the window with unsaved changes", () => {
     await edit("a.ts");
     const first = controller.confirmClose();
     const second = controller.confirmClose();
-    expect(root.querySelectorAll(".coloride-unsaved-overlay")).toHaveLength(1);
+    expect(root.querySelectorAll(".hilo-unsaved-overlay")).toHaveLength(1);
     choose("cancel");
     expect(await first).toBe(false);
     expect(await second).toBe(false);

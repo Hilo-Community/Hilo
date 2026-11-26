@@ -1,4 +1,4 @@
-import { detectLanguageFromPath, resolveLanguageSupport } from "@coloride/editor-cm6";
+import { detectLanguageFromPath, resolveLanguageSupport } from "@hilo/editor-cm6";
 import { parser as cppParser } from "@lezer/cpp";
 import { classHighlighter, highlightTree, tagHighlighter, tags } from "@lezer/highlight";
 

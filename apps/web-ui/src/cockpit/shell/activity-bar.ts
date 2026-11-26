@@ -47,7 +47,7 @@ export class ActivityBar {
   constructor(doc: Document, stores: CockpitStoreBundle, onOpenSettings?: () => void) {
     this.element = doc.createElement("nav");
     this.element.className =
-      "coloride-zone-1-activity-bar bg-nav-rail flex flex-col items-center pt-1.5 pb-2.5 px-1 gap-1.5";
+      "hilo-zone-1-activity-bar bg-nav-rail flex flex-col items-center pt-1.5 pb-2.5 px-1 gap-1.5";
     this.element.setAttribute("aria-label", UI_STRINGS.shell.activityBar);
     this.element.style.width = "48px";
     this.element.style.minWidth = "48px";
@@ -55,14 +55,14 @@ export class ActivityBar {
     for (const item of ACTIVITY_ITEMS) {
       if (item.dividerBefore) {
         const divider = doc.createElement("div");
-        divider.className = "coloride-activity-divider";
+        divider.className = "hilo-activity-divider";
         divider.setAttribute("role", "separator");
         divider.setAttribute("aria-orientation", "horizontal");
         this.element.append(divider);
       }
       const button = doc.createElement("button");
       button.type = "button";
-      button.className = "coloride-activity-btn flex items-center justify-center";
+      button.className = "hilo-activity-btn flex items-center justify-center";
       button.dataset.section = item.section;
       button.setAttribute(
         "aria-label",
@@ -74,7 +74,7 @@ export class ActivityBar {
     }
 
     this.persona = doc.createElement("select");
-    this.persona.className = "coloride-persona-selector";
+    this.persona.className = "hilo-persona-selector";
     this.persona.setAttribute("aria-label", UI_STRINGS.persona.label);
     for (const mode of PERSONAS) {
       const option = doc.createElement("option");
@@ -90,8 +90,7 @@ export class ActivityBar {
     if (onOpenSettings) {
       const settings = doc.createElement("button");
       settings.type = "button";
-      settings.className =
-        "coloride-activity-btn coloride-settings-btn flex items-center justify-center";
+      settings.className = "hilo-activity-btn hilo-settings-btn flex items-center justify-center";
       settings.setAttribute(
         "aria-label",
         uiText.activityButton(UI_STRINGS.settings.open, "Cmd/Ctrl+,"),

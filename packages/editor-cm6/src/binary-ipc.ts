@@ -1,13 +1,13 @@
 import {
   CONTRACT_SCHEMA_VERSION,
-  type ColorideValidationState,
   type EditorSelection,
   type EditorSnapshot,
   type EditorTransaction,
+  type HiloValidationState,
   type LineCol,
   type TextChange,
   type TransactionOrigin,
-} from "@coloride/protocol-types";
+} from "@hilo/protocol-types";
 
 const MAGIC_TX = 0x434c5458; // "CLTX"
 const MAGIC_SNAP = 0x434c534e; // "CLSN"
@@ -304,7 +304,7 @@ export interface HostDecorationsPushMessage {
   readonly decorations: readonly {
     readonly fromLine: number;
     readonly toLine: number;
-    readonly state: ColorideValidationState;
+    readonly state: HiloValidationState;
     readonly snapshotHash: string;
   }[];
 }

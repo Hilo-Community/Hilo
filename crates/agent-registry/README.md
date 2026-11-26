@@ -55,9 +55,9 @@ crate cannot be cross-checked from macOS, like `host-core`; Linux and Windows ar
 
 ## Not done
 
-- **Node.js is the computer's.** Coloride does not download one. It looks in `PATH`, then the
+- **Node.js is the computer's.** Hilo does not download one. It looks in `PATH`, then the
   places a GUI app does not see (Homebrew, nvm, Volta, Windows install folders);
-  `COLORIDE_NODE` forces a path. Volta's shims are not recognized (npm is not beside them).
+  `HILO_NODE` forces a path. Volta's shims are not recognized (npm is not beside them).
 - `.tar.bz2` and bare executables (about 8 catalog builds) and uv agents are listed as not
   supported.
 - Links to a repository or website are not offered: opening a URL needs a Tauri opener plugin.

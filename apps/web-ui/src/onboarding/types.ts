@@ -2,7 +2,7 @@ import type {
   Cm6TranslatedKeybinding,
   DeclarativeVsixBundle,
   KeymapPresetId,
-} from "@coloride/editor-cm6";
+} from "@hilo/editor-cm6";
 
 export type OsPlatformId = "MacOs" | "Windows" | "Linux";
 export type ExternalIdeSourceId = "VsCode" | "Cursor" | "ClaudeDesktop";

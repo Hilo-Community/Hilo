@@ -32,10 +32,10 @@ function renderLink(label: string, rawDestination: string): string {
   if (path && !path.startsWith("/") && !path.split("/").includes("..")) {
     const line = Number(reference?.[2] ?? 1) || 1;
     // Plain inline text that acts as a link: it flows and wraps with the sentence around it.
-    return `<span role="link" tabindex="0" class="coloride-agent-ref" data-path="${path}" data-line="${line}" title="${path}:${line}">${label}</span>`;
+    return `<span role="link" tabindex="0" class="hilo-agent-ref" data-path="${path}" data-line="${line}" title="${path}:${line}">${label}</span>`;
   }
   if (/^https?:\/\//i.test(destination))
-    return `<span class="coloride-agent-link" title="${destination}">${label}</span>`;
+    return `<span class="hilo-agent-link" title="${destination}">${label}</span>`;
   return label;
 }
 
