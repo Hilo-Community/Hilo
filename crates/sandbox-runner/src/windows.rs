@@ -141,14 +141,10 @@ impl AppContainerEngine {
             ));
         }
         let root = plain(&spec.worktree_root);
-        let mut denied_read_paths: Vec<_> = spec
-            .denied_read_paths
-            .iter()
-            .map(|path| plain(path))
-            .collect();
+        let mut denied_read_paths: Vec<_> = spec.denied_read_paths.iter().map(plain).collect();
         if spec.mediate_worktree_reads {
             for entry in fs::read_dir(&spec.worktree_root)? {
-                let path = plain(&entry?.path());
+                let path = plain(entry?.path());
                 if !plain(&spec.program).starts_with(&path)
                     && !plain(&spec.tmp_dir).starts_with(&path)
                 {
@@ -161,13 +157,9 @@ impl AppContainerEngine {
         } else {
             root.clone()
         })
-        .chain(spec.writable_paths.iter().map(|path| plain(path)))
+        .chain(spec.writable_paths.iter().map(plain))
         .collect();
-        let mut read_only_dirs: Vec<_> = spec
-            .read_only_paths
-            .iter()
-            .map(|path| plain(path))
-            .collect();
+        let mut read_only_dirs: Vec<_> = spec.read_only_paths.iter().map(plain).collect();
         if spec.worktree_read_only {
             read_only_dirs.insert(0, root);
         }
@@ -476,11 +468,11 @@ mod tests {
         }
         assert_eq!(
             config.read_only_dirs,
-            vec![super::plain(&work.path().canonicalize().unwrap())]
+            vec![super::plain(work.path().canonicalize().unwrap())]
         );
         assert_eq!(
             config.denied_read_paths,
-            vec![super::plain(&file.canonicalize().unwrap())]
+            vec![super::plain(file.canonicalize().unwrap())]
         );
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "unchanged");
         assert!(!work.path().join("journal").exists());
