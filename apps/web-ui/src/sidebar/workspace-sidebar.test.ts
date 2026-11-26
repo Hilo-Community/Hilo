@@ -2,14 +2,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCockpitStoreBundle } from "../stores/index.js";
 import { FrameBatchedStreamRenderer } from "../ui/stream-renderer.js";
-import { WorkspaceSidebar } from "./workspace-sidebar.js";
+import { WorkspaceSidebar, type WorkspaceSidebarOptions } from "./workspace-sidebar.js";
 
 const cleanup: Array<() => void> = [];
 afterEach(() => {
   for (const fn of cleanup.splice(0)) fn();
+  vi.useRealTimers();
 });
 
-function setup(openWorkspace?: () => Promise<readonly [] | null>) {
+function setup(
+  openWorkspace?: () => Promise<readonly [] | null>,
+  options: Pick<WorkspaceSidebarOptions, "newSessionKind" | "agentRegistryHost"> = {},
+) {
   const stores = createCockpitStoreBundle({
     initialChats: [
       {
@@ -38,6 +42,7 @@ function setup(openWorkspace?: () => Promise<readonly [] | null>) {
     stores,
     controlsHost,
     treeHost,
+    ...options,
     ...(openWorkspace ? { openWorkspace } : {}),
   });
   cleanup.push(() => {
@@ -62,6 +67,55 @@ function menuItem(root: ParentNode, label: string): HTMLButtonElement {
 }
 
 describe("Workspace sidebar", () => {
+  it.each(["agent", "terminal"] as const)(
+    "shows the panel limit as a temporary notification when adding a %s",
+    (kind) => {
+      vi.useFakeTimers();
+      const { stores, root, get } = setup(undefined, { newSessionKind: kind });
+      stores.setPanelArea({ widthPx: 440, heightPx: 270 });
+      const add = get(".sidebar-row--group .sidebar-add");
+      const attempt = () => {
+        add.focus();
+        add.click();
+        if (kind === "terminal") {
+          document.querySelector<HTMLButtonElement>(".hilo-new-panel-item")?.click();
+        }
+      };
+      attempt();
+      const notice = document.querySelector<HTMLElement>(".hilo-toast");
+      expect(notice?.hidden).toBe(false);
+      expect(notice?.textContent).toContain("No room for another panel");
+      expect(notice?.getAttribute("role")).toBe("status");
+      expect(root.contains(notice)).toBe(false);
+      expect(root.querySelector<HTMLElement>(".sidebar-error")?.hidden).toBe(true);
+      expect(stores.zone3.getState().chats).toHaveLength(2);
+      expect(document.activeElement).toBe(add);
+
+      vi.advanceTimersByTime(4000);
+      attempt();
+      expect(document.querySelectorAll(".hilo-toast")).toHaveLength(1);
+      vi.advanceTimersByTime(4000);
+      expect(notice?.hidden).toBe(false);
+      vi.advanceTimersByTime(1000);
+      expect(notice?.hidden).toBe(true);
+
+      attempt();
+      notice?.querySelector<HTMLButtonElement>("button")?.click();
+      expect(notice?.hidden).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it("removes its notification and timer when the sidebar is destroyed", () => {
+    vi.useFakeTimers();
+    const { stores, sidebar, get } = setup();
+    stores.setPanelArea({ widthPx: 440, heightPx: 270 });
+    get(".sidebar-row--group .sidebar-add").click();
+    sidebar.destroy();
+    expect(document.querySelector(".hilo-toast")).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("preserves row nodes and focus through selection, collapse, rename and adding another group", () => {
     const { stores, get } = setup();
     const session = get('button[data-chat-id="b"]');

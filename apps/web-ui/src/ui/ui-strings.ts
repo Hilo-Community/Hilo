@@ -3,6 +3,9 @@
  * means providing another object with the same shape.
  */
 export const UI_STRINGS = {
+  notifications: {
+    dismiss: "Dismiss notification",
+  },
   shell: {
     cockpit: "Hilo 4-Zone Multi-Chat Cockpit",
     activityBar: "Activity bar",

@@ -46,7 +46,7 @@ export function filterFileTree(
 /**
  * The project file tree used everywhere it appears (sidebar and inspector): optional filter,
  * collapsible folders, sticky parent folders, virtualized rows and the thin scrollbar.
- * Each instance keeps its own scroll position, filter and collapsed folders.
+ * Folders start closed; each instance keeps its own scroll position, filter and folder choices.
  */
 export class FileTreePanel {
   readonly element: HTMLElement;
@@ -58,7 +58,8 @@ export class FileTreePanel {
   private readonly stickyEl: HTMLElement;
   private readonly renderer = new ExplorerTreeRenderer();
   private readonly scrollbar: ThinScrollbar;
-  private readonly collapsed = new Set<string>();
+  private collapsed = new Set<string>();
+  private directories = new Set<string>();
   private filter = "";
   private nodes: readonly CockpitFileTreeNode[] = [];
   private activePath = "";
@@ -155,6 +156,16 @@ export class FileTreePanel {
   }
 
   update(nodes: readonly CockpitFileTreeNode[], activePath: string): void {
+    if (nodes !== this.nodes) {
+      const directories = new Set(
+        nodes.filter((node) => node.isDirectory).map((node) => node.path),
+      );
+      // Refreshing preserves manual choices, while newly discovered folders start closed.
+      this.collapsed = new Set(
+        [...directories].filter((path) => !this.directories.has(path) || this.collapsed.has(path)),
+      );
+      this.directories = directories;
+    }
     this.nodes = nodes;
     this.activePath = activePath;
     this.render();
@@ -167,9 +178,9 @@ export class FileTreePanel {
     this.render();
   }
 
-  /** Forgets the filter, collapsed folders and scroll position (e.g. on a project switch). */
+  /** Closes all folders and clears the filter and scroll position on a project switch. */
   reset(): void {
-    this.collapsed.clear();
+    this.collapsed = new Set(this.directories);
     this.filter = "";
     if (this.filterEl) this.filterEl.value = "";
     this.setScrollTop(0);

@@ -30,7 +30,8 @@ describe("@hilo/web-ui — Zone 4 inspector (editor, tabs, file tree)", () => {
       },
     ]);
     const rows = tree()?.querySelectorAll<HTMLElement>(".cm-hilo-virtual-tree-row");
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0]?.getAttribute("aria-expanded")).toBe("false");
     const filter = zone4.querySelector<HTMLInputElement>(".hilo-file-tree-filter");
     if (!filter) throw new Error("Missing tree filter");
     filter.value = "zzz";
@@ -41,6 +42,8 @@ describe("@hilo/web-ui — Zone 4 inspector (editor, tabs, file tree)", () => {
     expect(tree()?.querySelectorAll(".cm-hilo-virtual-tree-row")).toHaveLength(2);
     filter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(filter.value).toBe("");
+    expect(tree()?.querySelectorAll(".cm-hilo-virtual-tree-row")).toHaveLength(1);
+    zone4.querySelector<HTMLElement>('.hilo-file-tree [data-path="src"]')?.click();
     zone4.querySelectorAll<HTMLElement>(".hilo-file-tree .cm-hilo-virtual-tree-row")[1]?.click();
     expect(stores.zone4.getState().activeDocumentId).toBe("src/app.ts");
     expect(

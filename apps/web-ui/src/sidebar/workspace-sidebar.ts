@@ -2,8 +2,14 @@ import { NewPanelMenu } from "../cockpit/panels/new-panel-menu.js";
 import { sessionIcon, sessionStatusDot } from "../cockpit/panels/session-presentation.js";
 import type { AgentRegistryHost } from "../settings/agent-registry.js";
 import { type WorkGroup, listProjects } from "../state/workspace-navigation.js";
-import type { CockpitChatTab, CockpitFileTreeNode, CockpitStoreBundle } from "../stores/index.js";
+import type {
+  CockpitChatTab,
+  CockpitFileTreeNode,
+  CockpitStoreBundle,
+  CreateChatOptions,
+} from "../stores/index.js";
 import { attribute, button, reconcile, visibility } from "../ui/dom-utils.js";
+import { Toast } from "../ui/toast.js";
 import { UI_STRINGS } from "../ui/ui-strings.js";
 import { FOLDER_ICON, GROUP_ICON } from "./icons.js";
 import {
@@ -67,6 +73,7 @@ export class WorkspaceSidebar {
   private readonly error: HTMLElement;
   private readonly menu: SidebarMenu;
   private readonly newPanelMenu: NewPanelMenu;
+  private readonly notice: Toast;
   private readonly unsubscribers: Array<() => void> = [];
   private opening = false;
   private switching = false;
@@ -80,6 +87,7 @@ export class WorkspaceSidebar {
     treeHost.setAttribute("aria-label", UI_STRINGS.sidebar.navigation);
     this.menu = new SidebarMenu(treeHost);
     this.newPanelMenu = new NewPanelMenu(treeHost.ownerDocument, options.agentRegistryHost);
+    this.notice = new Toast(doc);
     this.openProjectButton = button(
       doc,
       "sidebar-row sidebar-open-project sidebar-open-project-label",
@@ -123,18 +131,18 @@ export class WorkspaceSidebar {
   }
 
   /** A new session (or terminal) in a group, next to `from` when given. */
-  private addSession(projectPath: string, groupId: string, kind?: "terminal", from?: string): void {
+  private addSession(projectPath: string, groupId: string, options: CreateChatOptions = {}): void {
     const { stores } = this.options;
     this.withProject(projectPath, () => {
       const created = stores.createChat({
+        ...options,
         groupId,
-        ...(kind ? { kind } : {}),
-        ...(from ? { from } : {}),
       });
       if (created === null) {
-        this.showError(null, UI_STRINGS.sidebar.noRoom);
+        this.notice.show(UI_STRINGS.sidebar.noRoom);
         return;
       }
+      this.notice.hide();
       this.error.hidden = true;
       stores.setWorkGroupExpanded(groupId, true);
     });
@@ -251,17 +259,14 @@ export class WorkspaceSidebar {
         // With terminals available the "+" offers the same choices as the one of the panels.
         if (this.options.newSessionKind === "terminal") {
           this.newPanelMenu.toggle(anchor, {
-            openTerminal: () => this.addSession(projectPath, group.id, "terminal"),
+            openTerminal: () => this.addSession(projectPath, group.id, { kind: "terminal" }),
             openAgentInterface: (agent) =>
-              this.withProject(projectPath, () => {
-                stores.createChat({
-                  groupId: group.id,
-                  kind: "agent",
-                  agentId: agent.agentId,
-                  agentName: agent.name,
-                  title: agent.name,
-                  modelName: agent.name,
-                });
+              this.addSession(projectPath, group.id, {
+                kind: "agent",
+                agentId: agent.agentId,
+                agentName: agent.name,
+                title: agent.name,
+                modelName: agent.name,
               }),
             installAgents: () => this.options.openSettings?.(),
           });
@@ -367,12 +372,10 @@ export class WorkspaceSidebar {
             label: UI_STRINGS.sidebar.duplicateSession,
             icon: MENU_COPY_ICON,
             run: () =>
-              this.addSession(
-                projectPath,
-                groupId,
-                latest.kind === "terminal" ? "terminal" : undefined,
-                chat.chatId,
-              ),
+              this.addSession(projectPath, groupId, {
+                ...(latest.kind === "terminal" ? { kind: "terminal" } : {}),
+                from: chat.chatId,
+              }),
           },
           {
             label: alone ? UI_STRINGS.sidebar.restoreSession : UI_STRINGS.sidebar.maximizeSession,
@@ -555,6 +558,7 @@ export class WorkspaceSidebar {
     this.destroyed = true;
     this.menu.close(false);
     this.newPanelMenu.destroy();
+    this.notice.destroy();
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.projects.clear();
   }

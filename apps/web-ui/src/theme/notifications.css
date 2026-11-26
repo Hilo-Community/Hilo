@@ -1,0 +1,15 @@
+@layer components {
+  .hilo-toast {
+    @apply fixed right-4 bottom-4 flex items-center gap-4 rounded-lg border border-white/12 bg-card py-3 pr-2 pl-4 text-[13px] text-text-primary shadow-lg;
+    z-index: 15;
+    max-width: calc(100vw - 32px);
+  }
+
+  .hilo-toast[hidden] {
+    display: none;
+  }
+
+  .hilo-toast-close {
+    @apply flex h-6 w-6 shrink-0 items-center justify-center rounded border-0 bg-transparent text-lg text-text-secondary cursor-pointer hover:bg-selected hover:text-text-primary;
+  }
+}
