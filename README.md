@@ -1,14 +1,15 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./.github/assets/logo-dark.svg">
-  <img src="./.github/assets/logo-light.svg" alt="Hilo" width="80" height="80">
-</picture>
-
 # Hilo
 
 [![CI](https://github.com/Hilo-Community/hilo/actions/workflows/ci.yml/badge.svg)](https://github.com/Hilo-Community/hilo/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-gray.svg)](./LICENSE)
 
-Hilo is a native code-editor foundation built with [Tauri v2](https://v2.tauri.app/), a Rust host, and [CodeMirror 6](https://codemirror.net/). The current implementation covers the desktop shell, authoritative `ropey`/WAL documents, binary editor IPC, workspace navigation, migration, AST analysis, filtered local context search, and a read-only local MCP server with token-budgeted context assembly and optional vector retrieval. Agent execution, the operational `PolicyEngine`, and OS sandbox runners belong to later lots and remain disabled until their fail-closed implementations are complete.
+Hilo is a native code editor built with [Tauri v2](https://v2.tauri.app/), a Rust host, and [CodeMirror 6](https://codemirror.net/). It includes workspace navigation, durable `ropey`/WAL documents, language services, debugging, integrated terminals, ACP agent sessions, and local context search with optional vector retrieval.
+
+Agent operations pass through authenticated policy, budgets and a sandboxed tool broker.
+The native runners use Seatbelt on macOS, bubblewrap on Linux, and AppContainer with Job
+Objects on Windows. An unavailable sandbox capability causes an explicit error. Workspace
+code execution requires trust; agent file writes remain proposals rather than
+automatically applied edits.
 
 ---
 
@@ -37,13 +38,17 @@ cargo test --workspace
 ### Repository Layout
 
 - [`apps/desktop-tauri`](./apps/desktop-tauri) — Tauri v2 desktop application shell and native menus.
-- [`apps/web-ui`](./apps/web-ui) — React and Vite frontend implementing the 4-zone cockpit.
+- [`apps/web-ui`](./apps/web-ui) — TypeScript cockpit, agent panels, terminal views and shared styles.
 - [`packages/editor-cm6`](./packages/editor-cm6) — Isolated CodeMirror 6 view and validation state decorations.
 - [`packages/protocol-types`](./packages/protocol-types) — TypeScript bindings generated from Rust contracts.
 - [`crates/host-core`](./crates/host-core) — Authoritative `ropey` text buffers, WAL persistence, and UTF-8/UTF-16 offset conversion.
-- [`crates/context-engine`](./crates/context-engine) — SQLite WAL/mmap, filtered FTS5 search, and Tree-sitter AST indexing.
-- [`crates/judge-orchestrator`](./crates/judge-orchestrator) — Foundation for the later deterministic state machine, `PolicyEngine`, and `Evidence` verification lots.
-- [`crates/sandbox-runner`](./crates/sandbox-runner) — Capability model for later fail-closed OS sandbox implementations (`Seatbelt`, `Landlock`, `AppContainer`).
+- [`crates/context-engine`](./crates/context-engine) — Local context indexing, filtered search, Tree-sitter AST analysis and the read-only MCP server.
+- [`crates/judge-orchestrator`](./crates/judge-orchestrator) — Persistent task state, authenticated policy, budgets, sandboxed tool broker and ACP supervision.
+- [`crates/sandbox-runner`](./crates/sandbox-runner) — Fail-closed native sandbox launch, resource limits and process supervision.
+- [`crates/sandbox-windows`](./crates/sandbox-windows) — Windows AppContainer, ACLs, Job Objects and recovery of sandbox permissions.
+- [`crates/agent-registry`](./crates/agent-registry) — Agent catalog, verified installation, launch profiles and private agent homes.
+- [`crates/agent-gateway`](./crates/agent-gateway) — Host-owned provider proxy and OS-keychain credential access.
+- [`crates/path-util`](./crates/path-util) — Shared platform path conversions.
 
 ### Frontend boundaries and performance checks
 
@@ -72,12 +77,11 @@ not a claim about physical input latency on all machines. Investigate failed run
 before classifying them as machine contention; do not raise budgets to make them pass.
 
 `judge-orchestrator` exposes the authenticated policy, budget ledger and idempotent
-tool broker (`policy_engine_operational: true`). Its sandbox executor delegates to
-the native fail-closed runner. The sandbox health check still reports
-`execution_available: false`; it is not a live machine probe. The agent queue models
-UI intent, not actual execution. Desktop boot reports no background service ready
-unless an initialization provider supplies that result. Model adapters and the
-desktop execution workflow remain separate integration work.
+tool broker (`policy_engine_operational: true`). ACP sessions use that broker and
+the native fail-closed runner. The static sandbox health check still reports
+`execution_available: false`; it is not a live machine probe. Actual native runner
+initialization verifies isolation before accepting a session. Availability depends
+on the platform and requested capabilities.
 
 ### Local context MCP server (LOT-009)
 
@@ -102,7 +106,7 @@ can fit roughly four times less text than a typical 16,000-token model window.
 Only `LocalOnly` export is authorized by the executable; embedded hosts can configure
 an explicit destination allowlist. Diagnostics can be published by a trusted host
 provider and are bound to the document hash; absent providers return `Unavailable`,
-and edited documents return `Stale`. LSP/Biome execution belongs to LOT-010.
+and edited documents return `Stale`.
 
 Embeddings are disabled by default and return `LexicalAndAstOnly`. To opt in, build
 with `--features vector`, provide ONNX Runtime 1.20+ through `ORT_DYLIB_PATH`, and
