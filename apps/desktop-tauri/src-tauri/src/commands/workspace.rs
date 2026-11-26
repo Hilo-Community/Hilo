@@ -224,12 +224,24 @@ pub(crate) fn resolve_authorized_workspace_file(
     Ok(canonical)
 }
 
+/// Reads up to 4 MB from disk: on a blocking worker, not on the main thread.
 #[tauri::command]
-pub fn read_workspace_file_command(
-    state: tauri::State<'_, DesktopAppState>,
+pub async fn read_workspace_file_command(
+    app: tauri::AppHandle,
     relative_path: String,
 ) -> Result<String, String> {
-    let path = authorized_workspace_file(&state, &relative_path)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        read_workspace_file(&app.state::<DesktopAppState>(), &relative_path)
+    })
+    .await
+    .map_err(|error| format!("File read task failed: {error}"))?
+}
+
+fn read_workspace_file(
+    state: &tauri::State<'_, DesktopAppState>,
+    relative_path: &str,
+) -> Result<String, String> {
+    let path = authorized_workspace_file(state, relative_path)?;
     let metadata = path
         .metadata()
         .map_err(|error| format!("Failed to inspect workspace file: {error}"))?;

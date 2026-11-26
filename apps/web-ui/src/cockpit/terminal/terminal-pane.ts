@@ -1,5 +1,8 @@
 import { UI_STRINGS } from "../../ui/ui-strings.js";
 
+/** How long a terminal must keep its size before the shell is told about it. */
+export const SHELL_RESIZE_DELAY_MS = 100;
+
 /** A running shell on the host side. */
 export interface TerminalHandle {
   write(data: string): void;
@@ -60,6 +63,7 @@ export class TerminalPane {
   private starting = false;
   private started = false;
   private readonly resizeObserver: ResizeObserver | null;
+  private shellResize: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
 
   constructor(
@@ -141,14 +145,25 @@ export class TerminalPane {
     }
   }
 
+  /**
+   * The screen follows the panel at once; the shell is only told the final size. Dragging a
+   * separator resizes the panel every frame, and each resize makes the shell (or a full-screen
+   * program in it) redraw everything it shows and send it back.
+   */
   private refit(): void {
-    if (!this.view || !this.element.isConnected) return;
-    if (this.view.fit()) this.handle?.resize(this.view.cols, this.view.rows);
+    if (!this.view || !this.element.isConnected || !this.view.fit()) return;
+    if (this.shellResize !== null) clearTimeout(this.shellResize);
+    this.shellResize = setTimeout(() => {
+      this.shellResize = null;
+      if (this.view) this.handle?.resize(this.view.cols, this.view.rows);
+    }, SHELL_RESIZE_DELAY_MS);
   }
 
   /** Ends the shell and every job it started. */
   destroy(): void {
     this.destroyed = true;
+    if (this.shellResize !== null) clearTimeout(this.shellResize);
+    this.shellResize = null;
     this.resizeObserver?.disconnect();
     this.handle?.close();
     this.handle = null;

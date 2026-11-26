@@ -8,6 +8,8 @@ use host_core::{
     OsPlatform,
 };
 
+use tauri::Manager;
+
 use crate::state::DesktopAppState;
 
 fn read_small_config(path: &Path) -> Option<String> {
@@ -18,10 +20,19 @@ fn read_small_config(path: &Path) -> Option<String> {
     std::fs::read_to_string(path).ok()
 }
 
+/// Reads other editors' configuration files: on a blocking worker, not on the main thread.
 #[tauri::command]
-pub fn run_native_migration_command(
-    state: tauri::State<'_, DesktopAppState>,
+pub async fn run_native_migration_command(
+    app: tauri::AppHandle,
 ) -> Result<OneClickMigrationReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        run_native_migration(&app.state::<DesktopAppState>())
+    })
+    .await
+    .map_err(|error| format!("Migration task failed: {error}"))?
+}
+
+fn run_native_migration(state: &DesktopAppState) -> Result<OneClickMigrationReport, String> {
     let home = std::env::var_os(if cfg!(target_os = "windows") {
         "USERPROFILE"
     } else {

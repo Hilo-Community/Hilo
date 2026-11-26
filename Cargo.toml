@@ -49,12 +49,10 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 all = "warn"
 
-[profile.dev.package.ropey]
-opt-level = 2
-
-[profile.dev.package.str_indices]
-opt-level = 2
-
-[profile.dev.package.blake3]
+# Dependencies (Tauri, WebKit bindings, serde, SQLite, Tree-sitter, ropey, blake3...) are built
+# optimized even in dev: unoptimized, they make `npm run dev` feel slow on every keystroke,
+# search and IPC message. They are compiled once and cached; the workspace crates stay
+# unoptimized, so incremental rebuilds stay fast.
+[profile.dev.package."*"]
 opt-level = 2
 

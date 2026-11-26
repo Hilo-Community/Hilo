@@ -3,14 +3,26 @@
 use std::path::{Path, PathBuf};
 
 use context_engine::{
-    AclAndSecretScanner, ContextSearchHit, ExtractedSymbol, ImpactAnalyzer, IncrementalAstParser,
-    RopeTextProvider, SqliteWalContextEngine, SupportedAstLanguage, TestFileTarget,
+    AclAndSecretScanner, ContextSearchHit, ExtractedSymbol, IncrementalAstParser, RopeTextProvider,
+    SqliteWalContextEngine, SupportedAstLanguage,
 };
 use host_core::{
     decode_editor_transaction_ipc, encode_editor_snapshot_ipc, BackgroundServicesStatus,
     DocumentError, DocumentService, EditorSnapshot, LazyBootError, LazyBootOrchestrator,
     LazyBootReadySnapshot,
 };
+
+/// The AST symbols (`LOT-007`) of a buffer's text.
+pub fn document_symbols(document_id: &str, rope: &host_core::ropey::Rope) -> Vec<ExtractedSymbol> {
+    let provider = RopeTextProvider::new(rope);
+    IncrementalAstParser::new()
+        .parse_with(
+            SupportedAstLanguage::from_path(document_id),
+            &provider,
+            None,
+        )
+        .symbols()
+}
 
 /// See [`DesktopBinaryEditorBridge::document_imports`].
 #[derive(Debug, Clone)]
@@ -178,29 +190,16 @@ impl DesktopBinaryEditorBridge {
         &mut self.documents
     }
 
-    /// Analyze AST symbols and impacted tests (`LOT-007`) for a live buffer in `DocumentService`.
-    pub fn analyze_document_ast_impact(
+    /// A copy (O(1)) of a live buffer, to work on without holding the bridge.
+    pub fn document_rope(
         &self,
         document_id: &str,
         session_generation: u32,
-    ) -> Option<(Vec<ExtractedSymbol>, Vec<TestFileTarget>)> {
-        let session = self
-            .documents
+    ) -> Option<host_core::ropey::Rope> {
+        self.documents
             .session(document_id, session_generation)
-            .ok()?;
-        let mut parser = IncrementalAstParser::new();
-        let lang = SupportedAstLanguage::from_path(document_id);
-        let provider = RopeTextProvider::new(session.rope());
-        let tree = parser.parse_with(lang, &provider, None);
-        let symbols = tree.symbols();
-        let pairs: Vec<(&str, &str)> = symbols
-            .iter()
-            .map(|s| (document_id, s.name.as_str()))
-            .collect();
-        let mut analyzer = ImpactAnalyzer::new();
-        analyzer.index_file(document_id, session.rope(), &tree);
-        let impacted = analyzer.find_impacted_tests(&pairs, 4);
-        Some((symbols, impacted))
+            .ok()
+            .map(|session| session.rope().clone())
     }
 
     /// The imports of a live buffer with the text, revision and file they were read from.
