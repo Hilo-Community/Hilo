@@ -4,6 +4,8 @@ mod bridge;
 mod commands;
 mod state;
 
+use std::sync::Arc;
+
 use context_engine::ContextEngineStatus;
 use host_core::HostHealthStatus;
 use judge_orchestrator::JudgeHealthStatus;
@@ -52,6 +54,19 @@ pub fn run() {
                 let _ = handle.emit(DOCUMENT_DIAGNOSTICS_EVENT, batch);
             });
             app.manage(DesktopAppState::new(bridge, data_dir, diagnostics_sink));
+
+            // Group-commit: keystrokes write to the WAL without an immediate `fsync`
+            // (`apply_binary_transaction_observed`); this durably flushes them shortly after,
+            // off the keystroke path, bounding how much could be lost to a crash.
+            let bridge_for_flush = Arc::clone(&app.state::<DesktopAppState>().bridge);
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    if let Ok(mut bridge) = bridge_for_flush.lock() {
+                        let _ = bridge.flush_journal();
+                    }
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -113,6 +128,10 @@ pub fn run() {
         if matches!(event, tauri::RunEvent::Exit) {
             if let Some(state) = handle.try_state::<DesktopAppState>() {
                 commands::agent::close_all_agents(&state);
+                // Durably flush any group-committed WAL entries before the process exits.
+                if let Ok(mut bridge) = state.bridge.lock() {
+                    let _ = bridge.flush_journal();
+                }
             }
         }
         // Quitting (Cmd/Ctrl+Q, or the last window closing) with unsaved changes. An exit asked for

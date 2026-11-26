@@ -1,5 +1,5 @@
 import { AgentPanel } from "../../agent/panel.js";
-import type { AgentHost } from "../../agent/store.js";
+import type { AgentHost, AgentState } from "../../agent/store.js";
 import { type LayoutNode, panel, panelIds, reconcileLayout } from "../../layout/layout-tree.js";
 import { SPINNER_ICON } from "../../settings/agent-marks.js";
 import type { AgentRegistryHost, InstalledAgent } from "../../settings/agent-registry.js";
@@ -13,6 +13,7 @@ import {
   resolveGroupLayout,
   resolveGroupMaximized,
 } from "../../stores/index.js";
+import { type AgentBadgeInputs, nextAgentBadge } from "../../stores/session-status.js";
 import { SETTINGS_ICON } from "../../theme/icons.js";
 import { reconcile } from "../../ui/dom-utils.js";
 import { UI_STRINGS, uiText } from "../../ui/ui-strings.js";
@@ -39,6 +40,15 @@ import {
   shortcutLabel,
 } from "./panel-shortcuts.js";
 import { sessionIcon, sessionStatusDot } from "./session-presentation.js";
+
+/** The part of an agent panel's state its sidebar/tab badge follows. */
+function badgeInputs(state: AgentState): AgentBadgeInputs {
+  return {
+    busy: state.busy,
+    pendingPermissions: state.permissions.length,
+    error: state.error,
+  };
+}
 
 /** The icon of a session's header tab: the terminal glyph, the Codex mark, or its state glyph. */
 function tabIcon(chat: CockpitChatTab, stateGlyph: string): { svg: string } | { text: string } {
@@ -563,12 +573,10 @@ export class ChatGrid {
         );
         this.agentPanes.set(chat.chatId, pane);
         pane.store.subscribe((state, prevState) => {
-          if (state.permissions.length > 0) this.stores.setChatStatusBadge(chat.chatId, "waiting");
-          else if (state.error) this.stores.setChatStatusBadge(chat.chatId, "error");
-          else if (prevState.busy && !state.busy)
-            this.stores.setChatStatusBadge(chat.chatId, "done");
-          else if (state.busy) this.stores.setChatStatusBadge(chat.chatId, "running");
-          else this.stores.clearChatStatusBadge(chat.chatId);
+          const tab = this.stores.zone3.getState().chats.find((c) => c.chatId === chat.chatId);
+          const current = tab?.kind === "agent" ? tab.statusBadge : undefined;
+          const badge = nextAgentBadge(badgeInputs(prevState), badgeInputs(state), current);
+          if (badge !== current) this.stores.setChatStatusBadge(chat.chatId, badge);
         });
       }
       if (pane.element.parentElement !== cell.el) cell.el.append(pane.element);

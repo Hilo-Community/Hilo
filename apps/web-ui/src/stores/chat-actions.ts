@@ -106,11 +106,11 @@ export function createChatActions(ctx: StoreContext): ChatActions {
     if (chatState.activeChatId !== chatId)
       zone3.setState((prev) => ({ ...prev, activeChatId: chatId }));
 
-    // Looking at the chat dismisses its pending-permission/done/error badge, or a terminal's
-    // finished-agent mark.
+    // Looking at the chat dismisses what it only had to report (a finished turn, an error, or a
+    // terminal's finished-agent mark). A running turn or a pending permission is still current.
     if (
       targetChat.kind === "agent"
-        ? targetChat.statusBadge !== undefined
+        ? targetChat.statusBadge === "done" || targetChat.statusBadge === "error"
         : targetChat.detectedAgentFinished === true
     ) {
       ctx.bundle().clearChatStatusBadge(chatId);

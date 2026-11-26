@@ -296,12 +296,14 @@ pub(super) fn start_session(
     events: Channel<AcpEvent>,
 ) -> Result<u32, String> {
     let state = app.state::<DesktopAppState>();
+    // Held for the whole function: no account mutation (sign-out, preference change, re-auth)
+    // may race a session start, from resolving the launch through inserting the running session.
+    let _account_lock = state
+        .agent_account_lock
+        .lock()
+        .map_err(|_| "account lock poisoned")?;
     let gate = gate(&state)?;
     let (launch, registry, runtime) = {
-        let _account_lock = state
-            .agent_account_lock
-            .lock()
-            .map_err(|_| "account lock poisoned")?;
         // The program comes from the registry by id, never from the webview, and the user already
         // confirmed it when installing; it still runs only in the read-only sandbox.
         let mut launch = resolve_launch(&state, &installed_agent_id)?;
@@ -345,7 +347,7 @@ pub(super) fn start_session(
     spec.policy.network_allowed = matches!(runtime.network, AgentNetwork::Proxy { .. });
     let (repository, lease, signed, authority) = start_task(&state, spec)?;
     let runner = sandbox_runner(&state)?;
-    let text = workspace_text(&state, root, &task.worktree, task.files)?;
+    let text = workspace_text(&state, root, task.files)?;
     let host = AcpHost {
         session_resources: runtime
             .gateway
@@ -390,10 +392,6 @@ pub(super) fn start_session(
         },
     };
     let supervisor = AcpSessionSupervisor::start(host, launch).map_err(|e| e.to_string())?;
-    let _account_lock = state
-        .agent_account_lock
-        .lock()
-        .map_err(|_| "account lock poisoned")?;
     if !home_dir.is_dir() {
         return Err("Agent account was signed out while starting".into());
     }
@@ -424,7 +422,6 @@ pub(super) fn start_session(
 fn workspace_text(
     state: &DesktopAppState,
     root: PathBuf,
-    _worktree: &Path,
     files: TaskFiles,
 ) -> Result<HostText, String> {
     Ok(HostText {

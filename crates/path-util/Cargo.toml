@@ -1,0 +1,10 @@
+[package]
+name = "path-util"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Shared platform path conversions for process launches"
+
+[lints]
+workspace = true

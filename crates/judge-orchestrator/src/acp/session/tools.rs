@@ -1,22 +1,7 @@
 //! What the agent asks the Host to do: translating its tool calls, running them through the
 //! broker, and the user's answers to permission requests.
 use super::*;
-
-pub(super) fn plain_path(path: &Path) -> PathBuf {
-    if let Some(text) = path.to_str() {
-        if let Some(rest) = text.strip_prefix(r"\\?\") {
-            let bytes = rest.as_bytes();
-            if bytes.len() >= 3
-                && bytes[0].is_ascii_alphabetic()
-                && bytes[1] == b':'
-                && bytes[2] == b'\\'
-            {
-                return PathBuf::from(rest);
-            }
-        }
-    }
-    path.to_path_buf()
-}
+pub(super) use path_util::plain_path;
 
 impl Session {
     pub(super) fn translate(&self, message: &Value, key: &str) -> Result<ToolCall, String> {

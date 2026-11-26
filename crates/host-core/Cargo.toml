@@ -10,6 +10,7 @@ description = "Coloride Native Rust Host Core: ropey buffers, WAL journal, Git c
 workspace = true
 
 [dependencies]
+path-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 bincode.workspace = true

@@ -1,6 +1,37 @@
 import type { StoreContext } from "./context.js";
 import type { CockpitStoreBundle } from "./types.js";
 
+export type AgentStatusBadge = "running" | "waiting" | "done" | "error";
+
+/** What an agent panel's badge is derived from (a slice of its `AgentStore` state). */
+export interface AgentBadgeInputs {
+  readonly busy: boolean;
+  readonly pendingPermissions: number;
+  /** Empty when there is none. */
+  readonly error: string;
+}
+
+/**
+ * An agent panel's badge after its store changed from `previous` to `next`, given the badge it
+ * shows now. Current states are always shown (a pending permission, a running turn); what only
+ * reports an event (a turn that just ended, a new error) is set when it happens and then left as
+ * it is: an unrelated store change (text typed, a message streamed in) never dismisses it, only
+ * the user looking at the session does (`selectChat`) or the next turn.
+ */
+export function nextAgentBadge(
+  previous: AgentBadgeInputs,
+  next: AgentBadgeInputs,
+  current: AgentStatusBadge | undefined,
+): AgentStatusBadge | undefined {
+  if (next.pendingPermissions > 0) return "waiting";
+  if (next.error !== "" && next.error !== previous.error) return "error";
+  if (previous.busy && !next.busy) return next.error !== "" ? "error" : "done";
+  if (next.busy) return "running";
+  // A permission answered (or withdrawn) with no turn running: nothing is waiting any more.
+  if (current === "waiting") return undefined;
+  return current;
+}
+
 type SessionStatusActions = Pick<
   CockpitStoreBundle,
   "setChatStatusBadge" | "setTerminalRunning" | "clearChatStatusBadge" | "setTerminalAgentStatus"

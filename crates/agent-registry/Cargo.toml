@@ -10,6 +10,7 @@ description = "Coloride ACP agent registry: reads the public catalog, installs a
 workspace = true
 
 [dependencies]
+path-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

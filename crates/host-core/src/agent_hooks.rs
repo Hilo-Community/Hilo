@@ -4,7 +4,11 @@
 //! no hook, since it reports its state in the terminal title (see `terminal.rs`).
 //!
 //! One [`AgentHookServer`] is shared by every terminal session in the app, each with its own bearer
-//! token from [`AgentHookServer::register`]. The server only records the last state each token
+//! token from [`AgentHookServer::register`]. That token and the server's address reach the agent
+//! through its terminal's environment ([`HOOK_URL_ENV`], [`HOOK_TOKEN_ENV`]), never through the
+//! hook file: the file is the same for every terminal and every app run, so two terminals in one
+//! workspace never overwrite each other's hooks, and an agent that read the file at startup still
+//! reports to the terminal it runs in. The server only records the last state each token
 //! reported; the session's poller in `terminal.rs` reads it through
 //! [`AgentHookRegistration::reported_busy`] and stays the one place that decides and publishes.
 
@@ -12,7 +16,7 @@ use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -22,6 +26,11 @@ use serde_json::{json, Value};
 const MAX_HEADER_LINES: usize = 32;
 const MAX_LINE_BYTES: usize = 4096;
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Set in a terminal's environment: the hook endpoint's base URL (`http://127.0.0.1:<port>/hook`).
+pub const HOOK_URL_ENV: &str = "COLORIDE_AGENT_HOOK_URL";
+/// Set in a terminal's environment: that terminal's bearer token.
+pub const HOOK_TOKEN_ENV: &str = "COLORIDE_AGENT_HOOK_TOKEN";
 
 /// What a registration's agent last reported, stored in an `AtomicU8`.
 const REPORTED_NOTHING: u8 = 0;
@@ -78,6 +87,11 @@ impl AgentHookServer {
 
     pub fn address(&self) -> SocketAddr {
         self.address
+    }
+
+    /// The value of [`HOOK_URL_ENV`] for a terminal using this server.
+    pub fn hook_base_url(&self) -> String {
+        format!("http://{}/hook", self.address)
     }
 
     /// Registers a fresh, random bearer token for one terminal session's hook calls about
@@ -145,14 +159,38 @@ impl Drop for AgentHookRegistration {
     }
 }
 
+/// Connections handled at once. Hook calls are rare and short (one per turn start or end); the cap
+/// keeps a local process that opens many idle connections, token or not, from tying up a thread
+/// for each. A connection over the cap is closed unanswered, and its `curl` gives up quietly.
+const MAX_CONCURRENT_CONNECTIONS: usize = 8;
+
+/// One connection being handled; releases its slot when the handler ends.
+struct ConnectionSlot(Arc<AtomicUsize>);
+
+impl Drop for ConnectionSlot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 fn accept_loop(listener: TcpListener, registry: Arc<Registry>, stopped: Arc<AtomicBool>) {
+    let active = Arc::new(AtomicUsize::new(0));
     while !stopped.load(Ordering::SeqCst) {
         match listener.accept() {
             Ok((stream, _)) => {
+                if active.fetch_add(1, Ordering::SeqCst) >= MAX_CONCURRENT_CONNECTIONS {
+                    active.fetch_sub(1, Ordering::SeqCst);
+                    continue; // `stream` is dropped: closed.
+                }
+                let slot = ConnectionSlot(Arc::clone(&active));
                 let registry = Arc::clone(&registry);
+                // If the thread cannot be spawned, the closure (and the slot in it) is dropped.
                 let _ = thread::Builder::new()
                     .name("agent-hook-conn".into())
-                    .spawn(move || handle_connection(stream, &registry));
+                    .spawn(move || {
+                        let _slot = slot;
+                        handle_connection(stream, &registry);
+                    });
             }
             Err(_) => thread::sleep(Duration::from_millis(50)),
         }
@@ -196,6 +234,11 @@ fn read_request(stream: &TcpStream) -> Option<ParsedRequest> {
 }
 
 fn handle_connection(stream: TcpStream, registry: &Registry) {
+    // On macOS (and the BSDs) an accepted socket inherits the listener's non-blocking mode, which
+    // would make a read before the request has arrived fail at once instead of waiting.
+    if stream.set_nonblocking(false).is_err() {
+        return;
+    }
     let _ = stream.set_read_timeout(Some(CONNECTION_TIMEOUT));
     let _ = stream.set_write_timeout(Some(CONNECTION_TIMEOUT));
     let status = respond(&stream, registry);
@@ -263,19 +306,16 @@ fn event_busy(agent: &str, event_path_segment: &str) -> Option<bool> {
     }
 }
 
-/// `-o /dev/null`, discarded stdout and a forced `|| true`: whatever happens to this request
-/// (server not running, timeout, wrong response), the hook's own exit code stays 0 and it prints
-/// nothing — the agent CLI must never see this as a reason to block the prompt or the stop it is
-/// trying to report.
-fn curl_hook_command(
-    server_address: SocketAddr,
-    token: &str,
-    agent: &str,
-    event_path_segment: &str,
-) -> String {
+/// Reads the endpoint and token from the environment the agent inherited from its terminal, and
+/// does nothing for an agent started anywhere else (no [`HOOK_TOKEN_ENV`]). `-o /dev/null`,
+/// discarded output and a forced `|| true`: whatever happens to this request (server gone,
+/// timeout, wrong response), the hook's own exit code stays 0 and it prints nothing — the agent
+/// CLI must never see this as a reason to block the prompt or the stop it is trying to report.
+fn curl_hook_command(agent: &str, event_path_segment: &str) -> String {
     format!(
-        "curl -s -m 2 -o /dev/null -X POST -H \"Authorization: Bearer {token}\" \
-         \"http://{server_address}/hook/{agent}/{event_path_segment}\" >/dev/null 2>&1 || true \
+        "[ -n \"${HOOK_TOKEN_ENV}\" ] && curl -s -m 2 -o /dev/null -X POST \
+         -H \"Authorization: Bearer ${HOOK_TOKEN_ENV}\" \
+         \"${HOOK_URL_ENV}/{agent}/{event_path_segment}\" >/dev/null 2>&1 || true \
          # {MANAGED_HOOK_MARKER}"
     )
 }
@@ -333,14 +373,12 @@ fn managed_entry(command: String) -> Value {
 /// `.claude/settings.local.json` (never the user's real `~/.claude/settings.json`: this app never
 /// writes outside a trusted workspace for its own infrastructure). Only entries carrying
 /// [`MANAGED_HOOK_MARKER`] are touched — a user's own hooks for the same event are left alone, and
-/// re-installing (a fresh token after this app restarts) replaces only this app's previous entry.
-pub fn install_claude_hooks(
-    workspace_root: &Path,
-    server_address: SocketAddr,
-    token: &str,
-) -> io::Result<()> {
+/// an entry written by an older version is replaced. The entries never change between terminals
+/// or app runs, so the file is only written when they are missing or outdated.
+pub fn install_claude_hooks(workspace_root: &Path) -> io::Result<()> {
     let path = settings_path(workspace_root);
     let mut root = read_json_object(&path)?;
+    let before = root.clone();
     let hooks_value = root.entry("hooks".to_string()).or_insert_with(|| json!({}));
     let hooks = hooks_value
         .as_object_mut()
@@ -355,13 +393,20 @@ pub fn install_claude_hooks(
         })?;
         entries.retain(|entry| !is_managed_entry(entry));
         entries.push(managed_entry(curl_hook_command(
-            server_address,
-            token,
             "claude",
             turn_boundary_event_path_segment(event),
         )));
     }
+    if root == before {
+        return Ok(());
+    }
     write_json_atomically(&path, &root)
+}
+
+/// Whether the workspace already has Claude Code project settings, i.e. Claude Code is used
+/// there: its hooks are then installed as soon as a terminal opens, before Claude starts.
+pub fn workspace_uses_claude(workspace_root: &Path) -> bool {
+    workspace_root.join(".claude").is_dir()
 }
 
 #[cfg(test)]
@@ -384,8 +429,7 @@ mod tests {
         std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
         std::fs::write(&settings, r#"{"permissions": {"allow": ["Bash"]}}"#).unwrap();
 
-        let address: SocketAddr = "127.0.0.1:4000".parse().unwrap();
-        install_claude_hooks(dir.path(), address, "tok-1").unwrap();
+        install_claude_hooks(dir.path()).unwrap();
 
         let written: Value =
             serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
@@ -395,31 +439,69 @@ mod tests {
         let command = user_prompt_submit[0]["hooks"][0]["command"]
             .as_str()
             .unwrap();
-        assert!(command.contains("tok-1"));
-        assert!(command.contains("/hook/claude/user-prompt-submit"));
+        // No token or port in the file: both come from the agent's terminal.
+        assert!(command.contains(&format!("${HOOK_TOKEN_ENV}")));
+        assert!(command.contains(&format!("${HOOK_URL_ENV}/claude/user-prompt-submit")));
         assert!(command.contains("|| true"));
     }
 
     #[test]
-    fn reinstalling_replaces_only_the_previous_managed_entry() {
+    fn reinstalling_replaces_an_outdated_entry_and_leaves_a_current_file_alone() {
         let dir = tempfile::tempdir().unwrap();
-        let address: SocketAddr = "127.0.0.1:4000".parse().unwrap();
-        install_claude_hooks(dir.path(), address, "tok-1").unwrap();
-        install_claude_hooks(dir.path(), address, "tok-2").unwrap();
+        let settings = settings_path(dir.path());
+        std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        // An entry from an older version, with its token baked in.
+        std::fs::write(
+            &settings,
+            format!(
+                r#"{{"hooks": {{"Stop": [{{"hooks": [{{"type": "command", "command": "curl tok-1 # {MANAGED_HOOK_MARKER}"}}]}}]}}}}"#
+            ),
+        )
+        .unwrap();
+        install_claude_hooks(dir.path()).unwrap();
 
-        let written: Value =
-            serde_json::from_str(&std::fs::read_to_string(settings_path(dir.path())).unwrap())
-                .unwrap();
+        let text = std::fs::read_to_string(&settings).unwrap();
+        let written: Value = serde_json::from_str(&text).unwrap();
         let stop = written["hooks"]["Stop"].as_array().unwrap();
+        assert_eq!(stop.len(), 1, "the old entry is replaced, not duplicated");
+        assert!(!text.contains("tok-1"));
+
+        // Already current: not rewritten.
+        std::fs::write(&settings, format!("{text}\n")).unwrap();
+        install_claude_hooks(dir.path()).unwrap();
         assert_eq!(
-            stop.len(),
-            1,
-            "stale token entry must be replaced, not duplicated"
+            std::fs::read_to_string(&settings).unwrap(),
+            format!("{text}\n")
         );
-        assert!(stop[0]["hooks"][0]["command"]
-            .as_str()
-            .unwrap()
-            .contains("tok-2"));
+    }
+
+    /// Runs the real command, as Claude Code does, through `sh` and `curl`.
+    #[cfg(unix)]
+    #[allow(clippy::disallowed_methods)] // `sh` runs the hook command under test
+    #[test]
+    fn the_hook_command_reports_through_the_terminal_environment() {
+        let server = AgentHookServer::start().unwrap();
+        let registration = server.register("claude").unwrap();
+        let status = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(curl_hook_command("claude", "user-prompt-submit"))
+            .env(HOOK_URL_ENV, server.hook_base_url())
+            .env(HOOK_TOKEN_ENV, registration.token())
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert_eq!(registration.reported_busy(), Some(true));
+
+        // Outside a Coloride terminal it does nothing, and still succeeds.
+        let status = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(curl_hook_command("claude", "stop"))
+            .env_remove(HOOK_URL_ENV)
+            .env_remove(HOOK_TOKEN_ENV)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert_eq!(registration.reported_busy(), Some(true));
     }
 
     #[test]
@@ -433,8 +515,7 @@ mod tests {
         )
         .unwrap();
 
-        let address: SocketAddr = "127.0.0.1:4000".parse().unwrap();
-        install_claude_hooks(dir.path(), address, "tok-1").unwrap();
+        install_claude_hooks(dir.path()).unwrap();
 
         let written: Value =
             serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
@@ -445,18 +526,20 @@ mod tests {
             .any(|entry| entry["hooks"][0]["command"] == "echo mine"));
     }
 
-    fn post(address: SocketAddr, path: &str, token: &str) -> String {
-        let mut stream = TcpStream::connect(address).unwrap();
-        stream
-            .set_read_timeout(Some(Duration::from_secs(3)))
-            .unwrap();
+    fn try_post(address: SocketAddr, path: &str, token: &str) -> io::Result<String> {
+        let mut stream = TcpStream::connect(address)?;
+        stream.set_read_timeout(Some(Duration::from_secs(3)))?;
         let request = format!(
             "POST {path} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {token}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
         );
-        stream.write_all(request.as_bytes()).unwrap();
+        stream.write_all(request.as_bytes())?;
         let mut response = String::new();
-        stream.read_to_string(&mut response).unwrap();
-        response
+        stream.read_to_string(&mut response)?;
+        Ok(response)
+    }
+
+    fn post(address: SocketAddr, path: &str, token: &str) -> String {
+        try_post(address, path, token).unwrap()
     }
 
     #[test]
@@ -500,6 +583,43 @@ mod tests {
         assert!(wrong_agent.starts_with("HTTP/1.1 404"), "{wrong_agent}");
 
         assert_eq!(registration.reported_busy(), None);
+    }
+
+    #[test]
+    fn idle_connections_beyond_the_cap_do_not_block_a_real_hook_call_for_long() {
+        let server = AgentHookServer::start().unwrap();
+        let registration = server.register("claude").unwrap();
+        // Idle connections that never send a request hold every slot.
+        let idle: Vec<TcpStream> = (0..MAX_CONCURRENT_CONNECTIONS + 4)
+            .map(|_| TcpStream::connect(server.address()).unwrap())
+            .collect();
+        thread::sleep(Duration::from_millis(200));
+        // Over the cap: closed unanswered rather than given a thread.
+        let mut extra = TcpStream::connect(server.address()).unwrap();
+        extra
+            .set_read_timeout(Some(Duration::from_secs(3)))
+            .unwrap();
+        let mut response = String::new();
+        let _ = extra.read_to_string(&mut response);
+        assert!(response.is_empty(), "{response}");
+        drop(idle);
+        // Once the idle ones are gone (closed or timed out), real calls are served again; their
+        // handlers notice the close within moments.
+        let served = (0..40).any(|_| {
+            // A refused connection may be reset rather than closed: just a retry.
+            let ok = try_post(
+                server.address(),
+                "/hook/claude/user-prompt-submit",
+                registration.token(),
+            )
+            .is_ok_and(|response| response.starts_with("HTTP/1.1 204"));
+            if !ok {
+                thread::sleep(Duration::from_millis(50));
+            }
+            ok
+        });
+        assert!(served);
+        assert_eq!(registration.reported_busy(), Some(true));
     }
 
     #[test]

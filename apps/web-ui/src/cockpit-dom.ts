@@ -58,15 +58,15 @@ export interface CockpitDomControllerOptions {
   readonly openWorkspace?: () => Promise<readonly CockpitFileTreeNode[] | null>;
   readonly switchWorkspace?: (path: string) => Promise<readonly CockpitFileTreeNode[] | null>;
   /**
-   * Ends the agents and terminals that keep running for a project while another one is shown.
-   * Called when the user removes that project from the sidebar.
-   */
-  /**
    * Told whenever an agent finishes its turn (an agent panel, or a recognized agent CLI running in
    * a terminal), with whether the user was looking at that session: the host plays a sound and,
    * for a session nobody was watching, shows a notification.
    */
   readonly onAgentFinished?: (completion: AgentCompletionAlert) => void;
+  /**
+   * Ends the agents and terminals that keep running for a project while another one is shown.
+   * Called when the user removes that project from the sidebar.
+   */
   readonly closeWorkspaceSessions?: (path: string) => Promise<void>;
   readonly readWorkspaceFile?: (path: string) => Promise<string>;
   /**

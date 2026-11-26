@@ -238,8 +238,24 @@ fn browser_login_support(
         let ps_module_dir = home.join(".coloride-ps");
         let mgmt_dir = ps_module_dir.join("Microsoft.PowerShell.Management");
         std::fs::create_dir_all(&mgmt_dir).map_err(|e| e.to_string())?;
+        // Found before the real module of the same name (see `PSModulePath` below), so a fresh
+        // `powershell -NoProfile` gets this `Start-Process`. Everything else the real module has
+        // is imported and exported again, and a `Start-Process` that opens no web page goes to the
+        // real cmdlet: only a browser launch is intercepted.
         let script = format!(
-            "function Start-Process {{\n    param(\n        [Parameter(Position=0)][string]$FilePath,\n        [Parameter(Position=1, ValueFromRemainingArguments=$true)]$ArgumentList\n    )\n    $url = if ($FilePath -like 'https://*') {{ $FilePath }} else {{ ($ArgumentList | Where-Object {{ $_ -like 'https://*' }} | Select-Object -First 1) }}\n    if ($url) {{\n        [System.IO.File]::WriteAllText('{text}', \"$url`n\")\n    }}\n}}\nExport-ModuleMember -Function Start-Process\n"
+            "# The sandbox cannot open a browser: an https page is reported to the Host, which opens it.\n\
+             Import-Module ([System.IO.Path]::Combine($PSHOME, 'Modules', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Management.psd1'))\n\
+             function Start-Process {{\n\
+             \x20   foreach ($arg in $args) {{\n\
+             \x20       if (\"$arg\" -like 'https://*') {{\n\
+             \x20           [System.IO.File]::WriteAllText('{text}', \"$arg`n\")\n\
+             \x20           return\n\
+             \x20       }}\n\
+             \x20   }}\n\
+             \x20   $cmdlet = Get-Command -Name Start-Process -CommandType Cmdlet\n\
+             \x20   & $cmdlet @args\n\
+             }}\n\
+             Export-ModuleMember -Function Start-Process -Cmdlet *\n"
         );
         std::fs::write(
             mgmt_dir.join("Microsoft.PowerShell.Management.psm1"),
@@ -329,7 +345,14 @@ pub(super) fn runtime_with_key_reader(
         .as_ref()
         .and_then(|login| login.ps_module_dir.as_ref())
     {
-        environment.insert("PSModulePath".into(), ps_dir.clone().into_os_string());
+        // First, so its shim wins over the real module; the usual paths stay, so every other
+        // module (and the real one the shim loads) is still found.
+        let mut module_path = ps_dir.clone().into_os_string();
+        if let Some(existing) = std::env::var_os("PSModulePath").filter(|value| !value.is_empty()) {
+            module_path.push(";");
+            module_path.push(existing);
+        }
+        environment.insert("PSModulePath".into(), module_path);
     }
     let mut paths: Vec<PathBuf> = browser_login
         .as_ref()

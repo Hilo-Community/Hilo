@@ -10,6 +10,7 @@ description = "Coloride Isolated Sandbox Runner: Native OS Sandbox (Seatbelt/Lan
 workspace = true
 
 [dependencies]
+path-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

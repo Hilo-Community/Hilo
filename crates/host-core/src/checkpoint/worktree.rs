@@ -109,6 +109,13 @@ impl CheckpointManager {
             .materialize(&repo, latest.tree, &path, allow_cow, &mut counts)
             .and_then(|()| {
                 if cfg!(windows) && !allow_cow {
+                    // Package sharing uses links, which the Windows AppContainer refuses.
+                    // Report the limitation rather than silently returning an empty store list.
+                    tracing::warn!(
+                        task_id,
+                        worktree = %path.display(),
+                        "Windows checkpoint copy omits installed package stores; tools requiring the workspace's node_modules may be unavailable in this task"
+                    );
                     return Ok(Vec::new());
                 }
                 let scope = StoreScope {

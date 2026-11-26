@@ -216,8 +216,23 @@ pub(crate) fn terminal_spec(
         }
         spec.env.insert(key.into(), value.into());
     }
-    spec.args
-        .retain(|arg| arg != "--acp" && arg != "--experimental-acp");
+    // Launches are either the agent executable followed by mode switches, or Node followed
+    // by its entry script and mode switches. Only remove switches in that leading mode slot:
+    // after another option, an ACP-looking token could be that option's value; after `--`
+    // it is positional. Unknown command-line grammars must keep their arguments intact.
+    let node_entry = base.program.file_name().is_some_and(|name| {
+        name.eq_ignore_ascii_case("node") || name.eq_ignore_ascii_case("node.exe")
+    }) && spec
+        .args
+        .first()
+        .is_some_and(|arg| !arg.to_string_lossy().starts_with('-'));
+    let start = usize::from(node_entry);
+    let end = start
+        + spec.args[start..]
+            .iter()
+            .take_while(|arg| *arg == "--acp" || *arg == "--experimental-acp")
+            .count();
+    spec.args.drain(start..end);
     spec.args.extend(method.args.iter().map(Into::into));
     spec.env.insert("TERM".into(), "xterm-256color".into());
     spec.env.insert("TERM_PROGRAM".into(), "Coloride".into());
@@ -227,6 +242,43 @@ pub(crate) fn terminal_spec(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn terminal_login_preserves_option_values_and_positionals_that_look_like_modes() {
+        let method = methods(&json!([{"id":"login", "name":"Login", "args":["login"]}]))
+            .unwrap()
+            .remove(0);
+        for program in ["/bin/agent", "/bin/node"] {
+            let mut base = sandbox_runner::SandboxSpec::new(".", program);
+            let entry: Vec<std::ffi::OsString> = if program.ends_with("node") {
+                vec!["entry.js".into()]
+            } else {
+                vec![]
+            };
+            for tail in [
+                vec!["--acp", "--experimental-acp", "--label", "--acp"],
+                vec!["--acp", "--", "--experimental-acp"],
+                vec!["--label", "--experimental-acp"],
+                vec!["prompt", "--acp"],
+            ] {
+                base.args = entry
+                    .iter()
+                    .cloned()
+                    .chain(tail.iter().map(Into::into))
+                    .collect();
+                let expected: Vec<std::ffi::OsString> = entry
+                    .iter()
+                    .cloned()
+                    .chain(
+                        tail.iter()
+                            .skip_while(|arg| matches!(**arg, "--acp" | "--experimental-acp"))
+                            .map(Into::into),
+                    )
+                    .chain(["login".into()])
+                    .collect();
+                assert_eq!(terminal_spec(&base, &method).unwrap().args, expected);
+            }
+        }
+    }
     #[test]
     fn gateway_selection_uses_protocol_metadata_never_an_agent_or_method_name() {
         let methods = methods(&json!([

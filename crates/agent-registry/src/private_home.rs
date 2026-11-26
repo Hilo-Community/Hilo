@@ -1,5 +1,6 @@
 //! Persistent state for one installation, never the user's home or a workspace directory.
 use crate::profiles::AgentProfile;
+use path_util::plain_path;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -66,22 +67,6 @@ fn beneath(root: &Path, relative: &str, directory: bool) -> io::Result<PathBuf> 
         }
     }
     Ok(path)
-}
-
-fn plain_path(path: PathBuf) -> PathBuf {
-    if let Some(text) = path.to_str() {
-        if let Some(rest) = text.strip_prefix(r"\\?\") {
-            let bytes = rest.as_bytes();
-            if bytes.len() >= 3
-                && bytes[0].is_ascii_alphabetic()
-                && bytes[1] == b':'
-                && bytes[2] == b'\\'
-            {
-                return PathBuf::from(rest);
-            }
-        }
-    }
-    path
 }
 
 impl PrivateAgentHome {

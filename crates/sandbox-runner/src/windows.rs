@@ -31,6 +31,7 @@ use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use path_util::plain_path as plain;
 use sandbox_windows::{JobLimits, LaunchConfig};
 
 use crate::engine::{EngineCapabilities, Launch, OsSandboxEngine};
@@ -148,7 +149,9 @@ impl AppContainerEngine {
         if spec.mediate_worktree_reads {
             for entry in fs::read_dir(&spec.worktree_root)? {
                 let path = plain(&entry?.path());
-                if path != plain(&spec.program) && !plain(&spec.tmp_dir).starts_with(&path) {
+                if !plain(&spec.program).starts_with(&path)
+                    && !plain(&spec.tmp_dir).starts_with(&path)
+                {
                     denied_read_paths.push(path);
                 }
             }
@@ -186,24 +189,6 @@ impl AppContainerEngine {
             stdin_piped: false,
         })
     }
-}
-
-/// `\\?\C:\dir` to `C:\dir`: the verbatim form that `canonicalize` returns is not accepted as a
-/// working directory by every program. Other forms (UNC, device paths) are kept as they are.
-fn plain(path: &Path) -> PathBuf {
-    if let Some(text) = path.to_str() {
-        if let Some(rest) = text.strip_prefix(r"\\?\") {
-            let bytes = rest.as_bytes();
-            if bytes.len() >= 3
-                && bytes[0].is_ascii_alphabetic()
-                && bytes[1] == b':'
-                && bytes[2] == b'\\'
-            {
-                return PathBuf::from(rest);
-            }
-        }
-    }
-    path.to_path_buf()
 }
 
 impl OsSandboxEngine for AppContainerEngine {
@@ -391,6 +376,41 @@ mod tests {
     use super::{environment, plain};
     use std::ffi::OsString;
     use std::path::Path;
+
+    #[test]
+    fn mediated_reads_keep_nested_program_and_scratch_ancestors_accessible() {
+        use super::{AppContainerEngine, Launch, OsSandboxEngine};
+        use crate::SandboxSpec;
+        let work = tempfile::tempdir().unwrap();
+        let root = work.path().canonicalize().unwrap();
+        let bin = root.join("node_modules").join(".bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let program = bin.join("agent-cli.exe");
+        std::fs::write(&program, "test executable").unwrap();
+        let source = root.join("source.txt");
+        std::fs::write(&source, "private").unwrap();
+        let scratch = root.join("scratch").join("run");
+        std::fs::create_dir_all(&scratch).unwrap();
+        let mut spec = SandboxSpec::new(&root, &program);
+        spec.worktree_read_only = true;
+        spec.mediate_worktree_reads = true;
+        spec.denied_read_paths.push(source.clone());
+        let mut validated = spec.validate().unwrap();
+        validated.tmp_dir = scratch;
+        let engine = AppContainerEngine::with_journal_dir(root.join("journal"));
+        let Launch::AppContainer(config) = engine.prepare(&validated).unwrap() else {
+            panic!("AppContainer required")
+        };
+        assert!(config.denied_read_paths.contains(&plain(&source)));
+        assert!(config
+            .denied_read_paths
+            .iter()
+            .all(|path| !plain(&program).starts_with(path)));
+        assert!(config
+            .denied_read_paths
+            .iter()
+            .all(|path| !plain(&validated.tmp_dir).starts_with(path)));
+    }
 
     #[test]
     fn the_environment_has_the_system_variables_the_callers_and_one_private_temp() {

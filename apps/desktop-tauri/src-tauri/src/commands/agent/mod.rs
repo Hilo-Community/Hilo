@@ -54,12 +54,20 @@ fn agent(state: &DesktopAppState, id: u32) -> Result<Agent, String> {
     Ok(session)
 }
 
+/// Stops every session in parallel: each `stop()` can block for several seconds waiting for its
+/// sandboxed process tree to actually exit before releasing its permissions, and this runs
+/// synchronously on app exit — sequentially it would block the UI for that long times the number
+/// of open sessions.
 fn stop_all(sessions: Vec<Agent>) {
-    for agent in sessions {
-        if let Ok(mut agent) = agent.lock() {
-            agent.stop();
+    std::thread::scope(|scope| {
+        for agent in &sessions {
+            scope.spawn(|| {
+                if let Ok(mut agent) = agent.lock() {
+                    agent.stop();
+                }
+            });
         }
-    }
+    });
 }
 
 /// Stops every agent, whatever its workspace (the app is exiting).
