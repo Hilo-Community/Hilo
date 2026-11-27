@@ -235,40 +235,82 @@ async fn the_budget_is_reserved_before_the_runtime_is_contacted() {
 
 /// Real runtime benchmark (LOT-014 blocking): needs `ollama pull qwen2.5-coder:1.5b-base`.
 /// Run with `cargo test -p model-gateway --test lot014_gateway -- --ignored --nocapture`.
+///
+/// What the editor sends while someone types in real code: the window of `window.rs` around a
+/// cursor that advances a few characters per request, 32 output tokens. Each of 8 places in
+/// the file starts cold (a prompt the runtime has never seen); that first request is reported
+/// apart, and the p95 is taken over the keystrokes that follow it.
 #[tokio::test]
 #[ignore = "needs a local Ollama with qwen2.5-coder:1.5b-base"]
 async fn local_completion_p95_is_at_most_700_ms() {
+    use model_gateway::window::{context_bounds, MAX_OUTPUT_TOKENS};
     let gateway = gateway(ModelRegistry::builtin().entries().to_vec());
     let budget = TokenBudget::new(u64::MAX);
     let policy = PrivacyPolicy::strict_local();
     let model = "ollama/qwen2.5-coder:1.5b-base";
-    // The first call loads the model: it is not a keystroke latency.
+    let code: Vec<char> = [
+        include_str!("../src/gateway.rs"),
+        include_str!("../src/registry.rs"),
+        include_str!("../src/ollama.rs"),
+    ]
+    .concat()
+    .chars()
+    .collect();
+    let at = |place: usize, cursor: usize| {
+        let (start, end) = context_bounds(cursor, code.len());
+        CompletionRequest {
+            // A distinct first line per place: nothing is reused from another place.
+            prefix: format!(
+                "// place {place}\n{}",
+                code[start..cursor].iter().collect::<String>()
+            ),
+            suffix: code[cursor..end].iter().collect(),
+            max_output_tokens: MAX_OUTPUT_TOKENS,
+            stop: vec!["\n\n\n".into()],
+        }
+    };
+    // Loads the model: not a keystroke latency.
     gateway
         .complete(
             model,
             &policy,
             &budget,
-            &request(),
+            &at(99, 3000),
             &CancellationToken::new(),
         )
         .await
         .expect("Ollama must be running with the model pulled");
-    let mut samples = Vec::new();
-    for i in 0..40 {
-        let mut asked = request();
-        asked.prefix = format!("// variant {i}\n{}", asked.prefix);
-        let started = Instant::now();
-        gateway
-            .complete(model, &policy, &budget, &asked, &CancellationToken::new())
-            .await
-            .unwrap();
-        samples.push(started.elapsed());
+    let (mut cold, mut typing) = (Vec::new(), Vec::new());
+    for place in 0..8 {
+        let first = 2600 + place * 1100;
+        for typed in 0..6 {
+            let request = at(place, first + typed * 2);
+            let started = Instant::now();
+            gateway
+                .complete(model, &policy, &budget, &request, &CancellationToken::new())
+                .await
+                .unwrap();
+            let elapsed = started.elapsed();
+            if typed == 0 {
+                cold.push(elapsed)
+            } else {
+                typing.push(elapsed)
+            }
+        }
     }
-    samples.sort();
-    let p95 = samples[samples.len() * 95 / 100 - 1];
+    cold.sort();
+    typing.sort();
+    let p95 = typing[typing.len() * 95 / 100 - 1];
     println!(
-        "local completion p50 {:?}, p95 {p95:?}",
-        samples[samples.len() / 2]
+        "first request at a new place: p50 {:?}, max {:?}",
+        cold[cold.len() / 2],
+        cold[cold.len() - 1]
+    );
+    println!(
+        "while typing ({} requests): p50 {:?}, p95 {p95:?}, max {:?}",
+        typing.len(),
+        typing[typing.len() / 2],
+        typing[typing.len() - 1]
     );
     assert!(p95 <= Duration::from_millis(700), "p95 {p95:?}");
 }

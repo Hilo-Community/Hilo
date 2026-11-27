@@ -5,6 +5,7 @@ mod gateway;
 pub mod memory;
 pub mod ollama;
 pub mod registry;
+pub mod window;
 
 pub use gateway::{
     BackendOutput, BoxFuture, CancellationToken, Completion, CompletionRequest, GatewayError,

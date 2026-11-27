@@ -14,6 +14,7 @@ use host_core::{utf16_to_char_idx, Utf16CodeUnitOffset};
 use model_gateway::{
     memory::{self, Recommendation},
     ollama::{self, OllamaBackend},
+    window::{context_bounds, MAX_OUTPUT_TOKENS},
     CancellationToken, CompletionRequest, GatewayError, ModelGateway, ModelRegistry, PrivacyPolicy,
     TokenBudget, OLLAMA_DEFAULT_ENDPOINT,
 };
@@ -22,10 +23,6 @@ use tauri::Manager;
 
 use crate::state::DesktopAppState;
 
-/// Characters of context sent before and after the cursor.
-const PREFIX_CHARS: usize = 4000;
-const SUFFIX_CHARS: usize = 1500;
-const MAX_OUTPUT_TOKENS: u32 = 64;
 const MAX_LINES: usize = 8;
 /// Tokens a session of the app may spend on completions; generous for a local model, it
 /// bounds a runaway loop rather than normal typing.
@@ -154,8 +151,8 @@ fn context(state: &DesktopAppState, request: &InlineCompletionRequest) -> Result
     let rope = session.rope();
     let cursor =
         utf16_to_char_idx(rope, request.position_utf16).map_err(|error| error.to_string())?;
-    let start = cursor.saturating_sub(PREFIX_CHARS);
-    let end = (cursor + SUFFIX_CHARS).min(rope.len_chars());
+    // Anchored window: the start does not move while typing, so Ollama reuses the prompt.
+    let (start, end) = context_bounds(cursor, rope.len_chars());
     Ok(Context::Ready(
         rope.slice(start..cursor).to_string(),
         rope.slice(cursor..end).to_string(),

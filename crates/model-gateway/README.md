@@ -15,6 +15,9 @@ The one door between Hilo and a model.
 - **Ollama** (`ollama.rs`): `POST /api/generate` with `suffix` (Ollama applies the model's FIM
   template), `keep_alive` 30 min. The client ignores `HTTP(S)_PROXY`/`ALL_PROXY` and follows no
   redirect, so local traffic cannot be routed off the machine.
+- **Window** (`window.rs`): 2000 characters before the cursor, 300 after, 32 output tokens. The
+  start is anchored in steps of 512 characters, so it does not move while typing and Ollama
+  reuses the prompt it already evaluated.
 - **Memory** (`memory.rs`): picks the largest local model that fits in free memory, or says none
   does (then use a key of your own).
 
@@ -35,11 +38,24 @@ call in flight. Completion uses `PrivacyPolicy::strict_local()` and only local b
   FIM request shape and usage, cancellation (`cancel()` < 1 ms, call ended < 50 ms), budget
   reserved before contact.
 - `tests/ollama_ignores_proxy.rs`: proxy variables do not reroute the local runtime.
-- Real latency (ignored by default, needs `ollama pull qwen2.5-coder:1.5b-base`):
+- Real latency (ignored by default, needs `ollama pull qwen2.5-coder:1.5b-base`). It sends what
+  the editor sends while someone types in real code: 8 places, each a cold first request then 5
+  keystrokes.
 
   ```bash
   cargo test -p model-gateway --test lot014_gateway -- --ignored --nocapture
   ```
+
+### Measured (2026-11-27, Apple M1 Pro 16 GB, macOS 27.0.1, Ollama 0.40.18, Q4_K_M)
+
+| Case | p50 | p95 | max |
+|---|---|---|---|
+| While typing (40 requests) | 161 ms | **463 ms** | 465 ms |
+| First request at a new place (8) | 864 ms | — | 895 ms |
+
+The editor waits 120 ms after the last keystroke before asking, on top of these. Without the
+anchored window (the start moving with every keystroke) the p95 was 2.0 s: about 1 ms per prompt
+token is spent evaluating a prompt the runtime has not seen, and 11 ms per generated token.
 
 ## Not here
 
