@@ -49,7 +49,7 @@ fn fixture() -> Fixture {
         .unwrap();
     let node_modules = repo_root.join("node_modules");
     assert!(
-        node_modules.join("vitest/vitest.mjs").is_file(),
+        node_modules.join("vitest").join("vitest.mjs").is_file(),
         "run `pnpm install` first: the Judge tests use the repository's Vitest, Biome and TypeScript"
     );
     let workspace = tempfile::tempdir().unwrap();
@@ -183,6 +183,24 @@ fn judge(fx: &Fixture, compiled: &CompiledChangeSet, attempt: u32) -> Attempt {
     }
 }
 
+/// What each check reported: shown when a verdict is not the expected one.
+fn report(outcome: &JudgeOutcome) -> String {
+    let mut text = String::new();
+    for step in &outcome.steps {
+        text.push_str(&format!(
+            "{:?} passed={} exit={} {:?}\n",
+            step.kind, step.passed, step.record.exit_code, step.record.args
+        ));
+        for item in &step.items {
+            text.push_str(&format!(
+                "    {} [{}] {}\n",
+                item.file_path, item.code, item.message
+            ));
+        }
+    }
+    text
+}
+
 fn with_sub(body: &str) -> String {
     MONEY_BASE.replace("  return a - b;\n", body)
 }
@@ -288,7 +306,12 @@ fn blocking_judge_loop_reports_red_then_green_within_the_retry_cap() {
         ["src/money.test.ts"],
         "format.test.ts is not impacted"
     );
-    assert_eq!(attempt1.outcome.verdict(), HiloValidationState::FailedRed);
+    assert_eq!(
+        attempt1.outcome.verdict(),
+        HiloValidationState::FailedRed,
+        "{}",
+        report(&attempt1.outcome)
+    );
     let (state, elapsed) = attempt1.first_verdict.unwrap();
     assert_eq!(state, HiloValidationState::FailedRed);
     assert!(
@@ -302,7 +325,10 @@ fn blocking_judge_loop_reports_red_then_green_within_the_retry_cap() {
         .diagnostics
         .items
         .iter()
-        .any(|item| item.file_path == "src/money.test.ts" && item.message.contains("subtracts")));
+        .any(|item| item.file_path == "src/money.test.ts" && item.message.contains("subtracts")),
+        "{}",
+        report(&attempt1.outcome)
+    );
     assert!(fx.authority.verify_evidence(&attempt1.outcome.evidence));
     let CorrectionDecision::Retry {
         next_attempt,
@@ -322,8 +348,8 @@ fn blocking_judge_loop_reports_red_then_green_within_the_retry_cap() {
     assert_eq!(
         attempt2.outcome.verdict(),
         HiloValidationState::ValidatedGreen,
-        "{:#?}",
-        attempt2.outcome.steps
+        "{}",
+        report(&attempt2.outcome)
     );
     assert!(attempt2.first_verdict.unwrap().1 < Duration::from_secs(2));
     let kinds: Vec<_> = attempt2
@@ -380,7 +406,12 @@ fn blocking_judge_loop_stops_on_a_repeated_failure_and_after_two_retries() {
     ));
     let (again, _) = compiled("same", 2, MONEY_BASE, &regression);
     let outcome = judge(&fx, &again, 2).outcome;
-    assert_eq!(outcome.verdict(), HiloValidationState::FailedRed);
+    assert_eq!(
+        outcome.verdict(),
+        HiloValidationState::FailedRed,
+        "{}",
+        report(&outcome)
+    );
     assert_eq!(
         repeated.record(&outcome),
         CorrectionDecision::Stop(StopReason::SameFailureRepeated)
@@ -430,7 +461,12 @@ fn blocking_concurrent_user_edit_conflicts_and_is_never_overwritten() {
     let proposed = with_sub("  return -(b - a);\n");
     let (compiled_change, changeset) = compiled("concurrent", 1, MONEY_BASE, &proposed);
     let outcome = judge(&fx, &compiled_change, 1).outcome;
-    assert_eq!(outcome.verdict(), HiloValidationState::ValidatedGreen);
+    assert_eq!(
+        outcome.verdict(),
+        HiloValidationState::ValidatedGreen,
+        "{}",
+        report(&outcome)
+    );
     let change = judged(changeset, &compiled_change, &outcome, 1);
 
     // While the Judge ran, the user changed the very line the patch replaces.
@@ -491,6 +527,12 @@ fn blocking_green_range_goes_stale_on_edit_and_is_verified_again() {
     let (compiled_change, changeset) =
         compiled("cycle", 1, MONEY_BASE, &with_sub("  return -(b - a);\n"));
     let outcome = judge(&fx, &compiled_change, 1).outcome;
+    assert_eq!(
+        outcome.verdict(),
+        HiloValidationState::ValidatedGreen,
+        "{}",
+        report(&outcome)
+    );
     let change = judged(changeset, &compiled_change, &outcome, 1);
     let mut documents = document(MONEY_BASE);
     accept(&fx, &mut documents, &change).unwrap();
