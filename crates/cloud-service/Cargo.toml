@@ -1,0 +1,53 @@
+[package]
+name = "cloud-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Hilo Managed Cloud Service: Axum/Postgres/OIDC API, single-tenant Fargate dispatch, and Cloudflare R2/Pages static publishing (LOT-017)"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "hilo-cloud-service"
+path = "src/main.rs"
+
+[dependencies]
+host-core.workspace = true
+sandbox-runner.workspace = true
+context-engine.workspace = true
+judge-orchestrator.workspace = true
+agent-gateway.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+blake3.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+axum = { version = "=0.8.9", default-features = false, features = ["json", "query", "tokio", "http1", "ws", "macros"] }
+tower = { version = "=0.5.3", default-features = false, features = ["util"] }
+tower-http = { version = "=0.6.11", default-features = false, features = ["cors"] }
+tracing-subscriber = { version = "=0.3.20", default-features = false, features = ["fmt", "env-filter"] }
+
+# Postgres access (runtime-checked queries only — no `query!` macro, no compile-time DB needed).
+sqlx = { version = "=0.9.1", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring-webpki", "migrate", "macros", "json", "chrono", "uuid"] }
+uuid = { version = "=1.18.1", features = ["v4", "serde"] }
+chrono = { version = "=0.4.42", default-features = false, features = ["clock", "serde"] }
+
+# OIDC Authorization Code + PKCE against a configured issuer.
+openidconnect = { version = "=4.1.0", default-features = false, features = ["reqwest", "rustls-tls"] }
+
+# Cloudflare Pages API + R2 (S3-compatible) object storage; the only place in the workspace these
+# credentials are held.
+aws-sdk-s3 = "=1.162.0"
+aws-config = "=1.13.4"
+reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls", "json", "blocking"] }
+
+futures = "=0.3.34"
+async-stream = "=0.3.6"
+tar = "=0.4.46"
+
+[dev-dependencies]
+tempfile.workspace = true

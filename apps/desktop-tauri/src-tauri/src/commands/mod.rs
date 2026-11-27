@@ -11,6 +11,7 @@ pub mod documents;
 pub mod judge;
 pub mod language;
 pub mod migration;
+pub mod publish;
 pub mod search;
 pub mod semantic;
 pub mod session_cache;

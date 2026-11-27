@@ -122,6 +122,8 @@ pub fn run() {
             commands::search::search_workspace_command,
             commands::search::analyze_document_command,
             commands::migration::run_native_migration_command,
+            commands::publish::publish_build_command,
+            commands::publish::rollback_build_command,
             commands::debug::debug_start_command,
             commands::debug::debug_request_command,
             commands::debug::debug_set_breakpoints_command,

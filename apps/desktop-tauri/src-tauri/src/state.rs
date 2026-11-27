@@ -80,6 +80,11 @@ pub(crate) struct DesktopAppState {
     pub(crate) completion: crate::commands::completion::CompletionState,
     /// The Judge: proposals being verified, reviews, planned accepts, stale ranges (`LOT-015`).
     pub(crate) judge: crate::commands::judge::JudgeState,
+    /// `StaticPublishService` client (`LOT-017`): talks only to the Cloud Service's own
+    /// `/v1/publish`/`/v1/rollback` endpoints, never to R2/Cloudflare/KMS directly. `None` until
+    /// `HILO_CLOUD_SERVICE_URL` is configured — publishing then stays unavailable rather than
+    /// falling back to anything local.
+    pub(crate) publish_client: Mutex<Option<Arc<host_core::publish::PublishClient>>>,
 }
 
 impl DesktopAppState {
@@ -122,6 +127,7 @@ impl DesktopAppState {
             exit_confirmed: AtomicBool::new(false),
             completion,
             judge: crate::commands::judge::JudgeState::new(),
+            publish_client: Mutex::new(None),
         }
     }
 
