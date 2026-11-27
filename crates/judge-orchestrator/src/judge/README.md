@@ -60,5 +60,7 @@ revision, producing exactly the planned content.
   a file it proposed sees the original text.
 - A proposal whose target the user edited before the turn ended cannot be verified: it is
   reported as an error, not as a review.
+- Windows: no tool runs (worktrees there are copies without the installed packages, LOT-011);
+  every change is `🟡` and the user reviews it. The real-tool tests are Unix only.
 - Only JavaScript/TypeScript tooling is planned (`node_verification_plan`). Without Node.js or
   without the workspace's tools nothing is checked and the change is `🟡`.

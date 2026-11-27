@@ -52,12 +52,19 @@ impl NodeToolchain {
 
 /// The plan for `gate`'s workspace, or `None` while it is untrusted. A tool the workspace
 /// does not install is left out of the plan.
+///
+/// `None` on Windows too: task worktrees there are copies without the installed packages
+/// (the AppContainer refuses the links, LOT-011), so the tools could not run. Nothing is
+/// checked and the change stays `🟡`, never a false `🔴` or `🟢`.
 #[must_use]
 pub fn node_verification_plan(
     gate: &WorkspaceTrustGate,
     toolchain: &NodeToolchain,
     limits: ResourceLimits,
 ) -> Option<VerificationPlan> {
+    if cfg!(windows) {
+        return None;
+    }
     gate.authorize(GatedCapability::WorkspaceLocalBinary).ok()?;
     let root = gate.workspace_root();
     let tool = |entry: &str| {
@@ -74,4 +81,36 @@ pub fn node_verification_plan(
         read_only_paths: toolchain.read_only_paths.clone(),
         limits,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_windows_plan_runs_no_tool_and_an_untrusted_workspace_gets_no_plan() {
+        let workspace = tempfile::tempdir().unwrap();
+        let store = tempfile::tempdir().unwrap();
+        for entry in [VITEST, BIOME, TSC] {
+            let path = workspace.path().join(entry);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, "").unwrap();
+        }
+        let gate =
+            WorkspaceTrustGate::open(store.path().join("trust.json"), workspace.path()).unwrap();
+        let toolchain = NodeToolchain {
+            node: PathBuf::from("/usr/bin/node"),
+            read_only_paths: Vec::new(),
+        };
+        let limits = ResourceLimits::default();
+        assert!(node_verification_plan(&gate, &toolchain, limits).is_none());
+        gate.grant().unwrap();
+        let plan = node_verification_plan(&gate, &toolchain, limits);
+        if cfg!(windows) {
+            assert!(plan.is_none());
+        } else {
+            let plan = plan.unwrap();
+            assert!(plan.vitest.is_some() && plan.biome.is_some() && plan.typescript.is_some());
+        }
+    }
 }

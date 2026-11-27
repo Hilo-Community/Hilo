@@ -1,6 +1,10 @@
 //! LOT-015 blocking tests, with real processes only: a real Git repository and its invisible
 //! checkpoints, the native OS sandbox, and the repository's own Vitest, Biome and TypeScript
 //! (`pnpm install` must have run, and `node` must be on `PATH`).
+//!
+//! Unix only: on Windows the Judge plans no tool run (worktrees there are copies without the
+//! installed packages, LOT-011), which `the_windows_plan_runs_no_tool` checks instead.
+#![cfg(unix)]
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -74,10 +78,7 @@ fn fixture() -> Fixture {
     for (path, text) in files {
         std::fs::write(root.join(path), text).unwrap();
     }
-    #[cfg(unix)]
     std::os::unix::fs::symlink(&node_modules, root.join("node_modules")).unwrap();
-    #[cfg(windows)]
-    std::os::windows::fs::symlink_dir(&node_modules, root.join("node_modules")).unwrap();
     git(root, &["init", "-q", "-b", "main"]);
     git(root, &["config", "user.name", "Test"]);
     git(root, &["config", "user.email", "test@example.invalid"]);
