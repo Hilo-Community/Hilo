@@ -8,6 +8,7 @@ pub mod completion;
 pub mod context_index;
 pub mod debug;
 pub mod documents;
+pub mod judge;
 pub mod language;
 pub mod migration;
 pub mod search;

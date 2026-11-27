@@ -8,6 +8,7 @@ export * from "./inline-completion.js";
 export * from "./language-features.js";
 export * from "./indent-guide-columns.js";
 export * from "./languages.js";
+export * from "./merge-review.js";
 export * from "./onboarding-vsix.js";
 export * from "./scope-guides.js";
 export * from "./selection.js";

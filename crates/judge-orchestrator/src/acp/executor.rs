@@ -313,7 +313,7 @@ impl ToolExecutor for AgentToolExecutor {
                 }
                 proposals.insert(call.idempotency_key.clone(), edit.clone());
                 (self.sink)(AcpEvent::ProposedEdit { edit });
-                "Proposal recorded for review; no file was written. Applying edits requires LOT-015.".into()
+                "Proposal recorded; no file was written. When your turn ends, the Hilo Judge verifies your proposals and the user reviews them.".into()
             }
             "run_sandbox_command" => self.command(call)?,
             "query_local_mcp" => {

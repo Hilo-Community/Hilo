@@ -40,6 +40,25 @@ fn gate(state: &DesktopAppState) -> Result<WorkspaceTrustGate, String> {
 
 type Agent = Arc<Mutex<AcpSessionSupervisor>>;
 
+pub(crate) fn session_start_now() -> u64 {
+    session_start::now()
+}
+
+pub(crate) fn shared_sandbox_runner(
+    state: &DesktopAppState,
+) -> Result<Arc<dyn sandbox_runner::SandboxRunner>, String> {
+    session_start::sandbox_runner(state)
+}
+
+/// Sends `text` to agent `id` as a new prompt (the Judge's feedback, the user's adjustment).
+pub(crate) fn prompt_agent(state: &DesktopAppState, id: u32, text: String) -> Result<(), String> {
+    agent(state, id)?
+        .lock()
+        .map_err(|_| "agent lock poisoned")?
+        .prompt(text)
+        .map_err(|e| e.to_string())
+}
+
 /// The session `id`, if the gate of the workspace it was STARTED in still allows it. That is its
 /// own gate, not the active workspace's: after switching project, the old project's agent keeps
 /// being driven under its own trust decision (and is refused once that one is revoked).
@@ -156,6 +175,7 @@ pub async fn agent_stop_command(app: tauri::AppHandle, id: u32) -> Result<(), St
                 .map_err(|_| "agent lock poisoned")?
                 .stop();
         }
+        crate::commands::judge::forget_agent(&state, id);
         Ok(())
     })
     .await

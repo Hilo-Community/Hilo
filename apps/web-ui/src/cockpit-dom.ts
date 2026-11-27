@@ -17,6 +17,8 @@ import { SidebarPanels } from "./cockpit/shell/sidebar-panels.js";
 import { TitleBar } from "./cockpit/shell/title-bar.js";
 import type { TerminalHost, TerminalViewFactory } from "./cockpit/terminal/terminal-pane.js";
 import { createXtermView } from "./cockpit/terminal/xterm-view.js";
+import { JudgeController } from "./judge/controller.js";
+import type { JudgeHost } from "./judge/types.js";
 import { OnboardingModalController, createInitialOnboardingState } from "./onboarding/index.js";
 import { type AgentRegistryHost, SettingsPage } from "./settings/index.js";
 import { UiPreferences, browserStorage } from "./state/ui-preferences.js";
@@ -84,6 +86,8 @@ export interface CockpitDomControllerOptions {
   /** JavaScript debugging (F5). Without it the debugger is not offered. */
   readonly debugHost?: DebugHost;
   readonly agentHost?: AgentHost;
+  /** The Judge (`LOT-015`): reviews of agent changes. Without it agent changes are never applied. */
+  readonly judgeHost?: JudgeHost;
   /** The ACP agent registry of the Settings screen. Without it there is no Settings button. */
   readonly agentRegistryHost?: AgentRegistryHost;
   /** The desktop host opens a separate native Settings window. */
@@ -128,6 +132,7 @@ export class CockpitDomController {
   private readonly terminalAvailable: boolean;
   private readonly layout: ShellLayout;
   private readonly debugPanel: DebugPanel | null;
+  private readonly judge: JudgeController | null;
   /** Breakpoints of every file, keyed by project and document id. */
   private readonly breakpoints = new Map<string, readonly number[]>();
   /** Set while the editor switches file: its breakpoint changes then are not the user's. */
@@ -181,7 +186,11 @@ export class CockpitDomController {
       preferences,
       header: this.titleBar.zone4Header,
       saveActiveDocument: () => this.saveActiveDocument(),
-      onFileShown: (path) => this.requestNativeAnalysis(path),
+      onFileShown: (path) => {
+        this.requestNativeAnalysis(path);
+        void this.judge?.refreshStates();
+      },
+      onReviewLeft: () => this.judge?.reviewLeft(),
       onUnsavedChange: () => this.reportUnsaved(),
       onTreeScroll: (scrollTopPx, viewportHeightPx) =>
         this.storeFileTreeScroll(scrollTopPx, viewportHeightPx),
@@ -306,6 +315,16 @@ export class CockpitDomController {
         })
       : null;
     if (this.debugPanel) this.sidebar.debugSection.prepend(this.debugPanel.element);
+    this.judge = options.judgeHost
+      ? new JudgeController(doc, {
+          host: options.judgeHost,
+          editorView,
+          banner: this.inspector.judgeBanner,
+          showReview: (element) => this.inspector.showReview(element),
+          closeReview: () => this.inspector.closeReview(),
+          openFile: (path) => this.openWorkspaceFile(path),
+        })
+      : null;
     void this.workspaceTrust?.refresh();
 
     this.onboardingController.mountModal(this.shell);
@@ -315,6 +334,7 @@ export class CockpitDomController {
     this.inspector.update();
     this.titleBar.recordChatVisit(stores.zone3.getState().activeChatId);
     this.inspector.mountEditor();
+    void this.judge?.start();
 
     if (options.onAgentFinished) {
       this.unsubscribers.push(
@@ -532,6 +552,7 @@ export class CockpitDomController {
   destroy(): void {
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.unsubscribers.length = 0;
+    this.judge?.dispose();
     this.settings?.destroy();
     this.workspaceTrust?.destroy();
     this.chatGrid.destroy();

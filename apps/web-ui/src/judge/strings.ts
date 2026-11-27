@@ -1,0 +1,45 @@
+import type { JudgeStepKind } from "./types.js";
+
+export const JUDGE_STRINGS = {
+  panel: "Change review",
+  verifying: (attempt: number) => `Judge: verifying attempt ${attempt}…`,
+  firstVerdict: (label: string, seconds: string) =>
+    `Judge: ${label} on impacted tests (${seconds} s)`,
+  retrying: (attempt: number) => `Judge: failed, sent back to the agent (attempt ${attempt})`,
+  ready: (label: string) => `Change ready for review: ${label}`,
+  open: "Open review",
+  dismiss: "Dismiss",
+  attempts: (count: number) => (count === 1 ? "1 attempt" : `${count} attempts`),
+  stopped: {
+    RetriesExhausted: "Automatic corrections stopped after 2 retries.",
+    SameFailureRepeated: "Automatic corrections stopped: the same failure came back.",
+  } as Record<string, string>,
+  steps: {
+    ImpactedTests: "Impacted tests",
+    Lint: "Biome",
+    TypeCheck: "TypeScript",
+    FullSuite: "Full test suite",
+  } satisfies Record<JudgeStepKind, string>,
+  passed: "passed",
+  failed: "failed",
+  unified: "Unified",
+  sideBySide: "Side by side",
+  layout: "Diff layout",
+  files: "Changed files",
+  accept: "✓ Accept",
+  reject: "✕ Reject",
+  adjust: "Request Adjustment",
+  adjustPlaceholder: "What should the agent change?",
+  send: "Send to agent",
+  cancel: "Cancel",
+  close: "Close review",
+  conflict:
+    "You edited this code while the agent's change was being verified. Your edit is kept and the change was not applied.",
+  conflictOriginal: "Yours (current)",
+  conflictProposed: "Agent's change (verified)",
+  original: "Current",
+  proposed: "Proposed",
+  noChecks: "No check could run on this change: review it yourself.",
+  accepting: "Applying…",
+  moved: "The file changed while applying; try again.",
+} as const;

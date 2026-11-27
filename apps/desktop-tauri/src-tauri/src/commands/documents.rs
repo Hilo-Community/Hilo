@@ -99,16 +99,24 @@ pub(crate) fn apply_transaction(
     // A keystroke: any suggestion being computed is for a text that no longer exists.
     state.completion.cancel_inflight();
     let services = state.language_services();
-    state
+    let tx =
+        host_core::decode_editor_transaction_ipc(payload).map_err(|error| error.to_string())?;
+    let mut bridge = state
         .bridge
         .lock()
-        .map_err(|_| "desktop document bridge lock poisoned".to_string())?
+        .map_err(|_| "desktop document bridge lock poisoned".to_string())?;
+    // An agent edit reaches the document only as a change the user accepted in a Judge review.
+    let accepted =
+        crate::commands::judge::authorize_transaction(state, bridge.document_service(), &tx)?;
+    let encoded = bridge
         .apply_binary_transaction_observed(payload, |rope_before, changes, session| {
             if let Some(services) = &services {
                 services.transaction_applied(rope_before, changes, session);
             }
         })
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    crate::commands::judge::after_transaction(state, bridge.documents_mut(), &tx, accepted);
+    Ok(encoded)
 }
 
 #[tauri::command]
@@ -143,6 +151,7 @@ pub(crate) fn save_document(
         .documents_mut()
         .save_document_atomic(document_id, session_generation)
         .map_err(|error| error.to_string())?;
+    crate::commands::judge::document_saved(state, document_id);
     if let Some(root) = workspace_root {
         if let Ok(mut context) = state.context_engine.lock() {
             if let Some(context) = context.as_mut() {

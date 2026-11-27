@@ -1,0 +1,177 @@
+/* The Judge (LOT-015): progress notices above the editor and the change review of Zone 4. */
+.hilo-judge-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--color-text-primary);
+  background: var(--color-card, #1e1e1e);
+  border-bottom: 1px solid var(--color-border, #333);
+}
+.hilo-judge-banner[hidden] {
+  display: none;
+}
+.hilo-judge-banner-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.hilo-judge-banner button,
+.hilo-judge-review button {
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--color-border, #555);
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.hilo-judge-banner button:hover:not(:disabled),
+.hilo-judge-review button:hover:not(:disabled) {
+  background: var(--color-selected, #2a2d2e);
+}
+.hilo-judge-review button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.hilo-zone-4-review-host {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.hilo-zone-4-review-host[hidden] {
+  display: none;
+}
+.hilo-judge-review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  min-height: 100%;
+  font-size: 12px;
+  color: var(--color-text-primary);
+  background: var(--color-main);
+  overflow-wrap: anywhere;
+}
+.hilo-judge-review-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hilo-judge-meta {
+  flex: 1;
+  color: var(--color-text-secondary);
+}
+.hilo-judge-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-weight: 600;
+}
+/* Same palette as the editor's validation ranges (HILO_STATE_VISUAL_TOKENS). */
+.hilo-judge-badge[data-state="ValidatedGreen"] {
+  background: #052e16;
+  border-color: #22c55e;
+  color: #86efac;
+}
+.hilo-judge-badge[data-state="ReviewYellow"] {
+  background: #422006;
+  border-color: #eab308;
+  color: #fde047;
+}
+.hilo-judge-badge[data-state="FailedRed"] {
+  background: #450a0a;
+  border-color: #ef4444;
+  color: #fca5a5;
+}
+.hilo-judge-badge[data-state="StaleOrange"] {
+  background: #431407;
+  border-color: #f97316;
+  color: #fdba74;
+}
+.hilo-judge-badge[data-state="UnchangedBlue"] {
+  background: #0f172a;
+  border-color: #3b82f6;
+  color: #93c5fd;
+}
+.hilo-judge-stopped,
+.hilo-judge-status {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+.hilo-judge-steps,
+.hilo-judge-diagnostics {
+  margin: 0;
+  padding-left: 18px;
+}
+.hilo-judge-step[data-passed="false"] {
+  color: #fca5a5;
+}
+.hilo-judge-diagnostic {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  white-space: pre-wrap;
+}
+.hilo-judge-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+.hilo-judge-files,
+.hilo-judge-layouts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.hilo-judge-review .hilo-judge-file[aria-selected="true"],
+.hilo-judge-review .hilo-judge-layout[aria-pressed="true"] {
+  background: var(--color-selected, #2a2d2e);
+  border-color: var(--color-text-secondary, #888);
+}
+.hilo-judge-conflict {
+  margin: 0;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #f97316;
+  background: #431407;
+  color: #fdba74;
+}
+.hilo-judge-conflict[hidden] {
+  display: none;
+}
+.hilo-merge-review {
+  flex: 1;
+  min-height: 160px;
+  border: 1px solid var(--color-border, #333);
+  border-radius: 6px;
+  overflow: auto;
+}
+.hilo-merge-review .cm-mergeView,
+.hilo-merge-review .cm-editor {
+  height: 100%;
+}
+.hilo-judge-actions {
+  display: flex;
+  gap: 8px;
+}
+.hilo-judge-review .hilo-judge-accept:not(:disabled) {
+  border-color: #22c55e;
+}
+.hilo-judge-adjust-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hilo-judge-adjust-form[hidden] {
+  display: none;
+}
+.hilo-judge-adjust-input {
+  min-height: 64px;
+  padding: 8px;
+  color: inherit;
+  background: var(--color-topbar, #252526);
+  border: 1px solid var(--color-border, #555);
+  border-radius: 6px;
+}

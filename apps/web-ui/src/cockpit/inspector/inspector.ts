@@ -24,6 +24,8 @@ export interface InspectorOptions {
   readonly onTreeScroll: (scrollTopPx: number, viewportHeightPx: number) => void;
   /** Called when files stop or start having unsaved changes without an edit (discard, project switch). */
   readonly onUnsavedChange?: () => void;
+  /** The user went to a file while a Judge review was shown: the review is put away. */
+  readonly onReviewLeft?: () => void;
 }
 
 /**
@@ -37,6 +39,11 @@ export class Inspector {
   readonly editorHost: HTMLElement;
   readonly tree: FileTreePanel;
   private readonly previewHost: HTMLElement;
+  /** A Judge review shown in place of the editor (`LOT-015`). */
+  private readonly reviewHost: HTMLElement;
+  /** Judge progress and "ready for review" notices, above the editor. */
+  readonly judgeBanner: HTMLElement;
+  private reviewShown = false;
   private readonly empty: HTMLElement;
   private readonly tabs: HeaderTabs;
   private editorScrollbar: ThinScrollbar | null = null;
@@ -96,9 +103,23 @@ export class Inspector {
     this.empty.textContent = UI_STRINGS.editor.noFile;
     this.empty.hidden = true;
 
+    this.reviewHost = doc.createElement("div");
+    this.reviewHost.className = "hilo-zone-4-review-host";
+    this.reviewHost.hidden = true;
+    this.judgeBanner = doc.createElement("div");
+    this.judgeBanner.className = "hilo-judge-banner";
+    this.judgeBanner.setAttribute("role", "status");
+    this.judgeBanner.hidden = true;
+
     const editorColumn = doc.createElement("div");
     editorColumn.className = "hilo-zone-4-editor-column";
-    editorColumn.append(this.previewHost, this.editorHost, this.empty);
+    editorColumn.append(
+      this.judgeBanner,
+      this.previewHost,
+      this.editorHost,
+      this.reviewHost,
+      this.empty,
+    );
 
     this.tree = new FileTreePanel(doc, {
       className: "hilo-zone-4-tree-column",
@@ -114,8 +135,10 @@ export class Inspector {
             },
           }
         : {}),
-      onOpenFile: (node) =>
-        void this.openFile(node.path, (message) => this.tree.reportError(message)),
+      onOpenFile: (node) => {
+        this.leaveReview();
+        void this.openFile(node.path, (message) => this.tree.reportError(message));
+      },
       onScroll: options.onTreeScroll,
       headerAction: { run: () => this.toggleTree() },
     });
@@ -146,7 +169,10 @@ export class Inspector {
       dataKey: "path",
       closeLabel: uiText.closeTab,
       unsavedLabel: UI_STRINGS.editor.unsaved,
-      onSelect: (path) => void this.openFile(path),
+      onSelect: (path) => {
+        this.leaveReview();
+        void this.openFile(path);
+      },
       onClose: (path) => this.requestCloseTab(path),
     });
   }
@@ -213,10 +239,36 @@ export class Inspector {
 
     const wasHidden = this.editorHost.style.display === "none";
     this.previewHost.style.display = "none";
-    this.editorHost.style.display = noFile ? "none" : "block";
-    this.empty.hidden = !noFile;
+    this.editorHost.style.display = noFile || this.reviewShown ? "none" : "block";
+    this.reviewHost.hidden = !this.reviewShown;
+    this.empty.hidden = !noFile || this.reviewShown;
     if (!noFile && wasHidden) this.options.editorView.getEditorView().requestMeasure();
     this.updateTree();
+  }
+
+  /** Shows a Judge review in place of the editor, which stays mounted (hidden). */
+  showReview(content: HTMLElement): void {
+    this.reviewHost.replaceChildren(content);
+    this.reviewShown = true;
+    this.options.stores.toggleInspector(true);
+    this.update();
+  }
+
+  /** Back to the editor. */
+  closeReview(): void {
+    this.reviewHost.replaceChildren();
+    this.reviewShown = false;
+    this.update();
+  }
+
+  isShowingReview(): boolean {
+    return this.reviewShown;
+  }
+
+  private leaveReview(): void {
+    if (!this.reviewShown) return;
+    this.closeReview();
+    this.options.onReviewLeft?.();
   }
 
   updateTree(): void {

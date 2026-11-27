@@ -20,6 +20,7 @@ import { createTauriAgentHost } from "./tauri-agent-host.js";
 import { createTauriAgentRegistryHost } from "./tauri-agent-registry-host.js";
 import { TauriBinaryHostBridge } from "./tauri-binary-host-bridge.js";
 import { createTauriDebugHost } from "./tauri-debug-host.js";
+import { createTauriJudgeHost } from "./tauri-judge-host.js";
 import { createTauriTerminalHost } from "./tauri-terminal-host.js";
 
 import { mountSettingsWindow } from "./settings-window.js";
@@ -162,6 +163,7 @@ function HiloDesktopApp() {
             () => new Channel<{ agentId: string | null; busy: boolean }>(),
           ),
           agentHost: createTauriAgentHost(invoke, () => new Channel<AcpEvent>()),
+          judgeHost: createTauriJudgeHost(invoke, listen),
           agentRegistryHost: createTauriAgentRegistryHost(invoke),
           openSettingsWindow: () => invoke<void>("open_settings_window_command"),
           // F5: debug the shown JavaScript file (vscode-js-debug, trusted workspaces only).

@@ -4,7 +4,9 @@ mod authority;
 pub(crate) mod paths;
 mod schema;
 
-pub use authority::{AuthorityError, HostAuthority, SignedApproval, SignedTaskSpec};
+pub use authority::{
+    AuthorityError, HostAuthority, SignedApproval, SignedEvidence, SignedTaskSpec,
+};
 use host_core::{Approval, ApprovalActionKind, AutonomyLevel, TaskState, ToolCall, ToolCapability};
 use std::sync::Arc;
 

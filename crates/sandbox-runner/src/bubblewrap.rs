@@ -59,6 +59,9 @@ const ETC_ENTRIES: &[&str] = &[
     "/etc/ca-certificates",
     "/etc/pki",
     "/etc/localtime",
+    // `localhost` must resolve (Vite, which Vitest runs on, looks it up even with no server);
+    // the network namespace stays empty. Seatbelt allows the same file on macOS.
+    "/etc/hosts",
 ];
 
 #[derive(Debug, Clone)]
