@@ -9,6 +9,7 @@ use launch::{sandbox_spec, spawn_agent, LaunchExecutor};
 use super::{
     auth::{self, AgentCredentials, AuthMethod, AuthenticationPlan},
     executor::{AgentToolExecutor, EventSink, WorkspaceText},
+    mcp_relay::{self, McpRelay},
     options::{self, AgentOption},
     protocol::*,
 };
@@ -81,6 +82,9 @@ pub struct AcpHost {
     pub shared_read_only_paths: Vec<PathBuf>,
     pub clock: Arc<dyn Fn() -> Millis + Send + Sync>,
     pub events: EventSink,
+    /// The Host's local MCP server as a standard HTTP MCP server, offered in `session/new` when
+    /// the agent supports HTTP MCP. `None` when the session has no gateway the sandbox can reach.
+    pub mcp_relay: Option<McpRelay>,
 }
 
 enum Control {
@@ -318,7 +322,10 @@ struct Session {
     terminal_authenticated: bool,
     host: AcpHost,
     executor: Arc<AgentToolExecutor>,
-    broker: ToolBroker,
+    broker: Arc<ToolBroker>,
+    /// `mcpServers` entry for the relay, sent only if the agent said it speaks HTTP MCP.
+    mcp_entry: Option<Value>,
+    mcp_http: bool,
     input: ChildInput,
     session_id: Option<String>,
     /// What the agent offers for this session, and the picks sent but not yet answered.
@@ -337,19 +344,30 @@ struct Session {
 }
 impl Session {
     fn new(
-        host: AcpHost,
+        mut host: AcpHost,
         executor: Arc<AgentToolExecutor>,
         input: ChildInput,
         ui: SessionUi,
         credentials: AgentCredentials,
         base_spec: SandboxSpec,
     ) -> Self {
-        let broker = ToolBroker::new(
+        let broker = Arc::new(ToolBroker::new(
             host.repository.clone(),
             PolicyEngine::new(host.authority.clone()),
             executor.clone(),
             host.clock.clone(),
-        );
+        ));
+        let mcp_entry = host.mcp_relay.take().map(|relay| {
+            let entry = relay.server_entry();
+            (relay.install)(mcp_relay::handler(mcp_relay::RelayContext {
+                broker: broker.clone(),
+                lease: host.lease.clone(),
+                signed: host.signed.clone(),
+                clock: host.clock.clone(),
+                events: host.events.clone(),
+            }));
+            entry
+        });
         Self {
             auth_methods: vec![],
             login_attempted: false,
@@ -370,6 +388,8 @@ impl Session {
             host,
             executor,
             broker,
+            mcp_entry,
+            mcp_http: false,
             input,
             session_id: None,
             options: Vec::new(),
@@ -610,7 +630,11 @@ impl Session {
     }
     fn new_session(&mut self) -> Result<(), AcpError> {
         let cwd = super::session::tools::plain_path(&self.host.worktree_root);
-        self.request("session/new", json!({"cwd":cwd,"mcpServers":[]}))
+        let servers = match (&self.mcp_entry, self.mcp_http) {
+            (Some(entry), true) => json!([entry]),
+            _ => json!([]),
+        };
+        self.request("session/new", json!({"cwd":cwd,"mcpServers":servers}))
     }
     fn cancel_pending(&mut self) {
         self.elicitation_urls
@@ -694,6 +718,8 @@ impl Session {
                     return Err(bad("unsupported protocol version"));
                 }
                 let methods = auth::methods(&message["result"]["authMethods"])?;
+                self.mcp_http = message["result"]["agentCapabilities"]["mcpCapabilities"]["http"]
+                    == json!(true);
                 (self.host.events)(AcpEvent::AuthMethods {
                     methods: methods.clone(),
                 });
