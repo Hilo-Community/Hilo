@@ -107,7 +107,11 @@ pub async fn task_belongs_to_tenant(
     Ok(row.is_some())
 }
 
-pub async fn create_task(pool: &PgPool, tenant_id: Uuid, created_by: Uuid) -> Result<Uuid, sqlx::Error> {
+pub async fn create_task(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    created_by: Uuid,
+) -> Result<Uuid, sqlx::Error> {
     let id = Uuid::new_v4();
     sqlx::query("INSERT INTO tasks (id, tenant_id, created_by) VALUES ($1, $2, $3)")
         .bind(id)
@@ -132,7 +136,11 @@ impl PostgresDeploymentLedger {
     #[must_use]
     pub fn new(pool: PgPool, handle: Handle, tenant_id: String) -> Self {
         let tenant_id = Uuid::parse_str(&tenant_id).unwrap_or_else(|_| Uuid::nil());
-        Self { pool, handle, tenant_id }
+        Self {
+            pool,
+            handle,
+            tenant_id,
+        }
     }
 }
 

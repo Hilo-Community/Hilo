@@ -53,11 +53,12 @@ impl RunDeadlineStore for PostgresRunDeadlineStore {
         let run_id = run_id.to_string();
         tokio::task::block_in_place(move || {
             handle.block_on(async move {
-                let _ =
-                    sqlx::query("UPDATE fargate_runs SET status = 'stopped' WHERE ecs_task_arn = $1")
-                        .bind(&run_id)
-                        .execute(&pool)
-                        .await;
+                let _ = sqlx::query(
+                    "UPDATE fargate_runs SET status = 'stopped' WHERE ecs_task_arn = $1",
+                )
+                .bind(&run_id)
+                .execute(&pool)
+                .await;
             });
         });
     }

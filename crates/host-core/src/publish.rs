@@ -113,7 +113,10 @@ impl PublishClient {
         self
     }
 
-    fn request(&self, builder: reqwest::blocking::RequestBuilder) -> reqwest::blocking::RequestBuilder {
+    fn request(
+        &self,
+        builder: reqwest::blocking::RequestBuilder,
+    ) -> reqwest::blocking::RequestBuilder {
         match &self.bearer_token {
             Some(token) => builder.bearer_auth(token),
             None => builder,

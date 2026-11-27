@@ -16,7 +16,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use host_core::contracts::Evidence;
-use host_core::publish::{PublishClient, PublishRequest, PublishResult, RollbackRequest, StaticPublishService};
+use host_core::publish::{
+    PublishClient, PublishRequest, PublishResult, RollbackRequest, StaticPublishService,
+};
 use serde::Deserialize;
 
 use crate::state::DesktopAppState;
@@ -27,8 +29,9 @@ fn client(state: &DesktopAppState) -> Result<Arc<PublishClient>, String> {
         .lock()
         .map_err(|_| "publish client lock poisoned".to_string())?;
     if guard.is_none() {
-        let base_url = std::env::var("HILO_CLOUD_SERVICE_URL")
-            .map_err(|_| "publishing is not configured (HILO_CLOUD_SERVICE_URL is unset)".to_string())?;
+        let base_url = std::env::var("HILO_CLOUD_SERVICE_URL").map_err(|_| {
+            "publishing is not configured (HILO_CLOUD_SERVICE_URL is unset)".to_string()
+        })?;
         let token = std::env::var("HILO_CLOUD_BEARER_TOKEN").ok();
         let mut built = PublishClient::new(base_url);
         if let Some(token) = token {

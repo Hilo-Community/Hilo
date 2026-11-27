@@ -31,8 +31,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let s3_client = aws_sdk_s3::Client::new(&aws_config);
 
     let handle = tokio::runtime::Handle::current();
-    let artifacts: Arc<dyn ArtifactStore> =
-        Arc::new(R2ArtifactStore::new(s3_client, config.r2_bucket.clone(), handle.clone()));
+    let artifacts: Arc<dyn ArtifactStore> = Arc::new(R2ArtifactStore::new(
+        s3_client,
+        config.r2_bucket.clone(),
+        handle.clone(),
+    ));
     let pages: Arc<dyn PagesPublisher> = Arc::new(CloudflarePagesPublisher::new(
         config.cloudflare_api_token.clone(),
         config.r2_account_id.clone(),

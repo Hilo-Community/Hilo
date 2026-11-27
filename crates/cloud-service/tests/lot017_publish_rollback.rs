@@ -91,7 +91,11 @@ async fn publish_then_block_a_secret_then_rollback_over_http() {
     let digest1 = result1.unwrap().digest_blake3;
 
     let dir2 = tempfile::tempdir().unwrap();
-    std::fs::write(dir2.path().join("config.js"), "const KEY='AKIAABCDEFGHIJKLMNOP';").unwrap();
+    std::fs::write(
+        dir2.path().join("config.js"),
+        "const KEY='AKIAABCDEFGHIJKLMNOP';",
+    )
+    .unwrap();
     let (status2, result2) = publish(&app, &token, dir2.path(), "task-http-1", "hash-v2").await;
     assert_eq!(
         status2,

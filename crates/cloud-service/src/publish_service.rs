@@ -12,14 +12,20 @@ use std::path::Path;
 
 use context_engine::AclAndSecretScanner;
 use host_core::contracts::Evidence;
-use host_core::publish::{require_validated_green, PublishError, PublishRequest, PublishResult, RollbackRequest};
+use host_core::publish::{
+    require_validated_green, PublishError, PublishRequest, PublishResult, RollbackRequest,
+};
 
 /// Where a bundle's bytes go once it passes the gate. Implemented against Cloudflare R2
 /// (S3-compatible) in production; an in-memory fake in tests.
 pub trait ArtifactStore: Send + Sync {
     /// Uploads under a content-addressed key; must be idempotent (publishing the same digest
     /// twice is not an error).
-    fn put_bundle(&self, digest: &str, files: &BTreeMap<String, Vec<u8>>) -> Result<String, PublishError>;
+    fn put_bundle(
+        &self,
+        digest: &str,
+        files: &BTreeMap<String, Vec<u8>>,
+    ) -> Result<String, PublishError>;
 }
 
 /// Flips the live Cloudflare Pages deployment pointer. Implemented against the Cloudflare API
@@ -281,7 +287,11 @@ mod tests {
     ) -> CloudStaticPublishService {
         struct ArcStore<T>(Arc<T>);
         impl ArtifactStore for ArcStore<FakeArtifactStore> {
-            fn put_bundle(&self, d: &str, f: &BTreeMap<String, Vec<u8>>) -> Result<String, PublishError> {
+            fn put_bundle(
+                &self,
+                d: &str,
+                f: &BTreeMap<String, Vec<u8>>,
+            ) -> Result<String, PublishError> {
                 self.0.put_bundle(d, f)
             }
         }
@@ -366,7 +376,11 @@ mod tests {
         let before_count = artifacts.uploaded.lock().unwrap().len();
         let blocked = svc.publish(&req3, &evidence3);
         assert!(matches!(blocked, Err(PublishError::SecretsDetected(_))));
-        assert_eq!(artifacts.uploaded.lock().unwrap().len(), before_count, "nothing new was uploaded");
+        assert_eq!(
+            artifacts.uploaded.lock().unwrap().len(),
+            before_count,
+            "nothing new was uploaded"
+        );
 
         // 1-click rollback to V1.
         let rollback = svc

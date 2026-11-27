@@ -48,15 +48,14 @@ pub async fn callback(
     // One tenant per OIDC subject on first login, for this skeleton; a managed deployment with
     // invitations would look up an existing tenant membership instead of creating one here.
     let issuer = "configured-issuer"; // Set from `OidcClient` config in a full wiring pass.
-    let user_id: Uuid = sqlx::query_scalar(
-        "SELECT id FROM users WHERE oidc_issuer = $1 AND oidc_subject = $2",
-    )
-    .bind(issuer)
-    .bind(&subject)
-    .fetch_optional(&auth.pool)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .unwrap_or_else(Uuid::new_v4);
+    let user_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM users WHERE oidc_issuer = $1 AND oidc_subject = $2")
+            .bind(issuer)
+            .bind(&subject)
+            .fetch_optional(&auth.pool)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .unwrap_or_else(Uuid::new_v4);
 
     let tenant_id: Option<Uuid> = sqlx::query_scalar("SELECT tenant_id FROM users WHERE id = $1")
         .bind(user_id)
@@ -101,5 +100,7 @@ pub async fn callback(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(CallbackResponse { bearer_token: token }))
+    Ok(Json(CallbackResponse {
+        bearer_token: token,
+    }))
 }

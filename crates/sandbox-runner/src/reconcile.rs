@@ -127,11 +127,18 @@ mod tests {
         store.overdue.lock().unwrap().push(OverdueRun {
             run_id: "arn:aws:ecs:...:task/1".into(),
         });
-        let watchdog = ReconciliationWatchdog::new(store.clone(), Arc::new(AlwaysStops), Duration::from_secs(1));
+        let watchdog = ReconciliationWatchdog::new(
+            store.clone(),
+            Arc::new(AlwaysStops),
+            Duration::from_secs(1),
+        );
         let stopped = watchdog.tick();
         assert_eq!(stopped, vec!["arn:aws:ecs:...:task/1".to_string()]);
         assert!(store.overdue().is_empty());
-        assert_eq!(store.stopped.lock().unwrap().as_slice(), ["arn:aws:ecs:...:task/1"]);
+        assert_eq!(
+            store.stopped.lock().unwrap().as_slice(),
+            ["arn:aws:ecs:...:task/1"]
+        );
     }
 
     #[test]
@@ -140,9 +147,17 @@ mod tests {
         store.overdue.lock().unwrap().push(OverdueRun {
             run_id: "arn:aws:ecs:...:task/2".into(),
         });
-        let watchdog = ReconciliationWatchdog::new(store.clone(), Arc::new(AlwaysFails), Duration::from_secs(1));
+        let watchdog = ReconciliationWatchdog::new(
+            store.clone(),
+            Arc::new(AlwaysFails),
+            Duration::from_secs(1),
+        );
         let stopped = watchdog.tick();
         assert!(stopped.is_empty());
-        assert_eq!(store.overdue().len(), 1, "an unconfirmed stop must stay overdue");
+        assert_eq!(
+            store.overdue().len(),
+            1,
+            "an unconfirmed stop must stay overdue"
+        );
     }
 }

@@ -9,8 +9,8 @@ pub mod lsp;
 pub mod migration;
 pub mod offsets;
 pub mod preview;
-pub mod publish;
 pub mod process;
+pub mod publish;
 pub mod terminal;
 pub mod trust;
 
@@ -25,8 +25,8 @@ pub use lsp::*;
 pub use migration::*;
 pub use offsets::*;
 pub use preview::*;
-pub use publish::*;
 pub use process::*;
+pub use publish::*;
 pub use terminal::*;
 pub use trust::*;
 

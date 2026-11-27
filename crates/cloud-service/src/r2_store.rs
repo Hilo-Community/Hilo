@@ -22,7 +22,11 @@ pub struct R2ArtifactStore {
 impl R2ArtifactStore {
     #[must_use]
     pub fn new(client: S3Client, bucket: String, handle: Handle) -> Self {
-        Self { client, bucket, handle }
+        Self {
+            client,
+            bucket,
+            handle,
+        }
     }
 }
 
@@ -30,7 +34,11 @@ impl R2ArtifactStore {
 /// sync tests); bridges to the async S3 SDK via `block_in_place`, same convention as
 /// `fargate_runs.rs`.
 impl ArtifactStore for R2ArtifactStore {
-    fn put_bundle(&self, digest: &str, files: &BTreeMap<String, Vec<u8>>) -> Result<String, PublishError> {
+    fn put_bundle(
+        &self,
+        digest: &str,
+        files: &BTreeMap<String, Vec<u8>>,
+    ) -> Result<String, PublishError> {
         let tar = tar_bytes(files).map_err(|error| PublishError::Remote(error.to_string()))?;
         let key = format!("bundles/{digest}.tar");
         let client = self.client.clone();
@@ -101,11 +109,8 @@ impl CloudflarePagesPublisher {
 impl PagesPublisher for CloudflarePagesPublisher {
     fn set_active(&self, object_key: &str) -> Result<String, PublishError> {
         let allowlist = self.allowlist.clone();
-        tokio::task::block_in_place(|| {
-            self.handle
-                .block_on(allowlist.verify(CLOUDFLARE_API_HOST))
-        })
-        .map_err(|error| PublishError::Remote(error.to_string()))?;
+        tokio::task::block_in_place(|| self.handle.block_on(allowlist.verify(CLOUDFLARE_API_HOST)))
+            .map_err(|error| PublishError::Remote(error.to_string()))?;
 
         let url = format!(
             "https://{CLOUDFLARE_API_HOST}/client/v4/accounts/{}/pages/projects/{}/deployments",
@@ -124,9 +129,6 @@ impl PagesPublisher for CloudflarePagesPublisher {
                 response.status()
             )));
         }
-        Ok(format!(
-            "https://{}.pages.dev/",
-            self.project_name
-        ))
+        Ok(format!("https://{}.pages.dev/", self.project_name))
     }
 }

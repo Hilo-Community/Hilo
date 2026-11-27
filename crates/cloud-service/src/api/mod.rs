@@ -16,7 +16,10 @@ use crate::state::AppState;
 pub fn protected_router(state: AppState) -> Router {
     Router::new()
         .route("/v1/tasks", post(tasks::create_task))
-        .route("/v1/tasks/{task_id}/events", get(events::task_events).post(tasks::append_event))
+        .route(
+            "/v1/tasks/{task_id}/events",
+            get(events::task_events).post(tasks::append_event),
+        )
         .route("/v1/publish", post(publish::publish))
         .route("/v1/rollback", post(publish::rollback))
         .with_state(state.clone())

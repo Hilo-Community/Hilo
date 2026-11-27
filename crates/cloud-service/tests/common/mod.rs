@@ -7,7 +7,9 @@
 
 use std::sync::Arc;
 
-use cloud_service::publish_service::fakes::{FakeArtifactStore, FakeDeploymentLedger, FakePagesPublisher};
+use cloud_service::publish_service::fakes::{
+    FakeArtifactStore, FakeDeploymentLedger, FakePagesPublisher,
+};
 use cloud_service::publish_service::{ArtifactStore, DeploymentLedger, PagesPublisher};
 use cloud_service::state::AppState;
 use sqlx::PgPool;
@@ -45,14 +47,16 @@ pub async fn seed_session(pool: &PgPool) -> (Uuid, Uuid, String) {
         .execute(pool)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO users (id, tenant_id, oidc_subject, oidc_issuer) VALUES ($1, $2, $3, $4)")
-        .bind(user_id)
-        .bind(tenant_id)
-        .bind(user_id.to_string())
-        .bind("test-issuer")
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO users (id, tenant_id, oidc_subject, oidc_issuer) VALUES ($1, $2, $3, $4)",
+    )
+    .bind(user_id)
+    .bind(tenant_id)
+    .bind(user_id.to_string())
+    .bind("test-issuer")
+    .execute(pool)
+    .await
+    .unwrap();
     let token = Uuid::new_v4().to_string();
     let token_blake3 = blake3::hash(token.as_bytes()).to_hex().to_string();
     sqlx::query(
@@ -76,6 +80,8 @@ pub fn fake_app_state(pool: PgPool) -> AppState {
     let artifacts: Arc<dyn ArtifactStore> = Arc::new(FakeArtifactStore::default());
     let pages: Arc<dyn PagesPublisher> = Arc::new(FakePagesPublisher::default());
     let ledger_factory: Arc<dyn Fn(String) -> Box<dyn DeploymentLedger> + Send + Sync> =
-        Arc::new(|_tenant_id: String| Box::new(FakeDeploymentLedger::default()) as Box<dyn DeploymentLedger>);
+        Arc::new(|_tenant_id: String| {
+            Box::new(FakeDeploymentLedger::default()) as Box<dyn DeploymentLedger>
+        });
     AppState::new(pool, artifacts, pages, ledger_factory)
 }

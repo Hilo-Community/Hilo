@@ -15,8 +15,14 @@ use openidconnect::{
 /// endpoint is always present in discovery metadata (`EndpointSet`); the token/userinfo
 /// endpoints are optional per the OIDC spec, so discovery only ever yields `EndpointMaybeSet`
 /// for them (checked at the `exchange_code` call, which returns `ConfigurationError` if missing).
-type DiscoveredClient =
-    CoreClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointMaybeSet, EndpointMaybeSet>;
+type DiscoveredClient = CoreClient<
+    EndpointSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointMaybeSet,
+    EndpointMaybeSet,
+>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum OidcError {

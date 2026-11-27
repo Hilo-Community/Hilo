@@ -8,12 +8,18 @@ use std::sync::Arc;
 use host_core::publish::PublishError;
 use sqlx::PgPool;
 
-use crate::publish_service::{ArtifactStore, CloudStaticPublishService, DeploymentLedger, PagesPublisher};
+use crate::publish_service::{
+    ArtifactStore, CloudStaticPublishService, DeploymentLedger, PagesPublisher,
+};
 
 /// Lets a shared `Arc<dyn ArtifactStore>` (one upload destination for every tenant) be handed
 /// into `CloudStaticPublishService::new`, which wants its own `Box<dyn ArtifactStore>` per call.
 impl ArtifactStore for Arc<dyn ArtifactStore> {
-    fn put_bundle(&self, digest: &str, files: &BTreeMap<String, Vec<u8>>) -> Result<String, PublishError> {
+    fn put_bundle(
+        &self,
+        digest: &str,
+        files: &BTreeMap<String, Vec<u8>>,
+    ) -> Result<String, PublishError> {
         (**self).put_bundle(digest, files)
     }
 }
@@ -46,6 +52,9 @@ impl AppState {
                 ledger_factory(tenant_id),
             )
         });
-        Self { pool, publish_factory }
+        Self {
+            pool,
+            publish_factory,
+        }
     }
 }
