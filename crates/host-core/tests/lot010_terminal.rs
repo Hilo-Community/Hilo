@@ -202,14 +202,14 @@ fn keystrokes_reach_the_shell_in_the_workspace_and_its_output_comes_back() {
     let dir = tempfile::tempdir().unwrap();
     let gate = gate(dir.path(), true);
     let (session, events) = open(&gate, &cmd_launch(&["/Q"]));
+    // cmd echoes the typed line first, so wait for text only the output has: the echo shows
+    // `[%cd%]` and the prompt `workspace>`, while `\workspace]` appears once `%cd%` expanded,
+    // after the `42` (the commands run in order).
     session
-        .write(b"set /a 40+2 & echo. & echo CWD=%cd%\r\n")
+        .write(b"set /a 40+2 & echo. & echo CWD=[%cd%]\r\n")
         .unwrap();
-    let output = read_until(&events, "CWD=");
-    assert!(
-        output.contains("42") && output.contains("\\workspace"),
-        "{output}"
-    );
+    let output = read_until(&events, "\\workspace]");
+    assert!(output.contains("42"), "{output}");
     assert_eq!(gate.spawned_process_count(), 1);
 
     session
