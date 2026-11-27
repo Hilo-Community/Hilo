@@ -1,7 +1,7 @@
 import { type MergeLayout, MergeReviewView } from "@hilo/editor-cm6";
 import { HILO_STATE_META } from "@hilo/protocol-types";
 import { JUDGE_STRINGS } from "./strings.js";
-import type { AcceptResponse, JudgeReview } from "./types.js";
+import type { AcceptResponse, JudgeReview, ReviewPreview } from "./types.js";
 
 /** Most diagnostics listed; the agent got the full evidence. */
 const MAX_LISTED_DIAGNOSTICS = 20;
@@ -97,6 +97,8 @@ export class JudgeReviewPanel {
       this.element.append(list);
     }
 
+    if (review.preview) this.element.append(this.previewSection(review.preview));
+
     const toolbar = this.el("div", "hilo-judge-toolbar");
     this.fileTabs = this.el("div", "hilo-judge-files");
     this.fileTabs.setAttribute("role", "tablist");
@@ -182,6 +184,29 @@ export class JudgeReviewPanel {
   destroy(): void {
     this.merge.destroy();
     this.element.remove();
+  }
+
+  /**
+   * The components' rendered DOM in an iframe with an empty `sandbox`: an opaque origin, no
+   * script, no form, no navigation of the IDE. The document's own policy loads nothing.
+   */
+  private previewSection(preview: ReviewPreview): HTMLElement {
+    const section = this.el("section", "hilo-judge-preview");
+    section.append(this.el("h3", "hilo-judge-preview-title", JUDGE_STRINGS.preview));
+    const frame = this.doc.createElement("iframe");
+    frame.className = "hilo-judge-preview-frame";
+    frame.setAttribute("sandbox", "");
+    frame.setAttribute("referrerpolicy", "no-referrer");
+    frame.title = JUDGE_STRINGS.previewFrame;
+    frame.srcdoc = preview.document;
+    const tree = this.doc.createElement("details");
+    tree.className = "hilo-judge-a11y";
+    tree.append(
+      this.el("summary", "", JUDGE_STRINGS.a11yTree),
+      this.el("pre", "hilo-judge-a11y-tree", preview.a11y),
+    );
+    section.append(frame, tree);
+    return section;
   }
 
   private setLayout(layout: MergeLayout): void {

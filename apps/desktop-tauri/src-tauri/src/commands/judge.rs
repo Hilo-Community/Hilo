@@ -96,6 +96,9 @@ pub(crate) struct ReviewSummary {
     files: Vec<ReviewFile>,
     steps: Vec<StepSummary>,
     diagnostics: Vec<DiagnosticSummary>,
+    /// What the changed components rendered (`LOT-016`): a static document for an iframe that
+    /// runs no script.
+    preview: Option<PreviewSnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -166,6 +169,7 @@ struct Review {
     steps: Vec<StepReport>,
     status: ReviewStatus,
     stopped: Option<StopReason>,
+    preview: Option<PreviewSnapshot>,
     /// Files of the change already applied; the review closes once every file is.
     accepted: BTreeSet<String>,
 }
@@ -204,6 +208,7 @@ impl Review {
                     message: item.message.clone(),
                 })
                 .collect(),
+            preview: self.preview.clone(),
         }
     }
 }
@@ -438,6 +443,7 @@ fn evaluate(
         steps: outcome.steps,
         status: ReviewStatus::Pending,
         stopped,
+        preview: outcome.preview,
         accepted: BTreeSet::new(),
     };
     let summary = review.summary();
@@ -1185,6 +1191,7 @@ mod tests {
                 steps: Vec::new(),
                 status: ReviewStatus::Pending,
                 stopped: None,
+                preview: None,
                 accepted: BTreeSet::new(),
             },
         );

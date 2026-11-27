@@ -32,6 +32,7 @@ function review(overrides: Partial<JudgeReview> = {}): JudgeReview {
       { kind: "Lint", passed: true, exitCode: 0, durationMs: 30 },
     ],
     diagnostics: [],
+    preview: null,
     ...overrides,
   };
 }
@@ -121,6 +122,47 @@ describe("JudgeReviewPanel (LOT-015)", () => {
     expect(button(root, "✓ Accept").disabled).toBe(true);
     expect(root.querySelector(".hilo-judge-file")?.textContent).toBe("✓ src/money.ts");
     panel.destroy();
+  });
+
+  it("shows the rendered components in a frame that runs no script and has no origin", () => {
+    const document_ =
+      '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'"></head><body><output aria-label="Balance">42</output><script>parent.stolen = 1</script></body></html>';
+    const panel = new JudgeReviewPanel(
+      document,
+      review({ preview: { document: document_, a11y: 'body\n  output "Balance": 42' } }),
+      actions(async () => ({
+        type: "apply",
+        taskId: "t",
+        baseRevision: 0,
+        changes: [],
+        state: "ValidatedGreen",
+      })),
+    );
+    document.body.append(panel.element);
+    const frame = panel.element.querySelector("iframe");
+    expect(frame?.getAttribute("sandbox")).toBe("");
+    expect(frame?.getAttribute("referrerpolicy")).toBe("no-referrer");
+    expect(frame?.srcdoc).toBe(document_);
+    expect(frame?.src).toBe("");
+    expect(Reflect.get(window, "stolen")).toBeUndefined();
+    expect(panel.element.querySelector(".hilo-judge-a11y-tree")?.textContent).toContain(
+      'output "Balance": 42',
+    );
+    // No preview, no frame.
+    const plain = new JudgeReviewPanel(
+      document,
+      review(),
+      actions(async () => ({
+        type: "apply",
+        taskId: "t",
+        baseRevision: 0,
+        changes: [],
+        state: "ValidatedGreen",
+      })),
+    );
+    expect(plain.element.querySelector("iframe")).toBeNull();
+    panel.destroy();
+    plain.destroy();
   });
 
   it("shows a conflict between the user's text and the verified change, and cannot accept it", async () => {
