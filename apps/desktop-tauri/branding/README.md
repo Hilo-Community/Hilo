@@ -1,8 +1,9 @@
 # Hilo app icons
 
-`Hilo.icon` is the original Icon Composer source. `Icon Exports/` contains the six original
-PNG exports: Default, Dark, TintedLight, TintedDark, ClearLight and ClearDark. Keep these
-source assets intact when regenerating the application icons.
+`Icon Exports/` contains the six PNG exports of the current icon (the brain-and-circuit mark):
+Default, Dark, TintedLight, TintedDark, ClearLight and ClearDark. Keep them intact when
+regenerating the application icons. `Hilo.icon` is the Icon Composer source of the previous
+design (the double loop); it does not match these exports.
 
 From the repository root, `npm run icons` regenerates Tauri's platform icons from the
 Default export, including `src-tauri/icons/icon.icns` for macOS and the browser favicon.
