@@ -4,6 +4,7 @@ pub mod agent;
 pub mod agent_account;
 pub mod agent_registry;
 pub mod agent_transcripts;
+pub mod completion;
 pub mod context_index;
 pub mod debug;
 pub mod documents;

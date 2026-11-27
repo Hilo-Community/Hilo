@@ -23,6 +23,7 @@ tauri-plugin-dialog = "2.6.0"
 tauri-plugin-opener = "=2.7.3"
 agent-registry.workspace = true
 agent-gateway.workspace = true
+model-gateway.workspace = true
 zeroize = "=1.9.1"
 host-core.workspace = true
 context-engine.workspace = true

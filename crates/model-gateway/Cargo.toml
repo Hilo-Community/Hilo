@@ -1,0 +1,25 @@
+[package]
+name = "model-gateway"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Host-owned model registry and gateway: privacy routing with no fallback, budget before every call, local Ollama runtime"
+
+[lints]
+workspace = true
+
+[dependencies]
+host-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "=1.54.1", features = ["rt", "net", "io-util", "sync", "time", "macros"] }
+tokio-util = { version = "=0.7.20", default-features = false }
+reqwest = { version = "=0.12.28", default-features = false }
+url = "=2.5.8"
+sysinfo = { version = "=0.36.1", default-features = false, features = ["system"] }
+
+[dev-dependencies]
+tokio = { version = "=1.54.1", features = ["rt-multi-thread"] }
+url = "=2.5.8"

@@ -1,4 +1,4 @@
-import { SettingsPage } from "@hilo/web-ui";
+import { type InlineCompletionStatus, SettingsPage } from "@hilo/web-ui";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { createTauriAgentRegistryHost } from "./tauri-agent-registry-host.js";
@@ -8,6 +8,10 @@ export function mountSettingsWindow(root: HTMLElement): void {
   root.className = "hilo-standalone-settings";
   const page = new SettingsPage(document, {
     agentRegistry: createTauriAgentRegistryHost(invoke),
+    inlineCompletion: {
+      status: () => invoke<InlineCompletionStatus>("inline_completion_status_command"),
+      save: (settings) => invoke("set_inline_completion_settings_command", { settings }),
+    },
   });
   root.replaceChildren(page.element);
   page.showExternalAgents();

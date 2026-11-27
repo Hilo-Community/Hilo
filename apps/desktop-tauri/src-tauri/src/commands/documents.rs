@@ -96,6 +96,8 @@ pub(crate) fn apply_transaction(
     state: &DesktopAppState,
     payload: &[u8],
 ) -> Result<Vec<u8>, String> {
+    // A keystroke: any suggestion being computed is for a text that no longer exists.
+    state.completion.cancel_inflight();
     let services = state.language_services();
     state
         .bridge

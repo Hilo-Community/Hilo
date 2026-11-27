@@ -76,6 +76,8 @@ pub(crate) struct DesktopAppState {
     pub(crate) unsaved_buffers: AtomicUsize,
     /// Set once the user has answered the close prompt, so the exit that follows goes through.
     pub(crate) exit_confirmed: AtomicBool,
+    /// Inline AI completion through the model gateway (strict local mode).
+    pub(crate) completion: crate::commands::completion::CompletionState,
 }
 
 impl DesktopAppState {
@@ -85,6 +87,7 @@ impl DesktopAppState {
         diagnostics_sink: DiagnosticsSink,
     ) -> Self {
         let latest_diagnostics = Arc::new(LatestDiagnostics::new());
+        let completion = crate::commands::completion::CompletionState::new(&app_data_dir);
         Self {
             bridge: Arc::new(Mutex::new(bridge)),
             agents: Mutex::new(HashMap::new()),
@@ -115,6 +118,7 @@ impl DesktopAppState {
             index_build: Mutex::new(()),
             unsaved_buffers: AtomicUsize::new(0),
             exit_confirmed: AtomicBool::new(false),
+            completion,
         }
     }
 

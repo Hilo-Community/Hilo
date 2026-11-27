@@ -2187,6 +2187,7 @@ dependencies = [
  "context-engine",
  "host-core",
  "judge-orchestrator",
+ "model-gateway",
  "sandbox-runner",
  "serde",
  "serde_json",
@@ -3164,6 +3165,21 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "model-gateway"
+version = "0.1.0"
+dependencies = [
+ "host-core",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+ "url",
 ]
 
 [[package]]

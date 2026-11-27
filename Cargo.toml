@@ -5,6 +5,7 @@ members = [
     "crates/host-core",
     "crates/agent-registry",
     "crates/agent-gateway",
+    "crates/model-gateway",
     "crates/context-engine",
     "crates/judge-orchestrator",
     "crates/sandbox-runner",
@@ -37,6 +38,7 @@ tempfile = "3.12"
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process"] }
 agent-registry = { path = "crates/agent-registry" }
 agent-gateway = { path = "crates/agent-gateway" }
+model-gateway = { path = "crates/model-gateway" }
 host-core = { path = "crates/host-core" }
 context-engine = { path = "crates/context-engine" }
 judge-orchestrator = { path = "crates/judge-orchestrator" }

@@ -6,5 +6,11 @@ export const SETTINGS_SECTIONS = [
     groups: ["ACP Registry"],
     keywords: "acp registry agents install update remove",
   },
+  {
+    id: "ai-completion",
+    label: "AI Completion",
+    groups: ["Local model"],
+    keywords: "ollama local model completion qwen suggestions privacy offline",
+  },
 ] as const;
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]["id"];
