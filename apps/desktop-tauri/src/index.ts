@@ -86,6 +86,7 @@ export interface LazyBootDesktopOptions {
   readonly terminalHost?: CockpitDomControllerOptions["terminalHost"];
   readonly debugHost?: CockpitDomControllerOptions["debugHost"];
   readonly agentHost?: CockpitDomControllerOptions["agentHost"];
+  readonly judgeHost?: CockpitDomControllerOptions["judgeHost"];
   readonly agentRegistryHost?: CockpitDomControllerOptions["agentRegistryHost"];
   readonly openSettingsWindow?: CockpitDomControllerOptions["openSettingsWindow"];
   readonly searchWorkspace?: CockpitDomControllerOptions["searchWorkspace"];
@@ -209,6 +210,7 @@ export function lazyBootDesktopCockpit(
       ...(options?.workspaceTrust ? { workspaceTrust: options.workspaceTrust } : {}),
       ...(options?.terminalHost ? { terminalHost: options.terminalHost } : {}),
       ...(options?.agentHost ? { agentHost: options.agentHost } : {}),
+      ...(options?.judgeHost ? { judgeHost: options.judgeHost } : {}),
       ...(options?.agentRegistryHost ? { agentRegistryHost: options.agentRegistryHost } : {}),
       ...(options?.openSettingsWindow ? { openSettingsWindow: options.openSettingsWindow } : {}),
       ...(options?.debugHost ? { debugHost: options.debugHost } : {}),

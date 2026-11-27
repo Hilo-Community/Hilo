@@ -8,6 +8,7 @@ export { restoreCachedSession } from "./state/session-cache.js";
 export * from "./ui/stream-renderer.js";
 export * from "./ui/virtualizer.js";
 export * from "./cockpit-dom.js";
+export * from "./judge/index.js";
 export * from "./onboarding/index.js";
 export * from "./theme/index.js";
 

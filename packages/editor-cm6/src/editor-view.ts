@@ -78,6 +78,13 @@ export interface HiloEditorStoreSnapshot {
   readonly lastIpcError: string | null;
 }
 
+/** One edit of an accepted Judge change, in UTF-16 offsets of the current text. */
+export interface AcceptedChange {
+  readonly from: number;
+  readonly to: number;
+  readonly insert: string;
+}
+
 export interface HiloEditorOptions {
   readonly initialDocumentId: string;
   readonly initialContent: string;
@@ -366,6 +373,39 @@ export class HiloEditorView {
       selection: CmSelection.cursor(nextCursor),
       annotations: transactionOriginAnnotation.of(origin),
     });
+  }
+
+  /**
+   * Applies a change the user accepted in a Judge review (`LOT-015`): `changes` are in the
+   * coordinates of the current text and were planned by the Host on `baseRevision`. Nothing is
+   * dispatched (and `false` returned) if another document is shown or the text moved since:
+   * the Host would refuse the transaction anyway. The Host's states for the new ranges follow.
+   */
+  applyAcceptedChange(
+    documentId: string,
+    sessionGeneration: number,
+    baseRevision: number,
+    changes: readonly AcceptedChange[],
+    taskId: string,
+  ): boolean {
+    if (
+      documentId !== this.documentId ||
+      sessionGeneration !== this.sessionGeneration ||
+      baseRevision !== this.localRevision ||
+      this.imeComposing
+    ) {
+      return false;
+    }
+    this.getEditorView().dispatch({
+      changes: changes.map((change) => ({
+        from: change.from,
+        to: change.to,
+        insert: change.insert,
+      })),
+      effects: suppressLocalInvalidationAnnotation.of(true),
+      annotations: transactionOriginAnnotation.of({ Agent: { task_id: taskId } }),
+    });
+    return true;
   }
 
   /**

@@ -14,6 +14,7 @@
 @import "./onboarding.css";
 @import "./editor.css";
 @import "./agent.css";
+@import "./judge.css";
 @import "./settings.css";
 @import "./agent-account.css";
 @source "../**/*.ts";
