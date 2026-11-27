@@ -6,7 +6,7 @@ regenerating the application icons. `Hilo.icon` is the Icon Composer source of t
 design (the double loop); it does not match these exports.
 
 From the repository root, `npm run icons` regenerates Tauri's platform icons from the
-Default export, including `src-tauri/icons/icon.icns` for macOS and the browser favicon.
+Dark export, including `src-tauri/icons/icon.icns` for macOS and the browser favicon.
 The current Tauri bundle uses a static icon; retaining the other exports does not enable
 automatic appearance switching.
 

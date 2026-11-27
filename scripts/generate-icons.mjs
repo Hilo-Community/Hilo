@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "../apps/desktop-tauri");
 const cli = createRequire(import.meta.url).resolve("@tauri-apps/cli/tauri.js");
-const source = join(app, "branding/Icon Exports/Icon-iOS-Default-1024@1x.png");
+const source = join(app, "branding/Icon Exports/Icon-iOS-Dark-1024@1x.png");
 const temporary = mkdtempSync(join(tmpdir(), "hilo-icons-"));
 
 function generate(input, output) {
