@@ -10,6 +10,7 @@ members = [
     "crates/judge-orchestrator",
     "crates/sandbox-runner",
     "crates/sandbox-windows",
+    "crates/cloud-service",
     "apps/desktop-tauri/src-tauri",
 ]
 

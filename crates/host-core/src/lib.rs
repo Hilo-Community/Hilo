@@ -10,6 +10,7 @@ pub mod migration;
 pub mod offsets;
 pub mod preview;
 pub mod process;
+pub mod publish;
 pub mod terminal;
 pub mod trust;
 
@@ -25,6 +26,7 @@ pub use migration::*;
 pub use offsets::*;
 pub use preview::*;
 pub use process::*;
+pub use publish::*;
 pub use terminal::*;
 pub use trust::*;
 

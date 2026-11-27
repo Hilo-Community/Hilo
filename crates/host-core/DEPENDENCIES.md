@@ -141,3 +141,14 @@ resolving the name of the process in a terminal's foreground job, to show its ag
 - New crates pulled in: `objc2-io-kit` (macOS, implied by `system`) and its own small `objc2-*`
   dependency chain; `ntapi`/`windows*` are Windows-only and never actually built for us (we only
   depend on `sysinfo` under `[target.'cfg(unix)']`). Not reviewed line by line beyond the above.
+
+## `reqwest = 0.12.28` (`PublishClient`, LOT-017) — reviewed 2026-11-27
+
+Pinned exactly, the same version already reviewed for `agent-gateway`/`model-gateway`.
+`default-features = false`, `features = ["rustls-tls", "json", "blocking"]`: no native-tls/OpenSSL,
+no cookie jar, no system proxy auto-detection surface beyond what `rustls-tls` needs. Used from
+exactly one place, `publish.rs`'s `PublishClient`, to call the Cloud Service's own
+`/v1/publish`/`/v1/rollback` HTTP endpoints — never AWS, R2 or Cloudflare directly. It holds no
+R2/Cloudflare/KMS credential; those stay server-side in `crates/cloud-service`. The `blocking`
+feature avoids pulling an `async-trait`-style dependency into `StaticPublishService` just for this
+one client; callers run it from a Tauri command's own blocking context.

@@ -11,8 +11,10 @@ pub mod bubblewrap;
 mod common;
 pub mod engine;
 pub mod error;
+pub mod fargate;
 pub mod path_guard;
 mod probe;
+pub mod reconcile;
 pub mod runner;
 pub mod seatbelt;
 pub mod spec;
@@ -26,7 +28,9 @@ pub use audit::{
 pub use bubblewrap::BubblewrapEngine;
 pub use engine::{EngineCapabilities, Launch, OsSandboxEngine, RunInfo};
 pub use error::SandboxError;
+pub use fargate::{FargateEngine, FargateEngineConfig};
 pub use path_guard::{PathGuard, PathGuardError};
+pub use reconcile::{OverdueRun, ReconciliationWatchdog, RunDeadlineStore};
 pub use runner::{native_sandbox, OsNativeSandbox, SandboxRunner};
 pub use seatbelt::SeatbeltEngine;
 pub use spec::{NetworkPolicy, ResourceLimits, SandboxSpec, ValidatedSpec, TMP_DIR_NAME};
@@ -42,6 +46,8 @@ pub enum OsSandboxKind {
     MacOsSeatbelt,
     LinuxLandlockBubblewrap,
     WindowsAppContainerJobObject,
+    /// Not OS-native: single-tenant AWS ECS Fargate (`LOT-017`), orchestrated from this host.
+    CloudAwsFargate,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
