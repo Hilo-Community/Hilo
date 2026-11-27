@@ -37,6 +37,7 @@ import {
   setSourceDiagnosticsEffect,
 } from "./diagnostics.js";
 import { createEditorState } from "./editor-state.js";
+import { InlineCompletionClient, type InlineCompletionProvider } from "./inline-completion.js";
 import {
   LanguageFeatureClient,
   type LanguageFeatureProvider,
@@ -118,6 +119,13 @@ export class HiloEditorView {
     },
   });
   private discardedStaleLanguageAnswers = 0;
+  private readonly inlineCompletion = new InlineCompletionClient({
+    current: () => ({
+      documentId: this.documentId,
+      sessionGeneration: this.sessionGeneration,
+      revision: this.localRevision,
+    }),
+  });
   private readonly breakpointListeners = new Set<(lines: readonly number[]) => void>();
   private mountCount = 0;
   private activeKeymapPreset: KeymapPresetId;
@@ -158,6 +166,7 @@ export class HiloEditorView {
         customKeybindings: this.customKeybindings,
         activeTheme: this.activeTheme,
         languageFeatures: this.languageFeatures,
+        inlineCompletion: this.inlineCompletion.extension(),
         hostDeltaSync: this.createHostDeltaSyncExtension(),
         onKeyCommand: (command) => {
           this.lastTriggeredKeyCommand = command;
@@ -252,6 +261,15 @@ export class HiloEditorView {
     navigate?: NavigateToLocation,
   ): void {
     this.languageFeatures.setProvider(provider, navigate);
+  }
+
+  /** Connects the host's model gateway: ghost-text suggestions, Tab accepts (`LOT-014`). */
+  setInlineCompletionProvider(provider: InlineCompletionProvider | null): void {
+    this.inlineCompletion.setProvider(provider);
+  }
+
+  getInlineCompletion(): InlineCompletionClient {
+    return this.inlineCompletion;
   }
 
   /** Language features of the current revision; answers that arrive late are dropped. */

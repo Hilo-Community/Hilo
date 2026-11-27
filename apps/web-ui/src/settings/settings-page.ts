@@ -2,6 +2,7 @@ import { browserStorage } from "../state/ui-preferences.js";
 import { type ThinScrollbar, attachThinScrollbar } from "../ui/thin-scrollbar.js";
 import { AgentRegistryPanel } from "./agent-registry-panel.js";
 import type { AgentRegistryHost } from "./agent-registry.js";
+import { type InlineCompletionHost, InlineCompletionPanel } from "./inline-completion-panel.js";
 import { SETTINGS_SECTIONS, type SettingsSectionId } from "./settings-content.js";
 
 const CHEVRON =
@@ -22,10 +23,14 @@ export class SettingsPage {
   private activeGroup: string | null = null;
   private readonly expanded = new Set<SettingsSectionId>();
   private panel: AgentRegistryPanel | null = null;
+  private completionPanel: InlineCompletionPanel | null = null;
 
   constructor(
     private readonly doc: Document,
-    private readonly options: { agentRegistry: AgentRegistryHost },
+    private readonly options: {
+      agentRegistry: AgentRegistryHost;
+      inlineCompletion?: InlineCompletionHost;
+    },
   ) {
     try {
       const saved = browserStorage(doc)?.getItem(SECTION_KEY);
@@ -104,6 +109,8 @@ export class SettingsPage {
     for (const scrollbar of this.scrollbars) scrollbar.destroy();
     this.panel?.destroy();
     this.panel = null;
+    this.completionPanel?.destroy();
+    this.completionPanel = null;
     this.element.remove();
   }
 
@@ -164,8 +171,15 @@ export class SettingsPage {
         const group = this.doc.createElement("section");
         group.className = "hilo-settings-group";
         group.dataset.group = groupName;
-        this.panel ??= new AgentRegistryPanel(this.doc, this.options.agentRegistry);
-        group.append(this.panel.element);
+        if (section.id === "ai-completion") {
+          const host = this.options.inlineCompletion;
+          if (!host) continue;
+          this.completionPanel ??= new InlineCompletionPanel(this.doc, host);
+          group.append(this.completionPanel.element);
+        } else {
+          this.panel ??= new AgentRegistryPanel(this.doc, this.options.agentRegistry);
+          group.append(this.panel.element);
+        }
         content.append(group);
         matches++;
       }

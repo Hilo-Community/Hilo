@@ -1,3 +1,4 @@
+import type { InlineCompletionResponse } from "@hilo/editor-cm6";
 import type { DocumentDiagnostics, LanguageFeatureResponse } from "@hilo/protocol-types";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -197,6 +198,11 @@ function HiloDesktopApp() {
               void desktop?.domController?.openWorkspaceFile(location.file_path);
             }
           },
+        );
+        // Ghost-text suggestions from the local model (strict local mode, no account). The
+        // host reads the text from its own rope and cancels a call on the next keystroke.
+        desktop.editorView.setInlineCompletionProvider((request) =>
+          invoke<InlineCompletionResponse | null>("inline_completion_command", { request }),
         );
         sessionPersistenceTimer = window.setInterval(persistSession, 2_000);
         // The editor places each batch by its revision, and drops what its text has moved past.

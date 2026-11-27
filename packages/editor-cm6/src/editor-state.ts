@@ -46,6 +46,7 @@ export interface EditorStateRecipe {
   readonly customKeybindings: readonly Cm6TranslatedKeybinding[];
   readonly activeTheme: DeclarativeVsixTheme;
   readonly languageFeatures: LanguageFeatureClient;
+  readonly inlineCompletion: import("@codemirror/state").Extension;
   readonly hostDeltaSync: import("@codemirror/state").Extension;
   onKeyCommand(command: string): void;
 }
@@ -80,6 +81,7 @@ export function createEditorState(
       closeBrackets(),
       highlightActiveLine(),
       autocompletion({ override: [recipe.languageFeatures.completionSource] }),
+      recipe.inlineCompletion,
       keymap.of([
         ...recipe.languageFeatures.keyBindings(),
         ...breakpointKeyBindings,
