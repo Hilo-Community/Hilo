@@ -54,6 +54,17 @@ pub fn run() {
                 let _ = handle.emit(DOCUMENT_DIAGNOSTICS_EVENT, batch);
             });
             app.manage(DesktopAppState::new(bridge, data_dir, diagnostics_sink));
+            // The Judge's verdicts, reviews and range states reach the UI as events (LOT-015).
+            let handle = app.handle().clone();
+            app.state::<DesktopAppState>()
+                .judge
+                .set_sink(Arc::new(move |event| {
+                    let _ = handle.emit(commands::judge::JUDGE_EVENT, event);
+                }));
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                commands::judge::reverify_loop(&handle.state::<DesktopAppState>());
+            });
 
             // Group-commit: keystrokes write to the WAL without an immediate `fsync`
             // (`apply_binary_transaction_observed`); this durably flushes them shortly after,
@@ -70,6 +81,12 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::judge::judge_reviews_command,
+            commands::judge::judge_review_command,
+            commands::judge::judge_accept_command,
+            commands::judge::judge_reject_command,
+            commands::judge::judge_adjust_command,
+            commands::judge::judge_document_states_command,
             commands::agent::agent_start_command,
             commands::agent::agent_prompt_command,
             commands::agent::agent_cancel_command,

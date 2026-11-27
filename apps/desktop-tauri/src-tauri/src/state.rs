@@ -78,6 +78,8 @@ pub(crate) struct DesktopAppState {
     pub(crate) exit_confirmed: AtomicBool,
     /// Inline AI completion through the model gateway (strict local mode).
     pub(crate) completion: crate::commands::completion::CompletionState,
+    /// The Judge: proposals being verified, reviews, planned accepts, stale ranges (`LOT-015`).
+    pub(crate) judge: crate::commands::judge::JudgeState,
 }
 
 impl DesktopAppState {
@@ -119,6 +121,7 @@ impl DesktopAppState {
             unsaved_buffers: AtomicUsize::new(0),
             exit_confirmed: AtomicBool::new(false),
             completion,
+            judge: crate::commands::judge::JudgeState::new(),
         }
     }
 

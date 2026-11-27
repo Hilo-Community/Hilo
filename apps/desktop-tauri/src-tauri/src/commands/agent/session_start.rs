@@ -273,7 +273,7 @@ pub(super) fn start_task(
     Ok((Arc::new(repository), lease, signed, authority))
 }
 
-fn sandbox_runner(
+pub(super) fn sandbox_runner(
     state: &DesktopAppState,
 ) -> Result<Arc<dyn sandbox_runner::SandboxRunner>, String> {
     let mut cached = state
@@ -377,6 +377,7 @@ pub(super) fn start_session(
         events: Arc::new(event_sink(
             app.clone(),
             id,
+            gate.clone(),
             registry,
             installation_id,
             login_hosts.clone(),
@@ -444,11 +445,12 @@ fn workspace_text(
 }
 
 /// Where the session's events go: to the panel, after the Host acts on the few it must: it opens
-/// the sign-in page a login terminal prints, and records sign-in results and advertised methods
-/// for the next session.
+/// the sign-in page a login terminal prints, records sign-in results and advertised methods for
+/// the next session, and hands proposals to the Judge, which verifies them when the turn ends.
 fn event_sink(
     app: tauri::AppHandle,
     id: u32,
+    gate: WorkspaceTrustGate,
     registry: Arc<agent_registry::AgentRegistry>,
     installation_id: String,
     login_hosts: Vec<String>,
@@ -495,6 +497,25 @@ fn event_sink(
                     Err(error) => {
                         tracing::warn!(%error, "could not serialize agent authentication methods")
                     }
+                }
+            }
+            AcpEvent::ProposedEdit { edit } => {
+                crate::commands::judge::record_proposal(&app.state::<DesktopAppState>(), id, edit);
+            }
+            AcpEvent::Update { update }
+                if update["sessionUpdate"] == "turn_complete"
+                    && update["stopReason"] != "cancelled" =>
+            {
+                let state = app.state::<DesktopAppState>();
+                if crate::commands::judge::take_pending_turn(&state, id) {
+                    let app = app.clone();
+                    let gate = gate.clone();
+                    std::thread::spawn(move || {
+                        let state = app.state::<DesktopAppState>();
+                        crate::commands::judge::evaluate_turn(&state, id, &gate, &|text| {
+                            super::prompt_agent(&state, id, text)
+                        });
+                    });
                 }
             }
             _ => {}
