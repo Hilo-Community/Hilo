@@ -4,19 +4,38 @@ use std::path::Path;
 
 use context_engine::SqliteWalContextEngine;
 use host_core::encode_editor_snapshot_ipc;
+use tauri::Manager;
 
 use crate::bridge::DesktopBinaryEditorBridge;
 use crate::commands::workspace::resolve_authorized_workspace_file;
 use crate::state::DesktopAppState;
 
+// The document commands run on a blocking worker, never on the main thread that draws the
+// window: they wait for the bridge (held meanwhile by a search, a save or an analysis), read
+// the disk and hash the text. The editor sends them one at a time (it awaits each answer),
+// so they still apply in order.
+
+/// Runs `work` with the app state on a blocking worker.
+async fn on_worker<T: Send + 'static>(
+    app: tauri::AppHandle,
+    work: impl FnOnce(&DesktopAppState) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(move || work(&app.state::<DesktopAppState>()))
+        .await
+        .map_err(|error| format!("Document task failed: {error}"))?
+}
+
 #[tauri::command]
-pub fn open_document_binary_command(
-    state: tauri::State<'_, DesktopAppState>,
+pub async fn open_document_binary_command(
+    app: tauri::AppHandle,
     document_id: String,
     session_generation: u32,
     initial_text: String,
 ) -> Result<Vec<u8>, String> {
-    open_document(&state, document_id, session_generation, &initial_text)
+    on_worker(app, move |state| {
+        open_document(state, document_id, session_generation, &initial_text)
+    })
+    .await
 }
 
 pub(crate) fn open_document(
@@ -64,11 +83,11 @@ pub(crate) fn open_document(
 }
 
 #[tauri::command]
-pub fn apply_binary_transaction_command(
-    state: tauri::State<'_, DesktopAppState>,
+pub async fn apply_binary_transaction_command(
+    app: tauri::AppHandle,
     payload: Vec<u8>,
 ) -> Result<Vec<u8>, String> {
-    apply_transaction(&state, &payload)
+    on_worker(app, move |state| apply_transaction(state, &payload)).await
 }
 
 /// Applies an editor transaction to the authoritative rope and forwards the delta to the
@@ -91,12 +110,15 @@ pub(crate) fn apply_transaction(
 }
 
 #[tauri::command]
-pub fn save_document_binary_command(
-    state: tauri::State<'_, DesktopAppState>,
+pub async fn save_document_binary_command(
+    app: tauri::AppHandle,
     document_id: String,
     session_generation: u32,
 ) -> Result<Vec<u8>, String> {
-    save_document(&state, &document_id, session_generation)
+    on_worker(app, move |state| {
+        save_document(state, &document_id, session_generation)
+    })
+    .await
 }
 
 /// Saves a document atomically and re-indexes it for search.

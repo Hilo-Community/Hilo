@@ -47,6 +47,8 @@ export class SidebarPanels {
   private readonly wizardButton: HTMLButtonElement;
   private readonly mcpSummary: HTMLElement;
   private readonly scrollbar: ThinScrollbar;
+  /** Searches run concurrently on the host: only the latest one may show its results. */
+  private searchSequence = 0;
 
   constructor(
     doc: Document,
@@ -174,9 +176,13 @@ export class SidebarPanels {
       stores.runGlobalSearch(query);
       return;
     }
+    const sequence = ++this.searchSequence;
     void searchWorkspace(query)
-      .then((results) => stores.setGlobalSearchResults(query, results))
+      .then((results) => {
+        if (sequence === this.searchSequence) stores.setGlobalSearchResults(query, results);
+      })
       .catch((error: unknown) => {
+        if (sequence !== this.searchSequence) return;
         this.searchInput.title = error instanceof Error ? error.message : UI_STRINGS.search.failed;
       });
   }
