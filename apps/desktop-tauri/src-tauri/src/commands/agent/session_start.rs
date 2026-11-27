@@ -348,6 +348,16 @@ pub(super) fn start_session(
     let (repository, lease, signed, authority) = start_task(&state, spec)?;
     let runner = sandbox_runner(&state)?;
     let text = workspace_text(&state, root, task.files)?;
+    // The agent can reach only the gateway's loopback port, so the local MCP server is served
+    // there, behind its own token; every request still goes through the session's broker.
+    let mcp_relay = runtime.gateway.as_ref().map(|gateway| {
+        let slot = gateway.mcp_relay();
+        McpRelay {
+            url: slot.url().to_owned(),
+            authorization: slot.authorization(),
+            install: Box::new(move |handler| slot.install(handler)),
+        }
+    });
     let host = AcpHost {
         session_resources: runtime
             .gateway
@@ -372,6 +382,7 @@ pub(super) fn start_session(
             login_hosts.clone(),
             events,
         )),
+        mcp_relay,
     };
     let home_dir = runtime.home.clone();
     let launch = AcpLaunch {

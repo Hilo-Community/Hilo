@@ -94,6 +94,8 @@ fn installed_gateway_transport_smoke() {
         events: Arc::new(move |event| {
             let _ = tx.send(event);
         }),
+        // The smoke test checks the launch only: it has no task store for the local MCP server.
+        mcp_relay: None,
     };
     let mut session = AcpSessionSupervisor::start(
         host,

@@ -1,6 +1,7 @@
 # LOT-014: scoped ACP bridge and agent panel
 
-This task covers the ACP bridge, Tauri Host commands and generic agent panel. It does not
+This task covers the ACP bridge, Tauri Host commands, generic agent panel and the standard MCP
+relay. Provider egress and credentials live in `crates/agent-gateway`. It does not
 implement a Model Gateway, keyring, model registry, local inference runtime or changeset
 application. Those parts of LOT-014 / LOT-015 remain pending. A successful tool call is never
 presented as `ValidatedGreen` evidence.
@@ -93,10 +94,16 @@ is still the user's decision. Real provider agents are not claimed operational i
    `writesAreProposals`; no application is implied (that is LOT-015).
 2. `terminal/create` needs an absolute `command`: the sandbox never searches `PATH`, so an agent
    asking for `npm` is refused until the Host resolves programs itself.
-3. `session/new.mcpServers` is empty. A normal stdio MCP registration would let the agent spawn
-   a server outside the ToolBroker mediation path. The brokered Hilo extension is available;
-   standard-agent MCP registration needs a separately supervised broker relay. It is not claimed
-   interoperable with arbitrary unmodified agents.
+3. No stdio MCP server is ever registered: the agent would spawn it outside the ToolBroker.
+   Instead, when the agent advertises `mcpCapabilities.http` and the session has a gateway,
+   `session/new.mcpServers` holds one HTTP entry (`hilo`) served by the gateway at `/hilo-mcp`
+   on its loopback port, the only address the sandbox can reach, behind a bearer token of its
+   own (`mcp_relay.rs`). Each JSON-RPC request is one brokered `query_local_mcp` call (policy,
+   budget, durable intent, idempotency key `mcp:<generation>:<n>`); a refusal is a JSON-RPC
+   error and a call needing consent is refused, since the relay cannot ask mid-request.
+   Notifications reach no tool and are answered `202`; batches are refused. Only `tools/call` is
+   shown in the panel. Offline sessions have no gateway, so `mcpServers` stays empty there and
+   the `_hilo/query_local_mcp` extension remains the only path.
 4. Files larger than 64 KiB (one journaled summary) cannot be read or proposed; they are refused,
    never cut.
 5. Windows offline ACP sessions use an AppContainer with run-scoped read/execute ACLs for the

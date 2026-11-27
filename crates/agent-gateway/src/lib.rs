@@ -1,6 +1,10 @@
 //! One Host-owned proxy per agent session. The sandbox can only reach this loopback port.
 //! Key mode has a fixed upstream and injects the OS-keychain key; account mode permits only
 //! CONNECT to exact approved hosts on port 443. All resolved addresses must be public.
+//!
+//! In both modes the same port also serves the Host's MCP relay at `POST /hilo-mcp` (its own
+//! bearer token): standard agents reach the local MCP server there, without the sandbox having
+//! to allow a second address. The Host installs the handler once the session's broker exists.
 pub mod credentials;
 pub mod network;
 
@@ -16,6 +20,7 @@ use hyper::{
 };
 use hyper_util::rt::TokioIo;
 use std::sync::atomic::{AtomicU16, AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::{convert::Infallible, io, net::SocketAddr, sync::Arc, thread, time::Duration};
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -29,6 +34,37 @@ type Error = Box<dyn std::error::Error + Send + Sync>;
 type Body = UnsyncBoxBody<Bytes, Error>;
 const MAX_REQUEST_BYTES: usize = 32 * 1024 * 1024;
 const MAX_CONNECTIONS: usize = 32;
+/// The MCP relay's path on the gateway port.
+pub const MCP_PATH: &str = "/hilo-mcp";
+/// One MCP message; the local MCP server's answers are bounded by the broker.
+const MAX_MCP_REQUEST_BYTES: usize = 1024 * 1024;
+
+/// Answers one MCP JSON-RPC message of the agent: `Some` response, or `None` when there is
+/// nothing to send back (a notification). Errors are internal failures, not policy denials.
+pub type McpHandler = Arc<dyn Fn(&str) -> Result<Option<String>, String> + Send + Sync>;
+
+/// The session's MCP relay: where the agent reaches it, and where the Host installs the
+/// handler. Until a handler is installed the relay answers 503.
+#[derive(Clone)]
+pub struct McpRelaySlot {
+    url: String,
+    token: String,
+    handler: Arc<Mutex<Option<McpHandler>>>,
+}
+impl McpRelaySlot {
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+    /// The `Authorization` header value the agent must send.
+    pub fn authorization(&self) -> String {
+        format!("Bearer {}", self.token)
+    }
+    pub fn install(&self, handler: McpHandler) {
+        if let Ok(mut slot) = self.handler.lock() {
+            *slot = Some(handler);
+        }
+    }
+}
 
 /// Host-only, non-secret transport evidence. Never records URLs, bodies, or headers.
 #[derive(Default)]
@@ -87,16 +123,20 @@ impl GatewayEndpoint {
 pub struct AgentGateway {
     metrics: Arc<GatewayMetrics>,
     endpoint: GatewayEndpoint,
+    mcp: McpRelaySlot,
     stop: Option<oneshot::Sender<()>>,
     thread: Option<thread::JoinHandle<()>>,
+}
+fn random_token() -> io::Result<String> {
+    let mut random = [0u8; 32];
+    getrandom::fill(&mut random)
+        .map_err(|_| io::Error::other("session token generation failed"))?;
+    Ok(random.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 impl AgentGateway {
     pub fn start(mode: GatewayMode) -> io::Result<Self> {
         validate_mode(&mode)?;
-        let mut random = [0u8; 32];
-        getrandom::fill(&mut random)
-            .map_err(|_| io::Error::other("session token generation failed"))?;
-        let token: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+        let token = random_token()?;
         let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
         listener.set_nonblocking(true)?;
         let endpoint = GatewayEndpoint {
@@ -112,10 +152,16 @@ impl AgentGateway {
             .build()?;
         let (stop, stopped) = oneshot::channel();
         let metrics = Arc::new(GatewayMetrics::default());
+        let mcp = McpRelaySlot {
+            url: format!("http://{}{MCP_PATH}", endpoint.address),
+            token: random_token()?,
+            handler: Arc::new(Mutex::new(None)),
+        };
         let state = Arc::new(State {
             metrics: metrics.clone(),
             endpoint: endpoint.clone(),
             mode,
+            mcp: mcp.clone(),
         });
         let thread = thread::Builder::new()
             .name("agent-egress".into())
@@ -130,12 +176,16 @@ impl AgentGateway {
         Ok(Self {
             metrics,
             endpoint,
+            mcp,
             stop: Some(stop),
             thread: Some(thread),
         })
     }
     pub fn endpoint(&self) -> &GatewayEndpoint {
         &self.endpoint
+    }
+    pub fn mcp_relay(&self) -> McpRelaySlot {
+        self.mcp.clone()
     }
     pub fn metrics(&self) -> Arc<GatewayMetrics> {
         self.metrics.clone()
@@ -156,6 +206,7 @@ struct State {
     metrics: Arc<GatewayMetrics>,
     endpoint: GatewayEndpoint,
     mode: GatewayMode,
+    mcp: McpRelaySlot,
 }
 
 fn validate_mode(mode: &GatewayMode) -> io::Result<()> {
@@ -261,10 +312,87 @@ fn proxy_token(headers: &HeaderMap, expected: &str) -> bool {
     constant_time_eq::constant_time_eq(&value, expected.as_bytes())
 }
 
+/// Whether `uri` is the MCP relay of this gateway: origin-form, or absolute-form naming this very
+/// address (an agent whose HTTP client sends every request through its proxy settings).
+fn is_mcp_route(uri: &hyper::Uri, own: SocketAddr) -> bool {
+    if uri.path() != MCP_PATH || uri.query().is_some() {
+        return false;
+    }
+    match uri.authority() {
+        None => uri.scheme().is_none(),
+        Some(authority) => {
+            uri.scheme_str() == Some("http")
+                && authority.port_u16() == Some(own.port())
+                && authority.host() == own.ip().to_string()
+        }
+    }
+}
+
+fn bearer_token(headers: &HeaderMap, expected: &str) -> bool {
+    headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .is_some_and(|token| {
+            constant_time_eq::constant_time_eq(token.as_bytes(), expected.as_bytes())
+        })
+}
+
+/// One MCP message, answered by the Host's handler on a blocking worker (it goes through the
+/// session's broker). Notifications get `202 Accepted`; there is no server-sent event stream.
+async fn mcp(request: Request<Incoming>, relay: &McpRelaySlot) -> Response<Body> {
+    if request.method() != Method::POST {
+        let mut refused = response(
+            StatusCode::METHOD_NOT_ALLOWED,
+            "The MCP relay accepts POST only",
+        );
+        refused
+            .headers_mut()
+            .insert("allow", HeaderValue::from_static("POST"));
+        return refused;
+    }
+    if !bearer_token(request.headers(), &relay.token) {
+        return response(StatusCode::UNAUTHORIZED, "Invalid MCP token");
+    }
+    let Some(handler) = relay.handler.lock().ok().and_then(|slot| slot.clone()) else {
+        return response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "The MCP relay is not ready",
+        );
+    };
+    let Ok(body) = Limited::new(request.into_body(), MAX_MCP_REQUEST_BYTES)
+        .collect()
+        .await
+    else {
+        return response(StatusCode::PAYLOAD_TOO_LARGE, "MCP message too large");
+    };
+    let Ok(message) = String::from_utf8(body.to_bytes().to_vec()) else {
+        return response(StatusCode::BAD_REQUEST, "MCP messages are UTF-8 JSON");
+    };
+    match tokio::task::spawn_blocking(move || handler(&message)).await {
+        Ok(Ok(Some(answer))) => {
+            let mut answered = Response::new(
+                Full::new(Bytes::from(answer))
+                    .map_err(|never: Infallible| match never {})
+                    .boxed_unsync(),
+            );
+            answered
+                .headers_mut()
+                .insert("content-type", HeaderValue::from_static("application/json"));
+            answered
+        }
+        Ok(Ok(None)) => response(StatusCode::ACCEPTED, ""),
+        _ => response(StatusCode::BAD_GATEWAY, "The MCP relay failed"),
+    }
+}
+
 async fn handle(
     mut request: Request<Incoming>,
     state: Arc<State>,
 ) -> Result<Response<Body>, Infallible> {
+    if is_mcp_route(request.uri(), state.endpoint.address) {
+        return Ok(mcp(request, &state.mcp).await);
+    }
     let result = match &state.mode {
         GatewayMode::Key { provider, key } => {
             if !session_token(request.headers(), &state.endpoint.token) {
@@ -629,6 +757,108 @@ mod tests {
             allowed_hosts: vec![]
         })
         .is_err());
+    }
+
+    fn post_mcp(endpoint: &GatewayEndpoint, target: &str, headers: &str, body: &str) -> String {
+        exchange(
+            endpoint,
+            &format!(
+                "POST {target} HTTP/1.1\r\nHost: {}\r\n{headers}Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                endpoint.address,
+                body.len()
+            ),
+        )
+    }
+
+    #[test]
+    fn the_mcp_relay_needs_its_own_token_and_an_installed_handler() {
+        let gateway = AgentGateway::start(GatewayMode::Key {
+            provider: provider(),
+            key: Zeroizing::new("fake-provider-secret".into()),
+        })
+        .unwrap();
+        let endpoint = gateway.endpoint();
+        let relay = gateway.mcp_relay();
+        assert_eq!(
+            relay.url(),
+            format!("http://{}{MCP_PATH}", endpoint.address)
+        );
+        let auth = format!("Authorization: {}\r\n", relay.authorization());
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;
+        // The provider session token is not the relay's token.
+        for header in [
+            String::new(),
+            "Authorization: Bearer wrong\r\n".into(),
+            format!("Authorization: Bearer {}\r\n", endpoint.token),
+        ] {
+            let answer = post_mcp(endpoint, MCP_PATH, &header, request);
+            assert!(answer.starts_with("HTTP/1.1 401"), "{answer}");
+        }
+        let answer = post_mcp(endpoint, MCP_PATH, &auth, request);
+        assert!(answer.starts_with("HTTP/1.1 503"), "{answer}");
+
+        let seen = Arc::new(Mutex::new(Vec::<String>::new()));
+        let recorded = seen.clone();
+        relay.install(Arc::new(move |message: &str| {
+            recorded.lock().unwrap().push(message.to_owned());
+            Ok(message
+                .contains("\"id\"")
+                .then(|| r#"{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}"#.to_owned()))
+        }));
+        let answer = post_mcp(endpoint, MCP_PATH, &auth, request);
+        assert!(answer.starts_with("HTTP/1.1 200"), "{answer}");
+        assert!(
+            answer.contains("content-type: application/json"),
+            "{answer}"
+        );
+        assert!(answer.ends_with(r#"{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}"#));
+        let answer = post_mcp(
+            endpoint,
+            MCP_PATH,
+            &auth,
+            r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+        );
+        assert!(answer.starts_with("HTTP/1.1 202"), "{answer}");
+        assert_eq!(seen.lock().unwrap().len(), 2);
+
+        let answer = exchange(
+            endpoint,
+            &format!(
+                "GET {MCP_PATH} HTTP/1.1\r\nHost: localhost\r\n{auth}Connection: close\r\n\r\n"
+            ),
+        );
+        assert!(answer.starts_with("HTTP/1.1 405"), "{answer}");
+        let answer = post_mcp(endpoint, &format!("{MCP_PATH}?x=1"), &auth, request);
+        assert!(!answer.starts_with("HTTP/1.1 200"), "{answer}");
+        assert_eq!(
+            seen.lock().unwrap().len(),
+            2,
+            "refused requests never reach the Host"
+        );
+    }
+
+    #[test]
+    fn an_agent_sending_everything_through_the_proxy_still_reaches_only_this_relay() {
+        let gateway = AgentGateway::start(GatewayMode::Account {
+            allowed_hosts: vec!["auth.openai.com".into()],
+        })
+        .unwrap();
+        let endpoint = gateway.endpoint();
+        let relay = gateway.mcp_relay();
+        relay.install(Arc::new(|_: &str| Ok(Some("{}".into()))));
+        let auth = format!("Authorization: {}\r\n", relay.authorization());
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#;
+        let answer = post_mcp(endpoint, relay.url(), &auth, request);
+        assert!(answer.starts_with("HTTP/1.1 200"), "{answer}");
+        // Absolute-form to any other address is ordinary proxy traffic, refused in account mode.
+        for target in [
+            format!("http://127.0.0.1:1{MCP_PATH}"),
+            format!("http://localhost:{}{MCP_PATH}", endpoint.address.port()),
+            format!("http://evil.example.com{MCP_PATH}"),
+        ] {
+            let answer = post_mcp(endpoint, &target, &auth, request);
+            assert!(!answer.starts_with("HTTP/1.1 200"), "{target}: {answer}");
+        }
     }
 
     #[test]

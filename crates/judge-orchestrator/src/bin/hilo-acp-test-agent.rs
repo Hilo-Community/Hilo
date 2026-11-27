@@ -32,8 +32,18 @@ fn main() {
     let stdin = io::stdin();
     let mut lines = stdin.lock().lines();
     let mut cwd = String::new();
+    let mut mcp_servers = json!(null);
+    // `mcp` speaks HTTP MCP and should be offered the Host relay; `mcp-plain` does not.
+    let capabilities = if mode == "mcp" {
+        json!({"mcpCapabilities":{"http":true}})
+    } else {
+        json!({})
+    };
     for (id, result) in [
-        (0, json!({"protocolVersion":1,"agentCapabilities":{}})),
+        (
+            0,
+            json!({"protocolVersion":1,"agentCapabilities":capabilities}),
+        ),
         (
             1,
             if mode == "options" {
@@ -53,6 +63,7 @@ fn main() {
         if id == 1 {
             let request: Value = serde_json::from_str(&line).unwrap_or_default();
             cwd = request["params"]["cwd"].as_str().unwrap_or_default().into();
+            mcp_servers = request["params"]["mcpServers"].clone();
         }
         emit(json!({"jsonrpc":"2.0","id":id,"result":result}));
     }
@@ -104,6 +115,9 @@ fn main() {
             }
         }
         "unknown" => request(10, "execute_arbitrary_code", json!({})),
+        "mcp" | "mcp-plain" => emit(
+            json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"fake","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":format!("mcp={mcp_servers}")}}}}),
+        ),
         "oversized" => emit(
             json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"fake","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"x".repeat(1_100_000)}}}}),
         ),

@@ -23,6 +23,12 @@ impl WorkspaceText for Text {
     fn text(&self, _path: &str) -> Result<String, String> {
         Ok("unsaved 🦀\r\n".into())
     }
+    /// Stands in for the context engine's MCP server: answers with the method it was asked.
+    fn query_local_mcp(&self, request: &str) -> Result<String, String> {
+        let request: serde_json::Value =
+            serde_json::from_str(request).map_err(|e| e.to_string())?;
+        Ok(serde_json::json!({"jsonrpc":"2.0","id":request["id"],"result":{"method":request["method"]}}).to_string())
+    }
 }
 struct Fixture {
     _data: tempfile::TempDir,
@@ -84,6 +90,7 @@ impl Fixture {
                 events: Arc::new(move |event| {
                     let _ = tx.send(event);
                 }),
+                mcp_relay: None,
             },
             rx,
         )
@@ -891,4 +898,109 @@ fn windows_acp_session_enforces_read_only_worktree_forbidden_paths_and_absolute_
         }
     }
     session.stop();
+}
+
+/// A relay whose handler the test can call as the gateway would.
+fn relay() -> (McpRelay, Arc<std::sync::Mutex<Option<McpHandler>>>) {
+    let slot = Arc::new(std::sync::Mutex::new(None));
+    let installed = slot.clone();
+    let relay = McpRelay {
+        url: "http://127.0.0.1:9/hilo-mcp".into(),
+        authorization: "Bearer relay-token".into(),
+        install: Box::new(move |handler| *installed.lock().unwrap() = Some(handler)),
+    };
+    (relay, slot)
+}
+
+fn offered_servers(rx: &Receiver<AcpEvent>) -> serde_json::Value {
+    loop {
+        if let AcpEvent::Update { update } = next(rx) {
+            if let Some(text) = update["content"]["text"].as_str() {
+                if let Some(servers) = text.strip_prefix("mcp=") {
+                    return serde_json::from_str(servers).unwrap();
+                }
+            }
+        }
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn the_mcp_relay_is_offered_only_to_agents_that_speak_http_mcp_and_goes_through_the_broker() {
+    let f = Fixture::new();
+    let runner = sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).unwrap();
+    let (mut host, rx) = f.host(Arc::from(runner));
+    let (relay, slot) = relay();
+    host.mcp_relay = Some(relay);
+    let mut session = AcpSessionSupervisor::start(host, f.launch("mcp")).unwrap();
+    assert!(matches!(next(&rx), AcpEvent::Ready { .. }));
+    session.prompt("test".into()).unwrap();
+    assert_eq!(
+        offered_servers(&rx),
+        serde_json::json!([{"type":"http","name":"hilo","url":"http://127.0.0.1:9/hilo-mcp",
+            "headers":[{"name":"Authorization","value":"Bearer relay-token"}]}])
+    );
+    let handler = slot.lock().unwrap().clone().expect("handler installed");
+    // Notifications reach no tool; malformed or batched messages are refused.
+    assert_eq!(
+        handler(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#),
+        Ok(None)
+    );
+    assert!(handler("[]").is_err());
+    assert!(handler(r#"{"id":1,"method":"ping"}"#).is_err());
+    assert!(handler(r#"{"jsonrpc":"2.0","id":null,"method":"ping"}"#).is_err());
+    let answer: serde_json::Value = serde_json::from_str(
+        &handler(r#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"search"}}"#)
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(answer["id"], 7);
+    assert_eq!(answer["result"]["method"], "tools/call");
+    // The call was recorded and shown like any brokered tool.
+    let mut statuses = vec![];
+    while statuses.len() < 2 {
+        if let AcpEvent::Tool {
+            id, kind, status, ..
+        } = next(&rx)
+        {
+            assert_eq!((id.as_str(), kind.as_str()), ("mcp-0", "query_local_mcp"));
+            statuses.push(status);
+        }
+    }
+    assert_eq!(statuses, ["running", "done"]);
+    let snapshot = f.repository.snapshot(f.lease.task_id()).unwrap();
+    assert!(snapshot
+        .resolved_intents
+        .keys()
+        .any(|key| key.starts_with("mcp:")));
+    session.stop();
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn an_agent_without_http_mcp_is_offered_no_servers() {
+    let f = Fixture::new();
+    let runner = sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).unwrap();
+    let (mut host, rx) = f.host(Arc::from(runner));
+    host.mcp_relay = Some(relay().0);
+    let mut session = AcpSessionSupervisor::start(host, f.launch("mcp-plain")).unwrap();
+    assert!(matches!(next(&rx), AcpEvent::Ready { .. }));
+    session.prompt("test".into()).unwrap();
+    assert_eq!(offered_servers(&rx), serde_json::json!([]));
+    session.stop();
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn an_untrusted_workspace_never_installs_the_relay() {
+    let f = Fixture::new();
+    f.gate.revoke().unwrap();
+    let runner = sandbox_runner::native_sandbox(Arc::new(TracingAuditSink)).unwrap();
+    let (mut host, _rx) = f.host(Arc::from(runner));
+    let (relay, slot) = relay();
+    host.mcp_relay = Some(relay);
+    // An untrusted workspace cannot even launch the agent, so the relay is never installed.
+    assert!(AcpSessionSupervisor::start(host, f.launch("mcp")).is_err());
+    assert!(slot.lock().unwrap().is_none());
 }
