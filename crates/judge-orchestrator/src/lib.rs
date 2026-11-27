@@ -7,6 +7,7 @@
 pub mod acp;
 pub mod broker;
 pub mod budget;
+pub mod judge;
 pub mod policy;
 pub mod task;
 

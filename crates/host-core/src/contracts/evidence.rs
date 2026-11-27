@@ -107,6 +107,10 @@ pub struct Evidence {
     pub verdict: HiloValidationState,
 }
 
+/// `EvidenceArtifact::kind` of a file the Judge tested: `name` is its workspace-relative path
+/// and `digest_blake3` the BLAKE3 of the exact content tested (`LOT-015`).
+pub const TESTED_FILE_ARTIFACT_KIND: &str = "tested-file";
+
 impl Evidence {
     /// Enforces Invariant #4: `ValidatedGreen` (`🟢 ✓ Validated`) requires a matching
     /// `content_blake3_hash`, all executed commands succeeding (`exit_code == 0`),
@@ -115,7 +119,33 @@ impl Evidence {
     pub fn satisfies_validated_green(&self, current_content_blake3_hash: &str) -> bool {
         !current_content_blake3_hash.is_empty()
             && self.tested_snapshot_hash == current_content_blake3_hash
-            && !self.commands.is_empty()
+            && self.all_checks_passed()
+    }
+
+    /// Invariant #4 for one file of a multi-file snapshot: the content tested for `path` must
+    /// be exactly `current_content_blake3_hash`.
+    #[must_use]
+    pub fn satisfies_validated_green_for_file(
+        &self,
+        path: &str,
+        current_content_blake3_hash: &str,
+    ) -> bool {
+        !current_content_blake3_hash.is_empty()
+            && self.tested_file_hash(path) == Some(current_content_blake3_hash)
+            && self.all_checks_passed()
+    }
+
+    /// The content hash tested for `path`, if the Judge tested that file.
+    #[must_use]
+    pub fn tested_file_hash(&self, path: &str) -> Option<&str> {
+        self.artifacts
+            .iter()
+            .find(|artifact| artifact.kind == TESTED_FILE_ARTIFACT_KIND && artifact.name == path)
+            .map(|artifact| artifact.digest_blake3.as_str())
+    }
+
+    fn all_checks_passed(&self) -> bool {
+        !self.commands.is_empty()
             && self.commands.iter().all(|cmd| cmd.exit_code == 0)
             && self.diagnostics.vtsls_error_count == 0
             && self.diagnostics.biome_error_count == 0

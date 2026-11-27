@@ -1,11 +1,12 @@
 //! Only the Host owns signing material; wire envelopes carry data and MACs, never keys.
 
-use host_core::{Approval, TaskSpec};
+use host_core::{Approval, Evidence, TaskSpec};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 const TASK_DOMAIN: &[u8] = b"hilo.host.task.v1\0";
 const APPROVAL_DOMAIN: &[u8] = b"hilo.host.approval.v1\0";
+const EVIDENCE_DOMAIN: &[u8] = b"hilo.host.evidence.v1\0";
 
 #[derive(Debug, Error)]
 pub enum AuthorityError {
@@ -24,6 +25,13 @@ pub struct SignedTaskSpec {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedApproval {
     pub approval: Approval,
+    pub mac: [u8; 32],
+}
+
+/// Evidence the Judge produced: only the Host that ran the checks can have signed it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignedEvidence {
+    pub evidence: Evidence,
     pub mac: [u8; 32],
 }
 
@@ -68,6 +76,16 @@ impl HostAuthority {
 
     pub fn verify_approval(&self, signed: &SignedApproval) -> bool {
         self.mac(APPROVAL_DOMAIN, &signed.approval)
+            .is_ok_and(|expected| constant_time_eq::constant_time_eq_32(&expected, &signed.mac))
+    }
+
+    pub fn sign_evidence(&self, evidence: Evidence) -> Result<SignedEvidence, AuthorityError> {
+        let mac = self.mac(EVIDENCE_DOMAIN, &evidence)?;
+        Ok(SignedEvidence { evidence, mac })
+    }
+
+    pub fn verify_evidence(&self, signed: &SignedEvidence) -> bool {
+        self.mac(EVIDENCE_DOMAIN, &signed.evidence)
             .is_ok_and(|expected| constant_time_eq::constant_time_eq_32(&expected, &signed.mac))
     }
 }

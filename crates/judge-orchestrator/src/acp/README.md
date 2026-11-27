@@ -1,10 +1,9 @@
 # LOT-014: scoped ACP bridge and agent panel
 
 This task covers the ACP bridge, Tauri Host commands, generic agent panel and the standard MCP
-relay. Provider egress and credentials live in `crates/agent-gateway`. It does not
-implement a Model Gateway, keyring, model registry, local inference runtime or changeset
-application. Those parts of LOT-014 / LOT-015 remain pending. A successful tool call is never
-presented as `ValidatedGreen` evidence.
+relay. Provider egress and credentials live in `crates/agent-gateway`. The Model
+Gateway is `crates/model-gateway`; changeset application is the Judge's (LOT-015,
+`../judge/README.md`). A successful tool call is never presented as `ValidatedGreen` evidence.
 
 ## Transport and dependency decision
 
@@ -68,7 +67,7 @@ is still the user's decision. Real provider agents are not claimed operational i
   checks after symlink resolution.
 - `fs/write_text_file` runs the proposal-only executor for `write_worktree`, after exact-call
   Host approval. It stores one `ProposedEdit` with path, BLAKE3 of the current host-core text,
-  old text and new text. It never invokes a document or filesystem write API. Applying is LOT-015.
+  old text and new text. It never invokes a document or filesystem write API. Applying it is the Judge's (LOT-015, `../judge/README.md`), after the user accepts.
 - `terminal/create` runs `run_sandbox_command` in a separate read-only task sandbox after approval.
   Creation responds after completion. `output`, `wait_for_exit`, `kill` and `release` replay the
   original brokered call to recheck policy and return its bounded cached result; they do not
@@ -91,7 +90,7 @@ is still the user's decision. Real provider agents are not claimed operational i
 
 1. ACP filesystem writes normally mean a file was written. Here the response follows policy
    approval and proposal recording only. Client capability metadata declares
-   `writesAreProposals`; no application is implied (that is LOT-015).
+   `writesAreProposals`; no application is implied (the Judge applies a change only once the user accepts it).
 2. `terminal/create` needs an absolute `command`: the sandbox never searches `PATH`, so an agent
    asking for `npm` is refused until the Host resolves programs itself.
 3. No stdio MCP server is ever registered: the agent would spawn it outside the ToolBroker.
