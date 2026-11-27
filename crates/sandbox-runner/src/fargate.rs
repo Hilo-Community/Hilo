@@ -316,7 +316,11 @@ mod tests {
         let engine = FargateEngine::new(config).unwrap();
         let worktree = tempfile::tempdir().unwrap();
         let root = worktree.path().canonicalize().unwrap();
-        let mut spec = SandboxSpec::new(&root, "/usr/bin/true");
+        // An absolute path on every OS (`SandboxSpec::validate` requires one): the remote
+        // container's own program path, which this engine never resolves locally, so any
+        // absolute-looking value does.
+        let program = root.join("program");
+        let mut spec = SandboxSpec::new(&root, &program);
         spec.network = NetworkPolicy::LocalProxyOnly("127.0.0.1:9".parse().unwrap());
         let validated = spec.validate().expect("spec is otherwise valid");
         assert!(matches!(
