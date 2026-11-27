@@ -17,12 +17,16 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use host_core::{
-    ropey::Rope, Checkpoint, CheckpointError, CheckpointKind, CheckpointManager, DiagnosticEntry,
-    DiagnosticSeverity, DiagnosticSource, Evidence, EvidenceArtifact, ExecutedCommandRecord,
-    HiloValidationState, PreviewRuntimeReport, QualityDiagnosticsSummary, TaskWorktree,
-    UnsavedBuffer, CONTRACT_SCHEMA_VERSION, TESTED_FILE_ARTIFACT_KIND,
+    crashed_report, is_component_file, parse_probe_report, preview_harness, ropey::Rope,
+    snapshot_document, Checkpoint, CheckpointError, CheckpointKind, CheckpointManager,
+    DiagnosticEntry, DiagnosticSeverity, DiagnosticSource, Evidence, EvidenceArtifact,
+    ExecutedCommandRecord, HiloValidationState, PreviewRuntimeReport, QualityDiagnosticsSummary,
+    TaskWorktree, UnsavedBuffer, CONTRACT_SCHEMA_VERSION, PREVIEW_CONFIG, PREVIEW_DIR,
+    PREVIEW_REPORT, RENDER_WATCHDOG_MS, TESTED_FILE_ARTIFACT_KIND,
 };
-use sandbox_runner::{ResourceLimits, RunOutput, SandboxError, SandboxRunner, SandboxSpec};
+use sandbox_runner::{
+    ResourceLimits, RunOutput, SandboxError, SandboxRunner, SandboxSpec, Termination,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -58,6 +62,8 @@ pub enum StepKind {
     ImpactedTests,
     Lint,
     TypeCheck,
+    /// Changed UI components mounted in the sandbox (`LOT-016`).
+    Preview,
     FullSuite,
 }
 
@@ -106,6 +112,16 @@ pub struct JudgeOutcome {
     /// Same failure, same signature: what the correction loop compares between attempts.
     pub failure_signature: Option<String>,
     pub before: Checkpoint,
+    /// What the changed components rendered, for the review (`LOT-016`).
+    pub preview: Option<PreviewSnapshot>,
+}
+
+/// The rendered DOM of the previewed components, as a static document the IDE shows in an
+/// iframe with no script and an opaque origin, and its accessibility tree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PreviewSnapshot {
+    pub document: String,
+    pub a11y: String,
 }
 
 impl JudgeOutcome {
@@ -133,6 +149,9 @@ pub enum JudgeError {
         source: std::io::Error,
     },
 }
+
+/// Starting Vitest and loading React, on top of the render watchdog.
+const PREVIEW_STARTUP: Duration = Duration::from_secs(5);
 
 pub struct JudgePipeline {
     checkpoints: Arc<CheckpointManager>,
@@ -237,7 +256,7 @@ impl JudgePipeline {
         )?;
 
         let first_verdict_after = steps.first_verdict;
-        let evidence = self.evidence(request, &before, &steps.reports);
+        let evidence = self.evidence(request, &before, &steps);
         let failure_signature = failure_signature(&steps.reports);
         Ok(JudgeOutcome {
             evidence: self.authority.sign_evidence(evidence)?,
@@ -245,6 +264,7 @@ impl JudgePipeline {
             first_verdict_after,
             failure_signature,
             before,
+            preview: steps.preview_snapshot,
         })
     }
 
@@ -340,6 +360,24 @@ impl JudgePipeline {
                 report(&mut steps, step);
             }
         }
+        let components: Vec<String> = request
+            .files
+            .keys()
+            .filter(|path| is_component_file(path))
+            .cloned()
+            .collect();
+        if !components.is_empty() {
+            match &self.plan.vitest {
+                Some(vitest) if preview_ready(&worktree.workspace) => {
+                    let (step, runtime, snapshot) = context.preview_step(vitest, &components)?;
+                    steps.preview_report = Some(runtime);
+                    steps.preview_snapshot = snapshot;
+                    report(&mut steps, step);
+                }
+                // A UI change nothing could render is never `🟢`.
+                _ => steps.preview_missing = true,
+            }
+        }
         if let Some(vitest) = &self.plan.vitest {
             if self.plan.full_suite && steps.reports.iter().all(|step| step.passed) {
                 let step = context.vitest_step(StepKind::FullSuite, vitest, vitest_args(vitest))?;
@@ -349,12 +387,8 @@ impl JudgePipeline {
         Ok(steps)
     }
 
-    fn evidence(
-        &self,
-        request: &Verification<'_>,
-        before: &Checkpoint,
-        steps: &[StepReport],
-    ) -> Evidence {
+    fn evidence(&self, request: &Verification<'_>, before: &Checkpoint, all: &Steps) -> Evidence {
+        let steps = all.reports.as_slice();
         let file_hashes: Vec<(String, String)> = request
             .files
             .iter()
@@ -399,6 +433,11 @@ impl JudgePipeline {
         } else {
             HiloValidationState::FailedRed
         };
+        let verdict = if all.preview_missing && verdict == HiloValidationState::ValidatedGreen {
+            HiloValidationState::ReviewYellow
+        } else {
+            verdict
+        };
         let artifacts = file_hashes
             .iter()
             .map(|(path, digest)| EvidenceArtifact {
@@ -425,15 +464,15 @@ impl JudgePipeline {
             checkpoint_ref: before.reference.clone(),
             commands: steps.iter().map(|step| step.record.clone()).collect(),
             diagnostics,
-            // The Preview Service joins the evidence in LOT-016: no runtime check ran here.
-            preview_report: PreviewRuntimeReport {
+            // Empty when no UI component changed: nothing to render.
+            preview_report: all.preview_report.clone().unwrap_or(PreviewRuntimeReport {
                 inspected_url: String::new(),
                 console_error_count: 0,
                 uncaught_exception_count: 0,
                 failed_network_request_count: 0,
                 crashed: false,
                 dom_snapshot_hash: None,
-            },
+            }),
             artifacts,
             verdict,
         }
@@ -444,8 +483,12 @@ impl JudgePipeline {
 struct Steps {
     reports: Vec<StepReport>,
     first_verdict: Option<Duration>,
+    preview_report: Option<PreviewRuntimeReport>,
+    preview_snapshot: Option<PreviewSnapshot>,
+    preview_missing: bool,
 }
 
+#[derive(Clone, Copy)]
 struct StepContext<'a> {
     runner: &'a dyn SandboxRunner,
     worktree: &'a TaskWorktree,
@@ -586,6 +629,19 @@ impl StepContext<'_> {
     /// Messages must not depend on where the worktree was: the same failure in two attempts
     /// has to read (and hash) the same.
     fn clean(&self, items: &mut [DiagnosticEntry]) {
+        self.clean_paths(items);
+        for item in items {
+            item.message = item
+                .message
+                .lines()
+                .filter(|line| !line.trim_start().starts_with("at "))
+                .collect::<Vec<_>>()
+                .join("\n");
+        }
+    }
+
+    /// Like `clean`, keeping stack traces (a runtime crash is reported with its stack).
+    fn clean_paths(&self, items: &mut [DiagnosticEntry]) {
         let roots = [
             self.worktree.workspace.to_string_lossy().into_owned(),
             self.worktree
@@ -599,14 +655,94 @@ impl StepContext<'_> {
                 item.message = item.message.replace(root.as_str(), ".");
                 item.file_path = item.file_path.replace(root.as_str(), ".");
             }
-            item.message = item
-                .message
-                .lines()
-                .filter(|line| !line.trim_start().starts_with("at "))
-                .collect::<Vec<_>>()
-                .join("\n");
         }
     }
+
+    /// Mounts `components` with the workspace's React in `happy-dom`, in the sandbox, behind
+    /// the render watchdog (`LOT-016`).
+    fn preview_step(
+        &self,
+        tool: &ToolCommand,
+        components: &[String],
+    ) -> Result<(StepReport, PreviewRuntimeReport, Option<PreviewSnapshot>), JudgeError> {
+        let mut nonce = [0u8; 16];
+        getrandom::fill(&mut nonce).map_err(|error| JudgeError::Io {
+            path: PathBuf::from(PREVIEW_DIR),
+            source: std::io::Error::other(error.to_string()),
+        })?;
+        let nonce: String = nonce.iter().map(|byte| format!("{byte:02x}")).collect();
+        let dir = self.worktree.workspace.join(PREVIEW_DIR);
+        let io = |path: &Path| {
+            let path = path.to_path_buf();
+            move |source| JudgeError::Io { path, source }
+        };
+        std::fs::create_dir_all(&dir).map_err(io(&dir))?;
+        for (path, content) in preview_harness(components, &nonce) {
+            let target = self.worktree.workspace.join(path);
+            std::fs::write(&target, content).map_err(io(&target))?;
+        }
+        let mut args = tool.leading_args.clone();
+        args.extend(["run", "--config", PREVIEW_CONFIG, "--reporter=json"].map(OsString::from));
+        let context = StepContext {
+            limits: ResourceLimits {
+                wall_timeout: Duration::from_millis(RENDER_WATCHDOG_MS) + PREVIEW_STARTUP,
+                ..self.limits
+            },
+            ..*self
+        };
+        let (output, record) = context.run(tool, args)?;
+        let report = std::fs::read(self.worktree.workspace.join(PREVIEW_REPORT));
+        // The harness and its report never reach the rest of the checks.
+        let _ = std::fs::remove_dir_all(&dir);
+        let parsed = match report {
+            Ok(bytes) => parse_probe_report(&bytes, &nonce).map_err(|error| error.to_string()),
+            Err(_) if output.termination == Termination::WallTimeout => Err(format!(
+                "The component did not finish rendering within the {} s watchdog.",
+                RENDER_WATCHDOG_MS / 1000
+            )),
+            Err(_) => Err(format!(
+                "The preview produced no report.\n{}",
+                tool_failure(DiagnosticSource::PreviewRuntime, &output).message
+            )),
+        };
+        let (passed, runtime, mut items, snapshot) = match parsed {
+            Ok(probe) => (
+                probe.passed(),
+                probe.runtime_report(),
+                probe.diagnostics(),
+                Some(PreviewSnapshot {
+                    document: snapshot_document(&probe.html),
+                    a11y: probe.a11y.clone(),
+                }),
+            ),
+            Err(reason) => {
+                let (runtime, item) = crashed_report(components, &reason);
+                (false, runtime, vec![item], None)
+            }
+        };
+        self.clean_paths(&mut items);
+        Ok((
+            StepReport {
+                kind: StepKind::Preview,
+                record,
+                passed,
+                items,
+            },
+            runtime,
+            snapshot,
+        ))
+    }
+}
+
+/// What a preview needs from the workspace: React, its DOM renderer and `happy-dom`.
+fn preview_ready(workspace: &Path) -> bool {
+    ["react", "react-dom", "happy-dom"].iter().all(|package| {
+        workspace
+            .join("node_modules")
+            .join(package)
+            .join("package.json")
+            .is_file()
+    })
 }
 
 fn vitest_args(tool: &ToolCommand) -> Vec<OsString> {

@@ -18,6 +18,7 @@ export const JUDGE_STRINGS = {
     ImpactedTests: "Impacted tests",
     Lint: "Biome",
     TypeCheck: "TypeScript",
+    Preview: "Component preview",
     FullSuite: "Full test suite",
   } satisfies Record<JudgeStepKind, string>,
   passed: "passed",
@@ -40,6 +41,9 @@ export const JUDGE_STRINGS = {
   original: "Current",
   proposed: "Proposed",
   noChecks: "No check could run on this change: review it yourself.",
+  preview: "Rendered preview",
+  previewFrame: "Rendered preview (static snapshot, no script)",
+  a11yTree: "Accessibility tree",
   accepting: "Applying…",
   moved: "The file changed while applying; try again.",
 } as const;

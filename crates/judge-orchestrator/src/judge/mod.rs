@@ -24,8 +24,8 @@ pub use correction::{
 pub use diagnostics::{parse_biome, parse_tsc, parse_vitest};
 pub use impact::{impacted_tests, touched_symbols, IMPACT_DEPTH};
 pub use pipeline::{
-    JudgeError, JudgeOutcome, JudgePipeline, JudgeProgress, StepKind, StepReport, ToolCommand,
-    Verification, VerificationPlan,
+    JudgeError, JudgeOutcome, JudgePipeline, JudgeProgress, PreviewSnapshot, StepKind, StepReport,
+    ToolCommand, Verification, VerificationPlan,
 };
 pub use proposal::{changeset_from_proposals, FileProposal};
 pub use reverify::{reverified_ranges, StaleReverifier, REVERIFY_IDLE};

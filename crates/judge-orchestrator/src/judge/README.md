@@ -25,6 +25,14 @@ An agent's file writes are proposals (LOT-014). When its turn ends, the Host tur
 - `review.rs`: accepting recompiles against the text as it is now. A target the user edited
   is a conflict, never applied. A result that is byte for byte the tested content is
   `🟢 ValidatedGreen`; a change rebased over user edits is `🟠` until verified again.
+- Preview (LOT-016, `host-core/src/preview.rs`): each changed `.tsx`/`.jsx` component is
+  mounted with the workspace's own React in `happy-dom`, inside the OS sandbox, behind a 3 s
+  render watchdog. A probe records `console.error`, uncaught exceptions, unhandled
+  rejections, failed requests, whether the Tauri bridge is visible and whether the page is
+  framed. Its report is parsed against a strict schema, bounded and bound to a nonce; the
+  errors (with stack traces) join the `Evidence`. A changed component that nothing could
+  render (no React or `happy-dom`) is never `🟢`. The IDE shows a static snapshot of the DOM
+  in an iframe with `sandbox=""` (opaque origin, no script) under `default-src 'none'`.
 - `reverify.rs`: an edited `🟢` range is `🟠` synchronously (host-core); the Judge verifies it
   again after 1.5 s idle or on save, and drops the result if the text moved meanwhile.
 
@@ -49,12 +57,19 @@ revision, producing exactly the planned content.
    pool cannot stop its workers and waits ~10 s for its own timeout. Worker threads avoid it.
 5. **Retries.** "2 retries" is read as the French spec says: up to 2 correction cycles (3
    attempts), stopping at once when the same failure repeats.
-6. **Preview Service.** LOT-016 adds runtime evidence; until then `preview_report` is empty
-   (`inspected_url` is empty) and counts nothing.
+6. **Preview Service (LOT-016).** Rendering happens in `happy-dom` inside the OS sandbox rather
+   than in a browser on another origin: the component never shares a process, an origin or a
+   network with the IDE. What the IDE displays is a script-free snapshot in an opaque-origin
+   iframe, instead of a live page served from a second port.
 7. **Multi-file evidence.** `tested_snapshot_hash` is the file's content hash for one file and
    `result_digest` for several; each file's hash is a `tested-file` artifact, checked per file.
 
 ## Limits
+- Preview: components are rendered without props, with the harness's own Vitest
+  configuration (the project's Vite aliases and plugins are not applied). The code under test
+  runs in the same Node.js process as the probe: a component written to forge a clean report
+  could; the OS sandbox still bounds what it can reach, and the user reviews the change.
+  Failed requests are reported but do not fail the preview (it has no network by design).
 
 - ACP reads do not show the agent its own pending proposals (LOT-014): an agent that re-reads
   a file it proposed sees the original text.

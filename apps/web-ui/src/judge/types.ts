@@ -1,7 +1,7 @@
 import type { DiagnosticSource, HiloValidationState } from "@hilo/protocol-types";
 
 /** The Judge's verification steps, in the order they run (`LOT-015`). */
-export type JudgeStepKind = "ImpactedTests" | "Lint" | "TypeCheck" | "FullSuite";
+export type JudgeStepKind = "ImpactedTests" | "Lint" | "TypeCheck" | "Preview" | "FullSuite";
 
 export type ReviewStatus = "Pending" | "Accepted" | "Rejected" | "Adjusting";
 
@@ -41,6 +41,14 @@ export interface JudgeReview {
   readonly files: readonly ReviewFile[];
   readonly steps: readonly ReviewStep[];
   readonly diagnostics: readonly ReviewDiagnostic[];
+  /** What the changed components rendered (`LOT-016`). */
+  readonly preview: ReviewPreview | null;
+}
+
+/** A static snapshot of the rendered components: shown in an iframe that runs no script. */
+export interface ReviewPreview {
+  readonly document: string;
+  readonly a11y: string;
 }
 
 /** A validation range as the editor draws it (1-based lines). */

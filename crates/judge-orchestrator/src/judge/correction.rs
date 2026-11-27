@@ -87,6 +87,7 @@ pub fn agent_feedback(outcome: &JudgeOutcome, attempt: u32, retries_left: u32) -
             StepKind::ImpactedTests => "Impacted tests",
             StepKind::Lint => "Biome",
             StepKind::TypeCheck => "TypeScript",
+            StepKind::Preview => "Component preview (runtime)",
             StepKind::FullSuite => "Full test suite",
         };
         if step.passed {
